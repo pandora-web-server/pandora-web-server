@@ -1,0 +1,42 @@
+[package]
+name = "static-files-module"
+version = "0.1.0"
+authors = ["Wladimir Palant"]
+repository = "https://github.com/palant/pingora-utils"
+categories = ["network-programming", "web-programming::http-server"]
+keywords = ["static", "static-files", "web-server", "http", "pingora"]
+exclude = ["testdata/"]
+license = "Apache-2.0"
+edition = "2021"
+description = """
+A module for serving static files with Pingora.
+"""
+
+[lib]
+name = "static_files_module"
+path = "src/lib.rs"
+
+[dependencies]
+bytes.workspace = true
+http.workspace = true
+httpdate.workspace = true
+log.workspace = true
+mime_guess = { version = "2.0.4", default-features = false }
+percent-encoding.workspace = true
+pingora-core.workspace = true
+pingora-http.workspace = true
+pingora-proxy.workspace = true
+serde.workspace = true
+structopt.workspace = true
+
+[dev-dependencies]
+async-trait.workspace = true
+const_format = "0.2.32"
+env_logger.workspace = true
+serde_yaml.workspace = true
+test-log.workspace = true
+tokio.workspace = true
+tokio-test.workspace = true
+
+[lints]
+workspace = true

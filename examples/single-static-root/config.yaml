@@ -1,0 +1,11 @@
+listen:
+- 127.0.0.1:8080
+- "[::1]:8080"
+compression_level: 3
+root: ../../static-files-module/testdata/root
+canonicalize_url: true
+index_file:
+- index.html
+precompressed:
+- gz
+- br

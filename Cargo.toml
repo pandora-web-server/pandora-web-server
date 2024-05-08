@@ -1,0 +1,82 @@
+[workspace]
+resolver = "2"
+members = [
+  "static-files-module",
+  "examples/*",
+]
+default-members = [
+  "static-files-module",
+]
+
+[workspace.dependencies]
+async-trait = "0.1.42"
+bytes = "1.0"
+env_logger = "0.9"
+http = "1.0.0"
+httpdate = "1"
+log = "0.4"
+percent-encoding = "2.1"
+pingora-core = "0.1.1"
+pingora-http = "0.1.1"
+pingora-proxy = "0.1.1"
+serde = { version = "1.0", features = ["derive"] }
+structopt = "0.3"
+serde_yaml = "0.8"
+test-log = "=0.2.13"
+tokio = "1"
+tokio-test = "0.4"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+empty_enum = "warn"
+enum_glob_use = "warn"
+exit = "warn"
+filter_map_next = "warn"
+fn_params_excessive_bools = "warn"
+imprecise_flops = "warn"
+inefficient_to_string = "warn"
+linkedlist = "warn"
+lossy_float_literal = "warn"
+macro_use_imports = "warn"
+match_on_vec_items = "warn"
+mem_forget = "warn"
+needless_continue = "warn"
+option_option = "warn"
+rest_pat_in_fully_bound_structs = "warn"
+str_to_string = "warn"
+suboptimal_flops = "warn"
+todo = "warn"
+unnested_or_patterns = "warn"
+unused_self = "warn"
+verbose_file_reads = "warn"
+
+[workspace.lints.rust]
+elided_lifetimes_in_paths = "deny"
+explicit_outlives_requirements = "deny"
+keyword_idents = "deny"
+macro_use_extern_crate = "deny"
+meta_variable_misuse = "deny"
+missing_debug_implementations = "deny"
+missing_docs = "warn"
+non_ascii_idents = "deny"
+non_local_definitions = "deny"
+rust_2018_idioms = "deny"
+single_use_lifetimes = "deny"
+trivial_casts = "deny"
+trivial_numeric_casts = "deny"
+unit_bindings = "warn"
+unnameable_types = "warn"
+unreachable_pub = "deny"
+unsafe_code = "forbid"
+unstable_features = "deny"
+unused_import_braces = "deny"
+unused_lifetimes = "deny"
+unused_macro_rules = "warn"
+unused_qualifications = "warn"
+variant_size_differences = "deny"
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

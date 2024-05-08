@@ -1,0 +1,19 @@
+[package]
+name = "example-single-static-root"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+async-trait.workspace = true
+env_logger.workspace = true
+log.workspace = true
+pingora-core.workspace = true
+pingora-proxy.workspace = true
+serde.workspace = true
+serde_yaml.workspace = true
+static-files-module = { path = "../../static-files-module" }
+structopt.workspace = true
+
+[lints]
+workspace = true
