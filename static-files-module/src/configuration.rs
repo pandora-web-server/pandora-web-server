@@ -38,6 +38,10 @@ pub struct StaticFilesOpt {
     #[structopt(long)]
     pub index_file: Option<Vec<String>>,
 
+    /// URI path of the page to display instead of the default Not Found page, e.g. /404.html
+    #[structopt(long)]
+    pub page_404: Option<String>,
+
     /// File extension to check when looking for pre-compressed versions of a file. This command
     /// line flag can be specified multiple times. Supported file extensions are gz (gzip),
     /// zz (zlib deflate), z (compress), br (Brotli), zst (Zstandard).
@@ -57,6 +61,9 @@ pub struct StaticFilesConf {
 
     /// List of index files to look for in a directory.
     pub index_file: Vec<String>,
+
+    /// URI path of the page to display instead of the default Not Found page, e.g. /404.html
+    pub page_404: Option<String>,
 
     /// List of file extensions to check when looking for pre-compressed versions of a file.
     /// Supported file extensions are gz (gzip), zz (zlib deflate), z (compress), br (Brotli),
@@ -80,6 +87,10 @@ impl StaticFilesConf {
             self.index_file = index_file;
         }
 
+        if opt.page_404.is_some() {
+            self.page_404 = opt.page_404;
+        }
+
         if let Some(precompressed) = opt.precompressed {
             self.precompressed = precompressed;
         }
@@ -92,6 +103,7 @@ impl Default for StaticFilesConf {
             root: DEFAULT_ROOT.into(),
             canonicalize_uri: true,
             index_file: vec!["index.html".into()],
+            page_404: None,
             precompressed: Vec::new(),
         }
     }

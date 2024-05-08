@@ -353,6 +353,33 @@ async fn no_file() -> Result<(), Box<Error>> {
 }
 
 #[test(tokio::test)]
+async fn no_file_with_page_404() -> Result<(), Box<Error>> {
+    let mut handler = handler();
+    handler.conf_mut().page_404 = Some("/file.txt".to_owned());
+
+    let meta = Metadata::from_path(&root_path("file.txt"), None).unwrap();
+
+    let mut session = make_session(
+        request("GET", "/missing.txt"),
+        response(
+            "404 Not Found",
+            vec![
+                ("Content-Length", meta.size.to_string()),
+                ("accept-ranges", "bytes".into()),
+                ("Content-Type", "text/plain".into()),
+                ("last-modified", meta.modified.clone().unwrap()),
+                ("etag", meta.etag.clone()),
+            ],
+            "Hi!\n",
+        ),
+    )
+    .await;
+    assert!(handler.handle(&mut session).await?);
+
+    Ok(())
+}
+
+#[test(tokio::test)]
 async fn no_index() -> Result<(), Box<Error>> {
     let handler = handler();
 

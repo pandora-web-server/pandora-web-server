@@ -68,8 +68,29 @@ impl StaticFilesHandler {
         let uri = &session.req_header().uri;
         debug!("received URI path {}", uri.path());
 
-        let mut path = match resolve_uri(uri.path(), &self.conf.root) {
-            Ok(path) => path,
+        let (mut path, not_found) = match resolve_uri(uri.path(), &self.conf.root) {
+            Ok(path) => (path, false),
+            Err(err) if err.kind() == ErrorKind::NotFound => {
+                debug!("canonicalizing resulted in NotFound error");
+
+                let path = self.conf.page_404.as_ref().and_then(|page_404| {
+                    debug!("error page is {page_404}");
+                    match resolve_uri(page_404, &self.conf.root) {
+                        Ok(path) => Some(path),
+                        Err(err) => {
+                            warn!("Failed resolving error page {page_404}: {err}");
+                            None
+                        }
+                    }
+                });
+
+                if let Some(path) = path {
+                    (path, true)
+                } else {
+                    error_response(session, StatusCode::NOT_FOUND).await?;
+                    return Ok(true);
+                }
+            }
             Err(err) => {
                 let status = match err.kind() {
                     ErrorKind::InvalidInput => {
@@ -79,10 +100,6 @@ impl StaticFilesHandler {
                     ErrorKind::InvalidData => {
                         warn!("Requested path outside root directory: {}", uri.path());
                         StatusCode::BAD_REQUEST
-                    }
-                    ErrorKind::NotFound => {
-                        debug!("canonicalizing resulted in NotFound error");
-                        StatusCode::NOT_FOUND
                     }
                     ErrorKind::PermissionDenied => {
                         debug!("canonicalizing resulted in PermissionDenied error");
@@ -100,7 +117,7 @@ impl StaticFilesHandler {
 
         debug!("translated into file path {path:?}");
 
-        if self.conf.canonicalize_uri {
+        if self.conf.canonicalize_uri && !not_found {
             if let Some(mut canonical) = path_to_uri(&path, &self.conf.root) {
                 if canonical != uri.path() {
                     if let Some(query) = uri.query() {
@@ -176,7 +193,7 @@ impl StaticFilesHandler {
             return Ok(true);
         }
 
-        let (header, start, end) = match extract_range(session, &meta) {
+        let (mut header, start, end) = match extract_range(session, &meta) {
             Some(Range::Valid(start, end)) => {
                 debug!("bytes range requested: {start}-{end}");
                 let header = meta.to_partial_content_header(start, end)?;
@@ -197,6 +214,10 @@ impl StaticFilesHandler {
                 (header, 0, meta.size - 1)
             }
         };
+
+        if not_found {
+            header.set_status(StatusCode::NOT_FOUND)?;
+        }
 
         session.write_response_header(header).await?;
 
