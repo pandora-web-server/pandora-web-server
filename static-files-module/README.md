@@ -134,7 +134,7 @@ static_files_conf.merge_with_opt(opt.static_files);
 let static_files_handler = StaticFilesHandler::new(static_files_conf);
 ```
 
-For complete and more comprehensive code see [single-static-root example](../../../tree/main/examples/single-static-root) in the repository.
+For complete and more comprehensive code see [single-static-root example](https://github.com/palant/pingora-utils/tree/main/examples/single-static-root) in the repository.
 
 ## Compression support
 
