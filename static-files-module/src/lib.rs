@@ -20,6 +20,7 @@
 //!
 //! * `GET` and `HEAD` requests
 //! * Configurable directory index files (`index.html` by default)
+//! * Page configurable to display on 404 Not Found errors instead of the standard error page
 //! * Conditional requests via `If-Modified-Since`, `If-Unmodified-Since`, `If-Match`, `If-None` match HTTP headers
 //! * Byte range requests via `Range` and `If-Range` HTTP headers
 //! * Compression support: serving pre-compressed versions of the files (gzip, zlib deflate, compress, Brotli, Zstandard algorithms supported)
