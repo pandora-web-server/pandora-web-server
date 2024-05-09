@@ -49,7 +49,7 @@ where
         })?;
         let reader = BufReader::new(file);
 
-        let conf: Self = serde_yaml::from_reader(reader).map_err(|err| {
+        let conf = serde_yaml::from_reader(reader).map_err(|err| {
             Error::because(
                 ErrorType::FileReadError,
                 "failed reading configuration file",
