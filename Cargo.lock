@@ -426,8 +426,8 @@ dependencies = [
  "log",
  "pingora-core",
  "pingora-proxy",
+ "pingora-utils-core",
  "serde",
- "serde_yaml",
  "static-files-module",
  "structopt",
 ]
@@ -1298,6 +1298,16 @@ dependencies = [
  "pin-project-lite",
  "thread_local",
  "tokio",
+]
+
+[[package]]
+name = "pingora-utils-core"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "pingora-core",
+ "serde",
+ "serde_yaml",
 ]
 
 [[package]]

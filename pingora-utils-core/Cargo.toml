@@ -1,0 +1,25 @@
+[package]
+name = "pingora-utils-core"
+version = "0.1.0"
+authors = ["Wladimir Palant"]
+repository = "https://github.com/palant/pingora-utils"
+categories = ["network-programming", "web-programming::http-server"]
+keywords = ["utilities", "web-server", "http", "pingora"]
+license = "Apache-2.0"
+edition = "2021"
+description = """
+Helpers for Pingora modules such as static-files-module crate.
+"""
+
+[lib]
+name = "pingora_utils_core"
+path = "src/lib.rs"
+
+[dependencies]
+log.workspace = true
+pingora-core.workspace = true
+serde.workspace = true
+serde_yaml.workspace = true
+
+[lints]
+workspace = true

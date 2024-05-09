@@ -10,8 +10,8 @@ env_logger.workspace = true
 log.workspace = true
 pingora-core.workspace = true
 pingora-proxy.workspace = true
+pingora-utils-core = { path = "../../pingora-utils-core" }
 serde.workspace = true
-serde_yaml.workspace = true
 static-files-module = { path = "../../static-files-module" }
 structopt.workspace = true
 

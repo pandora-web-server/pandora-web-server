@@ -38,10 +38,9 @@ use pingora_core::server::Server;
 use pingora_core::upstreams::peer::HttpPeer;
 use pingora_core::{Error, ErrorType};
 use pingora_proxy::{http_proxy_service, ProxyHttp, Session};
+use pingora_utils_core::FromYaml;
 use serde::Deserialize;
 use static_files_module::{StaticFilesConf, StaticFilesHandler, StaticFilesOpt};
-use std::fs::File;
-use std::io::BufReader;
 use structopt::StructOpt;
 
 /// The application implementing the Pingora Proxy interface
@@ -155,18 +154,10 @@ fn main() {
         .server
         .conf
         .as_ref()
-        .and_then(|path| match File::open(path) {
-            Ok(file) => Some(file),
-            Err(err) => {
-                error!("Failed opening configuration file: {err}");
-                None
-            }
-        })
-        .map(BufReader::new)
-        .and_then(|reader| match serde_yaml::from_reader(reader) {
+        .and_then(|path| match StaticRootAppConf::load_from_yaml(path) {
             Ok(conf) => Some(conf),
             Err(err) => {
-                error!("Failed reading configuration file: {err}");
+                error!("{err}");
                 None
             }
         })
