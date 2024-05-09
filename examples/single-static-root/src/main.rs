@@ -33,12 +33,12 @@
 
 use async_trait::async_trait;
 use log::error;
-use pingora_core::server::configuration::{Opt, ServerConf};
+use pingora_core::server::configuration::{Opt as ServerOpt, ServerConf};
 use pingora_core::server::Server;
 use pingora_core::upstreams::peer::HttpPeer;
 use pingora_core::{Error, ErrorType};
 use pingora_proxy::{http_proxy_service, ProxyHttp, Session};
-use pingora_utils_core::FromYaml;
+use pingora_utils_core::{merge_conf, merge_opt, FromYaml};
 use serde::Deserialize;
 use static_files_module::{StaticFilesConf, StaticFilesHandler, StaticFilesOpt};
 use structopt::StructOpt;
@@ -59,9 +59,7 @@ impl StaticRootApp {
     }
 }
 
-/// Run a web server exposing a single directory with static content.
-///
-/// This application is based on pingora-proxy and static-files-module.
+/// Command line options of this application
 #[derive(Debug, StructOpt)]
 struct StaticRootAppOpt {
     /// Address and port to listen on, e.g. "127.0.0.1:8080". This command line flag can be
@@ -72,41 +70,26 @@ struct StaticRootAppOpt {
     /// Compression level to be used for dynamic compression (omit to disable compression).
     #[structopt(long)]
     compression_level: Option<u32>,
-
-    #[structopt(flatten)]
-    server: Opt,
-
-    #[structopt(flatten)]
-    static_files: StaticFilesOpt,
-
-    /// This only exists to overwrite about text again because Opt overwrites it above. Yes, this
-    /// is a [structopt bug](https://github.com/TeXitoi/structopt/issues/539).
-    #[allow(dead_code)]
-    #[structopt(flatten)]
-    dummy: StructOptDummy,
 }
 
-/// Run a web server exposing a single directory with static content.
-///
-/// This application is based on pingora-proxy and static-files-module.
-#[derive(Debug, StructOpt)]
-struct StructOptDummy {}
+merge_opt! {
+    /// Run a web server exposing a single directory with static content.
+    ///
+    /// This application is based on pingora-proxy and static-files-module.
+    struct Opt {
+        app: StaticRootAppOpt,
+        server: ServerOpt,
+        static_files: StaticFilesOpt,
+    }
+}
 
-/// The combined configuration of Pingora server and [`StaticFilesHandler`].
-#[derive(Debug, PartialEq, Eq, Deserialize)]
-#[serde(default)]
+#[derive(Debug, Deserialize)]
 struct StaticRootAppConf {
     /// List of address/port combinations to listen on, e.g. "127.0.0.1:8080".
     listen: Vec<String>,
 
     /// Compression level to be used for dynamic compression (omit to disable compression).
     compression_level: Option<u32>,
-
-    #[serde(flatten)]
-    server: ServerConf,
-
-    #[serde(flatten)]
-    static_files: StaticFilesConf,
 }
 
 impl Default for StaticRootAppConf {
@@ -114,9 +97,16 @@ impl Default for StaticRootAppConf {
         Self {
             listen: vec!["127.0.0.1:8080".to_owned(), "[::1]:8080".to_owned()],
             compression_level: None,
-            server: Default::default(),
-            static_files: Default::default(),
         }
+    }
+}
+
+merge_conf! {
+    /// The combined configuration of Pingora server and [`StaticFilesHandler`].
+    struct Conf {
+        app: StaticRootAppConf,
+        server: ServerConf,
+        static_files: StaticFilesConf,
     }
 }
 
@@ -149,19 +139,19 @@ impl ProxyHttp for StaticRootApp {
 fn main() {
     env_logger::init();
 
-    let opt = StaticRootAppOpt::from_args();
+    let opt = Opt::from_args();
     let conf = opt
         .server
         .conf
         .as_ref()
-        .and_then(|path| match StaticRootAppConf::load_from_yaml(path) {
+        .and_then(|path| match Conf::load_from_yaml(path) {
             Ok(conf) => Some(conf),
             Err(err) => {
                 error!("{err}");
                 None
             }
         })
-        .unwrap_or_else(StaticRootAppConf::default);
+        .unwrap_or_else(Conf::default);
 
     let mut server = Server::new_with_opt_and_conf(opt.server, conf.server);
     server.bootstrap();
@@ -175,13 +165,13 @@ fn main() {
             return;
         }
     };
-    let compression_level = opt.compression_level.or(conf.compression_level);
+    let compression_level = opt.app.compression_level.or(conf.app.compression_level);
 
     let mut proxy = http_proxy_service(
         &server.configuration,
         StaticRootApp::new(handler, compression_level),
     );
-    for addr in opt.listen.unwrap_or(conf.listen) {
+    for addr in opt.app.listen.unwrap_or(conf.app.listen) {
         proxy.add_tcp(&addr);
     }
     server.add_service(proxy);

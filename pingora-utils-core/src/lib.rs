@@ -61,3 +61,119 @@ where
         Ok(conf)
     }
 }
+
+/// This macro merges multiple structures implementing `structopt::StructOpt` into a structure
+/// containing all of them while making certain that all command line flags can be used.
+///
+/// ```rust
+/// use pingora_core::server::configuration::Opt as ServerOpt;
+/// use pingora_utils_core::merge_opt;
+/// use static_files_module::StaticFilesOpt;
+/// use structopt::StructOpt;
+///
+/// #[derive(Debug, StructOpt)]
+/// struct MyAppOpt {
+///     /// IP address and port for the server to listen on
+///     #[structopt(long, default_value = "127.0.0.1:8080")]
+///     listen: String,
+/// }
+///
+/// merge_opt!{
+///     /// Starts my great application.
+///     ///
+///     /// Additional application description just to make a structopt bug work-around work.
+///     struct Opt {
+///         app: MyAppOpt,
+///         server: ServerOpt,
+///         static_files: StaticFilesOpt,
+///     }
+/// }
+///
+/// let opt = Opt::from_args();
+/// println!("Application options: {:?}", opt.app);
+/// println!("Pingora server options: {:?}", opt.server);
+/// println!("Static files options: {:?}", opt.static_files);
+/// ```
+#[macro_export]
+macro_rules! merge_opt {
+    (
+        $(#[$struct_attr:meta])*
+        struct $struct_name:ident {
+            $(
+                $field_vis:vis $field_name:ident: $field_type:ty,
+            )*
+        }
+    ) => {
+        #[derive(Debug, structopt::StructOpt)]
+        $(#[$struct_attr])*
+        struct Dummy {}
+
+        $(#[$struct_attr])*
+        #[derive(Debug, structopt::StructOpt)]
+        struct $struct_name {
+            $(
+                #[structopt(flatten)]
+                $field_vis $field_name: $field_type,
+            )*
+
+            // This is a work-around for a https://github.com/TeXitoi/structopt/issues/539 (this
+            // bug won't be fixed).
+            #[structopt(flatten)]
+            _dummy: Dummy,
+        }
+    }
+}
+
+/// This macro merges multiple structures implementing [`serde::Deserialize`] and [`Default`] into
+/// a structure containing all of them.
+///
+/// The structure of the expected configuration file is
+/// flattened, so that the configuration settings from each component are still expected to be
+/// found on the top level.
+///
+/// ```rust
+/// use pingora_core::server::configuration::ServerConf;
+/// use pingora_utils_core::{merge_conf, FromYaml};
+/// use static_files_module::StaticFilesConf;
+/// use serde::Deserialize;
+///
+/// #[derive(Debug, Default, Deserialize)]
+/// struct MyAppConf {
+///     /// IP address and port for the server to listen on
+///     listen: String,
+/// }
+///
+/// merge_conf!{
+///     struct Conf {
+///         app: MyAppConf,
+///         server: ServerConf,
+///         static_files: StaticFilesConf,
+///     }
+/// }
+///
+/// let conf = Conf::load_from_yaml("test.yaml").ok().unwrap_or_else(Conf::default);
+/// println!("Application settings: {:?}", conf.app);
+/// println!("Pingora server settings: {:?}", conf.server);
+/// println!("Static files settings: {:?}", conf.static_files);
+/// ```
+#[macro_export]
+macro_rules! merge_conf {
+    (
+        $(#[$struct_attr:meta])*
+        struct $struct_name:ident {
+            $(
+                $field_vis:vis $field_name:ident: $field_type:ty,
+            )*
+        }
+    ) => {
+        $(#[$struct_attr])*
+        #[derive(Debug, Default, serde::Deserialize)]
+        #[serde(default)]
+        struct $struct_name {
+            $(
+                #[serde(flatten)]
+                $field_vis $field_name: $field_type,
+            )*
+        }
+    }
+}

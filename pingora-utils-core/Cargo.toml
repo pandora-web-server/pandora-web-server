@@ -21,5 +21,9 @@ pingora-core.workspace = true
 serde.workspace = true
 serde_yaml.workspace = true
 
+[dev-dependencies]
+static-files-module = { path = "../static-files-module" }
+structopt.workspace = true
+
 [lints]
 workspace = true
