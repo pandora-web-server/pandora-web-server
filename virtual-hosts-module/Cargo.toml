@@ -20,13 +20,13 @@ async-trait.workspace = true
 http.workspace = true
 pingora-core.workspace = true
 pingora-proxy.workspace = true
-module-utils = { path = "../module-utils" }
+module-utils.workspace = true
 serde.workspace = true
 log.workspace = true
 
 [dev-dependencies]
 env_logger.workspace = true
-static-files-module = { path = "../static-files-module" }
+static-files-module.workspace = true
 structopt.workspace = true
 test-log.workspace = true
 tokio.workspace = true

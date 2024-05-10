@@ -24,7 +24,7 @@ serde.workspace = true
 serde_yaml.workspace = true
 
 [dev-dependencies]
-static-files-module = { path = "../static-files-module" }
+static-files-module.workspace = true
 structopt.workspace = true
 
 [lints]
