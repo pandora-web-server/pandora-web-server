@@ -433,6 +433,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "example-virtual-hosts"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "env_logger",
+ "log",
+ "pingora-core",
+ "pingora-proxy",
+ "pingora-utils-core",
+ "serde",
+ "static-files-module",
+ "structopt",
+ "virtual-hosts-module",
+]
+
+[[package]]
 name = "flate2"
 version = "1.0.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1304,8 +1320,10 @@ dependencies = [
 name = "pingora-utils-core"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "log",
  "pingora-core",
+ "pingora-proxy",
  "serde",
  "serde_yaml",
  "static-files-module",
@@ -1852,6 +1870,7 @@ dependencies = [
  "pingora-core",
  "pingora-http",
  "pingora-proxy",
+ "pingora-utils-core",
  "serde",
  "serde_yaml",
  "structopt",
@@ -2316,6 +2335,25 @@ name = "version_check"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
+
+[[package]]
+name = "virtual-hosts-module"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "env_logger",
+ "http 1.1.0",
+ "log",
+ "pingora-core",
+ "pingora-proxy",
+ "pingora-utils-core",
+ "serde",
+ "static-files-module",
+ "structopt",
+ "test-log",
+ "tokio",
+ "tokio-test",
+]
 
 [[package]]
 name = "want"

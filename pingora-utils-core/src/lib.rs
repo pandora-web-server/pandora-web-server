@@ -17,8 +17,10 @@
 //! This crate contains some helpers that are useful when using `static-files-module` crate for
 //! example.
 
+use async_trait::async_trait;
 use log::trace;
 use pingora_core::{Error, ErrorType};
+use pingora_proxy::Session;
 use serde::de::DeserializeOwned;
 use std::fmt::Debug;
 use std::fs::File;
@@ -65,6 +67,8 @@ where
 /// This macro merges multiple structures implementing `structopt::StructOpt` into a structure
 /// containing all of them while making certain that all command line flags can be used.
 ///
+/// *Note*: Support for `struct` syntax is limited when it comes to generics.
+///
 /// ```rust
 /// use pingora_core::server::configuration::Opt as ServerOpt;
 /// use pingora_utils_core::merge_opt;
@@ -98,8 +102,16 @@ where
 macro_rules! merge_opt {
     (
         $(#[$struct_attr:meta])*
-        struct $struct_name:ident {
+        $struct_vis:vis struct $struct_name:ident $(<$($generic:ident $(: $bound:path)?),+>)?
+        $(
+            where
+                $(
+                    $where_type:ty: $where_bounds:path
+                ),+
+        )?
+        {
             $(
+                $(#[$field_attr:meta])*
                 $field_vis:vis $field_name:ident: $field_type:ty,
             )*
         }
@@ -110,9 +122,17 @@ macro_rules! merge_opt {
 
         $(#[$struct_attr])*
         #[derive(Debug, structopt::StructOpt)]
-        struct $struct_name {
+        $struct_vis struct $struct_name $(<$($generic $(: $bound)?),+>)?
+        $(
+            where
+                $(
+                    $where_type: $where_bounds
+                ),+
+        )?
+        {
             $(
                 #[structopt(flatten)]
+                $(#[$field_attr])*
                 $field_vis $field_name: $field_type,
             )*
 
@@ -130,6 +150,8 @@ macro_rules! merge_opt {
 /// The structure of the expected configuration file is
 /// flattened, so that the configuration settings from each component are still expected to be
 /// found on the top level.
+///
+/// *Note*: Support for `struct` syntax is limited when it comes to generics.
 ///
 /// ```rust
 /// use pingora_core::server::configuration::ServerConf;
@@ -160,8 +182,16 @@ macro_rules! merge_opt {
 macro_rules! merge_conf {
     (
         $(#[$struct_attr:meta])*
-        struct $struct_name:ident {
+        $struct_vis:vis struct $struct_name:ident $(<$($generic:ident $(: $bound:path)?),+>)?
+        $(
+            where
+                $(
+                    $where_type:ty: $where_bounds:path
+                ),+
+        )?
+        {
             $(
+                $(#[$field_attr:meta])*
                 $field_vis:vis $field_name:ident: $field_type:ty,
             )*
         }
@@ -169,11 +199,78 @@ macro_rules! merge_conf {
         $(#[$struct_attr])*
         #[derive(Debug, Default, serde::Deserialize)]
         #[serde(default)]
-        struct $struct_name {
+        $struct_vis struct $struct_name $(<$($generic $(: $bound)?),+>)?
+        $(
+            where
+                $(
+                    $where_type: $where_bounds
+                ),+
+        )?
+        {
             $(
                 #[serde(flatten)]
+                $(#[$field_attr])*
                 $field_vis $field_name: $field_type,
             )*
         }
     }
+}
+
+/// Request filter result indicating how the current request should be processed further
+#[derive(Debug, Copy, Clone, PartialEq, Default)]
+pub enum RequestFilterResult {
+    /// Response has been sent, no further processing should happen. Other Pingora phases should
+    /// not be triggered.
+    ResponseSent,
+
+    /// Request has been handled and further request filters should not run. Response hasn’t been
+    /// sent however, next Pingora phase should deal with that.
+    Handled,
+
+    /// Request filter could not handle this request, next request filter should run if it exists.
+    #[default]
+    Unhandled,
+}
+
+/// Trait to be implemented by request filters.
+#[async_trait]
+pub trait RequestFilter {
+    /// Configuration type of this handler.
+    type Conf;
+
+    /// Creates a new instance of the handler from its configuration.
+    fn new(conf: Self::Conf) -> Result<Self, Box<Error>>
+    where
+        Self: Sized,
+        Self::Conf: TryInto<Self, Error = Box<Error>>,
+    {
+        conf.try_into()
+    }
+
+    /// Handles the current request.
+    ///
+    /// This is essentially identical to the `request_filter` method but is supposed to be called
+    /// when there is only a single handler. Consequently, its result can be returned directly.
+    async fn handle(&self, session: &mut Session, ctx: &mut Self::CTX) -> Result<bool, Box<Error>>
+    where
+        Self::CTX: Send,
+    {
+        let result = self.request_filter(session, ctx).await?;
+        Ok(result == RequestFilterResult::ResponseSent)
+    }
+
+    /// Per-request state of this handler, see [`pingora_proxy::ProxyHttp::CTX`]
+    type CTX;
+
+    /// Creates a new sate object, see [`pingora_proxy::ProxyHttp::new_ctx`]
+    fn new_ctx() -> Self::CTX;
+
+    /// Handler to run during Pingora’s `request_filter` state, see
+    /// [`pingora_proxy::ProxyHttp::request_filter`]. This uses a different return type to account
+    /// for the existence of multiple request filters.
+    async fn request_filter(
+        &self,
+        session: &mut Session,
+        ctx: &mut Self::CTX,
+    ) -> Result<RequestFilterResult, Box<Error>>;
 }

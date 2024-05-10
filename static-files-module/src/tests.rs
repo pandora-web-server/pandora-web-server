@@ -23,6 +23,7 @@ use httpdate::fmt_http_date;
 use pingora_core::Error;
 use pingora_http::StatusCode;
 use pingora_proxy::Session;
+use pingora_utils_core::{RequestFilter, RequestFilterResult};
 use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::time::SystemTime;
@@ -84,11 +85,12 @@ fn root_path(filename: &str) -> PathBuf {
 }
 
 fn handler() -> StaticFilesHandler {
-    let conf = StaticFilesConf {
+    StaticFilesConf {
         root: root_path(""),
         ..Default::default()
-    };
-    StaticFilesHandler::new(conf).unwrap()
+    }
+    .try_into()
+    .unwrap()
 }
 
 async fn make_session(request: Request<'_>, response: Response<'_>) -> Session {
@@ -145,7 +147,10 @@ async fn text_file() -> Result<(), Box<Error>> {
     )
     .await;
 
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     let meta = Metadata::from_path(&root_path("large.txt"), None).unwrap();
     let mut session = make_session(
@@ -164,7 +169,10 @@ async fn text_file() -> Result<(), Box<Error>> {
     )
     .await;
 
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     Ok(())
 }
@@ -190,7 +198,10 @@ async fn dir_index() -> Result<(), Box<Error>> {
     )
     .await;
 
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     // Without matching directory index this should produce Forbidden response.
     handler.conf_mut().index_file = vec![];
@@ -208,7 +219,10 @@ async fn dir_index() -> Result<(), Box<Error>> {
         ),
     )
     .await;
-    assert!(handler.handle(&mut session).await.unwrap());
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await.unwrap(),
+        RequestFilterResult::ResponseSent
+    );
 
     Ok(())
 }
@@ -231,7 +245,10 @@ async fn no_trailing_slash() -> Result<(), Box<Error>> {
     )
     .await;
 
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     // Without canonicalize_uri this should just produce the response
     // (Forbidden because no index file).
@@ -250,7 +267,10 @@ async fn no_trailing_slash() -> Result<(), Box<Error>> {
         ),
     )
     .await;
-    assert!(handler.handle(&mut session).await.unwrap());
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await.unwrap(),
+        RequestFilterResult::ResponseSent
+    );
 
     Ok(())
 }
@@ -273,7 +293,10 @@ async fn unnecessary_percent_encoding() -> Result<(), Box<Error>> {
     )
     .await;
 
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     Ok(())
 }
@@ -296,7 +319,10 @@ async fn complex_path() -> Result<(), Box<Error>> {
     )
     .await;
 
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     Ok(())
 }
@@ -325,7 +351,10 @@ async fn utf8_path() -> Result<(), Box<Error>> {
     )
     .await;
 
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     Ok(())
 }
@@ -347,7 +376,10 @@ async fn no_file() -> Result<(), Box<Error>> {
         ),
     )
     .await;
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     Ok(())
 }
@@ -374,7 +406,10 @@ async fn no_file_with_page_404() -> Result<(), Box<Error>> {
         ),
     )
     .await;
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     Ok(())
 }
@@ -396,7 +431,10 @@ async fn no_index() -> Result<(), Box<Error>> {
         ),
     )
     .await;
-    assert!(handler.handle(&mut session).await.unwrap());
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await.unwrap(),
+        RequestFilterResult::ResponseSent
+    );
 
     Ok(())
 }
@@ -418,7 +456,10 @@ async fn wrong_method() -> Result<(), Box<Error>> {
         ),
     )
     .await;
-    assert!(handler.handle(&mut session).await.unwrap());
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await.unwrap(),
+        RequestFilterResult::ResponseSent
+    );
 
     Ok(())
 }
@@ -440,7 +481,10 @@ async fn wrong_method_no_file() -> Result<(), Box<Error>> {
         ),
     )
     .await;
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     Ok(())
 }
@@ -465,7 +509,10 @@ async fn head_request() -> Result<(), Box<Error>> {
         ),
     )
     .await;
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     let text = response_text(StatusCode::NOT_FOUND);
     let mut session = make_session(
@@ -480,7 +527,10 @@ async fn head_request() -> Result<(), Box<Error>> {
         ),
     )
     .await;
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     let text = response_text(StatusCode::PERMANENT_REDIRECT);
     let mut session = make_session(
@@ -496,7 +546,10 @@ async fn head_request() -> Result<(), Box<Error>> {
         ),
     )
     .await;
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     Ok(())
 }
@@ -518,7 +571,10 @@ async fn bad_request() -> Result<(), Box<Error>> {
         ),
     )
     .await;
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     let mut session = make_session(
         request("GET", "/../"),
@@ -532,7 +588,10 @@ async fn bad_request() -> Result<(), Box<Error>> {
         ),
     )
     .await;
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     Ok(())
 }
@@ -559,7 +618,10 @@ async fn if_none_match() -> Result<(), Box<Error>> {
         ),
     )
     .await;
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     let mut session = make_session(
         request_with_headers("GET", "/file.txt", vec![("If-None-Match", "*".into())]),
@@ -574,7 +636,10 @@ async fn if_none_match() -> Result<(), Box<Error>> {
         ),
     )
     .await;
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     let mut session = make_session(
         request_with_headers(
@@ -593,7 +658,10 @@ async fn if_none_match() -> Result<(), Box<Error>> {
         ),
     )
     .await;
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     let mut session = make_session(
         request_with_headers(
@@ -615,7 +683,10 @@ async fn if_none_match() -> Result<(), Box<Error>> {
         ),
     )
     .await;
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     let mut session = make_session(
         request_with_headers(
@@ -636,7 +707,10 @@ async fn if_none_match() -> Result<(), Box<Error>> {
         ),
     )
     .await;
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     // With compression enabled this should produce Vary header
     let mut session = make_session(
@@ -658,7 +732,10 @@ async fn if_none_match() -> Result<(), Box<Error>> {
     )
     .await;
     session.downstream_compression.adjust_level(3);
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     Ok(())
 }
@@ -683,7 +760,10 @@ async fn if_match() -> Result<(), Box<Error>> {
         ),
     )
     .await;
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     let mut session = make_session(
         request_with_headers("GET", "/file.txt", vec![("If-Match", "*".into())]),
@@ -700,7 +780,10 @@ async fn if_match() -> Result<(), Box<Error>> {
         ),
     )
     .await;
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     let mut session = make_session(
         request_with_headers(
@@ -721,7 +804,10 @@ async fn if_match() -> Result<(), Box<Error>> {
         ),
     )
     .await;
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     let mut session = make_session(
         request_with_headers(
@@ -748,7 +834,10 @@ async fn if_match() -> Result<(), Box<Error>> {
         ),
     )
     .await;
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     let mut session = make_session(
         request_with_headers("GET", "/file.txt", vec![("If-Match", "\"xyz\"".into())]),
@@ -763,7 +852,10 @@ async fn if_match() -> Result<(), Box<Error>> {
         ),
     )
     .await;
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     // With compression enabled this should produce Vary header
     let mut session = make_session(
@@ -781,7 +873,10 @@ async fn if_match() -> Result<(), Box<Error>> {
     )
     .await;
     session.downstream_compression.adjust_level(3);
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     Ok(())
 }
@@ -808,7 +903,10 @@ async fn if_modified_since() -> Result<(), Box<Error>> {
         ),
     )
     .await;
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     let mut session = make_session(
         request_with_headers(
@@ -829,7 +927,10 @@ async fn if_modified_since() -> Result<(), Box<Error>> {
         ),
     )
     .await;
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     let mut session = make_session(
         request_with_headers(
@@ -853,7 +954,10 @@ async fn if_modified_since() -> Result<(), Box<Error>> {
         ),
     )
     .await;
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     // With compression enabled this should produce Vary header
     let mut session = make_session(
@@ -875,7 +979,10 @@ async fn if_modified_since() -> Result<(), Box<Error>> {
     )
     .await;
     session.downstream_compression.adjust_level(3);
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     Ok(())
 }
@@ -904,7 +1011,10 @@ async fn if_unmodified_since() -> Result<(), Box<Error>> {
         ),
     )
     .await;
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     let mut session = make_session(
         request_with_headers(
@@ -926,7 +1036,10 @@ async fn if_unmodified_since() -> Result<(), Box<Error>> {
         ),
     )
     .await;
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     let mut session = make_session(
         request_with_headers(
@@ -948,7 +1061,10 @@ async fn if_unmodified_since() -> Result<(), Box<Error>> {
         ),
     )
     .await;
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     // With compression enabled this should produce Vary header
     let mut session = make_session(
@@ -973,7 +1089,10 @@ async fn if_unmodified_since() -> Result<(), Box<Error>> {
     )
     .await;
     session.downstream_compression.adjust_level(3);
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     Ok(())
 }
@@ -998,7 +1117,10 @@ async fn ranged_request() -> Result<(), Box<Error>> {
         ),
     )
     .await;
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     let mut session = make_session(
         request_with_headers("GET", "/large.txt", vec![("Range", "bytes=99999-".into())]),
@@ -1015,7 +1137,10 @@ async fn ranged_request() -> Result<(), Box<Error>> {
         ),
     )
     .await;
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     let mut session = make_session(
         request_with_headers("GET", "/large.txt", vec![("Range", "bytes=-5".into())]),
@@ -1032,7 +1157,10 @@ async fn ranged_request() -> Result<(), Box<Error>> {
         ),
     )
     .await;
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     let mut session = make_session(
         request_with_headers("GET", "/large.txt", vec![("Range", "bytes=200000-".into())]),
@@ -1047,7 +1175,10 @@ async fn ranged_request() -> Result<(), Box<Error>> {
         ),
     )
     .await;
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     // With compression enabled this should produce Vary header
     let mut session = make_session(
@@ -1065,7 +1196,10 @@ async fn ranged_request() -> Result<(), Box<Error>> {
     )
     .await;
     session.downstream_compression.adjust_level(3);
-    assert!(handler.handle(&mut session).await?);
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
 
     Ok(())
 }
@@ -1099,7 +1233,7 @@ async fn dynamic_compression() -> Result<(), Box<Error>> {
     .await;
     session.downstream_compression.adjust_level(3);
     handler
-        .handle(&mut session)
+        .request_filter(&mut session, &mut ())
         .await
         .expect_err("Writing response body should error out");
 
@@ -1126,7 +1260,7 @@ async fn dynamic_compression() -> Result<(), Box<Error>> {
     .await;
     session.downstream_compression.adjust_level(3);
     handler
-        .handle(&mut session)
+        .request_filter(&mut session, &mut ())
         .await
         .expect_err("Writing response body should error out");
 
@@ -1156,7 +1290,7 @@ async fn dynamic_compression() -> Result<(), Box<Error>> {
     .await;
     session.downstream_compression.adjust_level(3);
     handler
-        .handle(&mut session)
+        .request_filter(&mut session, &mut ())
         .await
         .expect_err("Writing response body should error out");
 
@@ -1195,7 +1329,7 @@ async fn static_compression() -> Result<(), Box<Error>> {
     )
     .await;
     handler
-        .handle(&mut session)
+        .request_filter(&mut session, &mut ())
         .await
         .expect_err("Writing response body should error out");
 
@@ -1223,7 +1357,7 @@ async fn static_compression() -> Result<(), Box<Error>> {
     .await;
     session.downstream_compression.adjust_level(3);
     handler
-        .handle(&mut session)
+        .request_filter(&mut session, &mut ())
         .await
         .expect_err("Writing response body should error out");
 
@@ -1249,7 +1383,7 @@ async fn static_compression() -> Result<(), Box<Error>> {
     )
     .await;
     handler
-        .handle(&mut session)
+        .request_filter(&mut session, &mut ())
         .await
         .expect_err("Writing response body should error out");
 
@@ -1282,7 +1416,7 @@ async fn static_compression() -> Result<(), Box<Error>> {
     )
     .await;
     handler
-        .handle(&mut session)
+        .request_filter(&mut session, &mut ())
         .await
         .expect_err("Writing response body should error out");
 

@@ -1,0 +1,29 @@
+listen:
+- 127.0.0.1:8080
+- "[::1]:8080"
+- 127.0.0.1:8081
+- "[::1]:8081"
+compression_level: 3
+vhosts:
+  localhost:8080:
+    aliases:
+      - 127.0.0.1:8080
+      - "[::1]:8080"
+    default: true
+    root: ../../static-files-module/testdata/root
+    canonicalize_url: true
+    index_file:
+    - index.html
+    precompressed:
+    - gz
+    - br
+  localhost:8081:
+    aliases:
+      - 127.0.0.1:8081
+      - "[::1]:8081"
+    root: ../../static-files-module/testdata/root
+    canonicalize_url: false
+    index_file:
+    - file.txt
+    precompressed:
+    - zst

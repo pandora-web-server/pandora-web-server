@@ -12,32 +12,44 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! # Single static root example
+//! # Virtual hosts example
 //!
-//! This is a simple web server using `static-files-module` crate. It combines the usual
-//! [Pingora command line options](Opt) with the
-//! [command line options of `static-files-module`](static_files_module::StaticFilesOpt)
-//! and the usual [Pingora config file settings](ServerConf) with the
-//! [config file settings of `static-files-module`](static_files_module::StaticFilesConf).
-//! In addition, it provides the following settings:
+//! This web server uses `virtual-hosts-module` crate to handle virtual hosts and
+//! `static-files-module` crate for each individual virtual host. The configuration file looks like
+//! this:
 //!
-//! * `listen` (`--listen` as command line flag): A list of IP address/port combinations the server
-//!   should listen on, e.g. `0.0.0.0:8080`.
-//! * `compression_level` (`--compression-level` as command line flag): If present, dynamic
-//!   compression will be enabled and compression level set to the value provided for all
-//!   algorithms (see [Pingora issue #228](https://github.com/cloudflare/pingora/issues/228)).
+//! ```yaml
+//! # Application-specific settings
+//! listen:
+//! - "[::]:8080"
+//! compression_level: 3
+//!
+//! # General server settings (https://docs.rs/pingora-core/0.1.1/pingora_core/server/configuration/struct.ServerConf.html)
+//! daemon: false
+//!
+//! # Virtual hosts settings (https://docs.rs/static-files-module/latest/static_files_module/struct.StaticFilesConf.html)
+//! vhosts:
+//!     localhost:8080:
+//!         aliases:
+//!         - 127.0.0.1:8080
+//!         - "[::1]:8080"
+//!         root: ./local-debug-root
+//!     example.com:
+//!         default: true
+//!         root: ./production-root
+//! ```
 //!
 //! An example config file is provided in this directory. You can run this example with the
 //! following command:
 //!
 //! ```sh
-//! cargo run --package example-single-static-root -- -c config.yaml
+//! cargo run --package example-virtual-hosts -- -c config.yaml
 //! ```
 //!
 //! To enable debugging output you can use the `RUST_LOG` environment variable:
 //!
 //! ```sh
-//! RUST_LOG=debug cargo run --package example-single-static-root -- -c config.yaml
+//! RUST_LOG=debug cargo run --package example-virtual-hosts -- -c config.yaml
 //! ```
 
 use async_trait::async_trait;
@@ -45,22 +57,26 @@ use log::error;
 use pingora_core::server::configuration::{Opt as ServerOpt, ServerConf};
 use pingora_core::server::Server;
 use pingora_core::upstreams::peer::HttpPeer;
-use pingora_core::{Error, ErrorType};
+use pingora_core::Error;
 use pingora_proxy::{http_proxy_service, ProxyHttp, Session};
 use pingora_utils_core::{merge_conf, merge_opt, FromYaml, RequestFilter};
 use serde::Deserialize;
-use static_files_module::{StaticFilesHandler, StaticFilesOpt};
+use static_files_module::{StaticFilesConf, StaticFilesHandler};
 use structopt::StructOpt;
+use virtual_hosts_module::{VirtualHostsConf, VirtualHostsHandler};
+
+type HostConf = StaticFilesConf;
+type HostHandler = StaticFilesHandler;
 
 /// The application implementing the Pingora Proxy interface
-struct StaticRootApp {
-    handler: StaticFilesHandler,
+struct VirtualHostsApp {
+    handler: VirtualHostsHandler<HostHandler>,
     compression_level: Option<u32>,
 }
 
-impl StaticRootApp {
-    /// Creates a new application instance with the given static files handler.
-    fn new(handler: StaticFilesHandler, compression_level: Option<u32>) -> Self {
+impl VirtualHostsApp {
+    /// Creates a new application instance with the given virtual hosts handler.
+    fn new(handler: VirtualHostsHandler<HostHandler>, compression_level: Option<u32>) -> Self {
         Self {
             handler,
             compression_level,
@@ -70,7 +86,7 @@ impl StaticRootApp {
 
 /// Command line options of this application
 #[derive(Debug, StructOpt)]
-struct StaticRootAppOpt {
+struct VirtualHostsAppOpt {
     /// Address and port to listen on, e.g. "127.0.0.1:8080". This command line flag can be
     /// specified multiple times.
     #[structopt(short, long)]
@@ -82,19 +98,18 @@ struct StaticRootAppOpt {
 }
 
 merge_opt! {
-    /// Run a web server exposing a single directory with static content.
+    /// Run a web server exposing static content under several virtual hosts.
     ///
-    /// This application is based on pingora-proxy and static-files-module.
+    /// This application is based on pingora-proxy and virtual-hosts-module.
     struct Opt {
-        app: StaticRootAppOpt,
+        app: VirtualHostsAppOpt,
         server: ServerOpt,
-        static_files: StaticFilesOpt,
     }
 }
 
 /// Application-specific configuration settings
 #[derive(Debug, Deserialize)]
-struct StaticRootAppConf {
+struct VirtualHostsAppConf {
     /// List of address/port combinations to listen on, e.g. "127.0.0.1:8080".
     listen: Vec<String>,
 
@@ -102,7 +117,7 @@ struct StaticRootAppConf {
     compression_level: Option<u32>,
 }
 
-impl Default for StaticRootAppConf {
+impl Default for VirtualHostsAppConf {
     fn default() -> Self {
         Self {
             listen: vec!["127.0.0.1:8080".to_owned(), "[::1]:8080".to_owned()],
@@ -112,20 +127,20 @@ impl Default for StaticRootAppConf {
 }
 
 merge_conf! {
-    /// The combined configuration of Pingora server and [`StaticFilesHandler`].
+    /// The combined configuration of Pingora server and [`VirtualHostsHandler`].
     struct Conf {
-        app: StaticRootAppConf,
+        app: VirtualHostsAppConf,
         server: ServerConf,
-        static_files: <StaticFilesHandler as RequestFilter>::Conf,
+        virtual_hosts: VirtualHostsConf<HostConf>,
     }
 }
 
 #[async_trait]
-impl ProxyHttp for StaticRootApp {
-    type CTX = <StaticFilesHandler as RequestFilter>::CTX;
+impl ProxyHttp for VirtualHostsApp {
+    type CTX = <VirtualHostsHandler<HostHandler> as RequestFilter>::CTX;
 
     fn new_ctx(&self) -> Self::CTX {
-        StaticFilesHandler::new_ctx()
+        VirtualHostsHandler::<HostHandler>::new_ctx()
     }
 
     async fn request_filter(
@@ -144,7 +159,11 @@ impl ProxyHttp for StaticRootApp {
         _session: &mut Session,
         _ctx: &mut Self::CTX,
     ) -> Result<Box<HttpPeer>, Box<Error>> {
-        Err(Error::new(ErrorType::HTTPStatus(404)))
+        Ok(Box::new(HttpPeer::new(
+            "example.com:443",
+            true,
+            "example.com".to_owned(),
+        )))
     }
 }
 
@@ -168,9 +187,7 @@ fn main() {
     let mut server = Server::new_with_opt_and_conf(opt.server, conf.server);
     server.bootstrap();
 
-    let mut static_files_conf = conf.static_files;
-    static_files_conf.merge_with_opt(opt.static_files);
-    let handler = match StaticFilesHandler::new(static_files_conf) {
+    let handler = match VirtualHostsHandler::new(conf.virtual_hosts) {
         Ok(handler) => handler,
         Err(err) => {
             error!("{err}");
@@ -181,7 +198,7 @@ fn main() {
 
     let mut proxy = http_proxy_service(
         &server.configuration,
-        StaticRootApp::new(handler, compression_level),
+        VirtualHostsApp::new(handler, compression_level),
     );
     for addr in opt.app.listen.unwrap_or(conf.app.listen) {
         proxy.add_tcp(&addr);

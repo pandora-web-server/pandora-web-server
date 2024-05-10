@@ -3,11 +3,13 @@ resolver = "2"
 members = [
   "pingora-utils-core",
   "static-files-module",
+  "virtual-hosts-module",
   "examples/*",
 ]
 default-members = [
   "pingora-utils-core",
   "static-files-module",
+  "virtual-hosts-module",
 ]
 
 [workspace.dependencies]

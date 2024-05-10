@@ -14,32 +14,41 @@
 
 //! # Static Files Module for Pingora
 //!
-//! This crate allows extending [Pingora Proxy](https://github.com/cloudflare/pingora) with the capability to serve static files from a directory.
+//! This crate allows extending [Pingora Proxy](https://github.com/cloudflare/pingora) with the
+//! capability to serve static files from a directory.
 //!
 //! ## Supported functionality
 //!
 //! * `GET` and `HEAD` requests
 //! * Configurable directory index files (`index.html` by default)
 //! * Page configurable to display on 404 Not Found errors instead of the standard error page
-//! * Conditional requests via `If-Modified-Since`, `If-Unmodified-Since`, `If-Match`, `If-None` match HTTP headers
+//! * Conditional requests via `If-Modified-Since`, `If-Unmodified-Since`, `If-Match`, `If-None`
+//!   match HTTP headers
 //! * Byte range requests via `Range` and `If-Range` HTTP headers
-//! * Compression support: serving pre-compressed versions of the files (gzip, zlib deflate, compress, Brotli, Zstandard algorithms supported)
-//! * Compression support: dynamic compression via Pingora (currently gzip, Brotli and Zstandard algorithms supported)
+//! * Compression support: serving pre-compressed versions of the files (gzip, zlib deflate,
+//!   compress, Brotli, Zstandard algorithms supported)
+//! * Compression support: dynamic compression via Pingora (currently gzip, Brotli and Zstandard
+//!   algorithms supported)
 //!
 //! ## Known limitations
 //!
-//! * Requests with multiple byte ranges are not supported and will result in the full file being returned. The complexity required for implementing this feature isn’t worth this rare use case.
-//! * Zero-copy data transfer (a.k.a. sendfile) cannot currently be supported within the Pingora framework.
+//! * Requests with multiple byte ranges are not supported and will result in the full file being
+//!   returned. The complexity required for implementing this feature isn’t worth this rare use case.
+//! * Zero-copy data transfer (a.k.a. sendfile) cannot currently be supported within the Pingora
+//!   framework.
 //!
 //! ## Code example
 //!
-//! You will typically create a [`StaticFilesHandler`] instance and call it during the `request_filter` stage. If called unconditionally it will handle all requests so that subsequent stages won’t be reached at all.
+//! You will typically create a [`StaticFilesHandler`] instance and call it during the
+//! `request_filter` stage. If called unconditionally it will handle all requests so that
+//! subsequent stages won’t be reached at all.
 //!
 //! ```rust
 //! use async_trait::async_trait;
 //! use pingora_core::Result;
 //! use pingora_core::upstreams::peer::HttpPeer;
 //! use pingora_proxy::{ProxyHttp, Session};
+//! use pingora_utils_core::RequestFilter;
 //! use static_files_module::StaticFilesHandler;
 //!
 //! pub struct MyServer {
@@ -48,20 +57,22 @@
 //!
 //! #[async_trait]
 //! impl ProxyHttp for MyServer {
-//!     type CTX = ();
-//!     fn new_ctx(&self) -> Self::CTX {}
+//!     type CTX = <StaticFilesHandler as RequestFilter>::CTX;
+//!     fn new_ctx(&self) -> Self::CTX {
+//!         StaticFilesHandler::new_ctx()
+//!     }
 //!
 //!     async fn request_filter(
 //!         &self,
 //!         session: &mut Session,
-//!         _ctx: &mut Self::CTX
+//!         ctx: &mut Self::CTX
 //!     ) -> Result<bool> {
-//!         self.static_files_handler.handle(session).await
+//!         self.static_files_handler.handle(session, ctx).await
 //!     }
 //!
 //!     async fn upstream_peer(
 //!         &self,
-//!         session: &mut Session,
+//!         _session: &mut Session,
 //!         _ctx: &mut Self::CTX,
 //!     ) -> Result<Box<HttpPeer>> {
 //!         panic!("Unexpected, upstream_peer stage reached");
@@ -71,50 +82,48 @@
 //!
 //! You can create a `StaticFilesHandler` instance by specifying its configuration directly:
 //!
-//! ```rust
+//! ```rust,no_run
 //! use static_files_module::{StaticFilesConf, StaticFilesHandler};
 //!
 //! let conf = StaticFilesConf {
 //!     root: "/var/www/html".into(),
 //!     ..Default::default()
 //! };
-//! let static_files_handler = StaticFilesHandler::new(conf);
+//! let static_files_handler: StaticFilesHandler = conf.try_into().unwrap();
 //! ```
-//! It is also possible to create a configuration from command line options and configuration file, extending the default Pingora data structures. *Note*: Reading the configuration file is currently [more complicated than necessary](https://github.com/cloudflare/pingora/issues/232).
+//! It is also possible to create a configuration from command line options and a configuration
+//! file, extending the default Pingora data structures. The macros
+//! [`pingora_utils_core::merge_opt`] and [`pingora_utils_core::merge_conf`] help merging command
+//! line options and configuration structures respectively, and [`pingora_utils_core::FromYaml`]
+//! trait helps reading the configuration file.
 //!
-//! ```rust
+//! ```rust,no_run
 //! use log::error;
-//! use pingora_core::server::configuration::{Opt, ServerConf};
+//! use pingora_core::server::configuration::{Opt as ServerOpt, ServerConf};
 //! use pingora_core::server::Server;
+//! use pingora_utils_core::{FromYaml, merge_opt, merge_conf};
 //! use serde::Deserialize;
 //! use static_files_module::{StaticFilesConf, StaticFilesHandler, StaticFilesOpt};
 //! use std::fs::File;
 //! use std::io::BufReader;
 //! use structopt::StructOpt;
 //!
-//! #[derive(Debug, StructOpt)]
-//! struct MyServerOpt {
-//!     // These are the default Pingora command line options. structopt(flatten) makes sure that these
-//!     // are treated the same as top-level fields.
-//!     #[structopt(flatten)]
-//!     server: Opt,
-//!
-//!     // These are the command line options specific to StaticFilesHandler.
-//!     #[structopt(flatten)]
-//!     static_files: StaticFilesOpt,
+//! // The command line flags from both structures are merged, so that the user doesn't need to
+//! // care which structure they belong to.
+//! merge_opt!{
+//!     struct MyServerOpt {
+//!         server: ServerOpt,
+//!         static_files: StaticFilesOpt,
+//!     }
 //! }
 //!
-//! #[derive(Debug, Default, PartialEq, Eq, Deserialize)]
-//! #[serde(default)]
-//! pub struct MyServerConf {
-//!     // These are the default Pingora configuration file settings. serde(flatten) makes sure that
-//!     // these are treated the same as top-level fields.
-//!     #[serde(flatten)]
-//!     server: ServerConf,
-//!
-//!     // These are the configuration file settings specific to StaticFilesHandler.
-//!     #[serde(flatten)]
-//!     static_files: StaticFilesConf,
+//! // The configuration settings from both structures are merged, so that the user doesn't need to
+//! // care which structure they belong to.
+//! merge_conf!{
+//!     struct MyServerConf {
+//!         server: ServerConf,
+//!         static_files: StaticFilesConf,
+//!     }
 //! }
 //!
 //! let opt = MyServerOpt::from_args();
@@ -122,21 +131,7 @@
 //!     .server
 //!     .conf
 //!     .as_ref()
-//!     .and_then(|path| match File::open(path) {
-//!         Ok(file) => Some(file),
-//!         Err(err) => {
-//!             error!("Failed opening configuration file: {err}");
-//!             None
-//!         }
-//!     })
-//!     .map(BufReader::new)
-//!     .and_then(|reader| match serde_yaml::from_reader(reader) {
-//!         Ok(conf) => Some(conf),
-//!         Err(err) => {
-//!             error!("Failed reading configuration file: {err}");
-//!             None
-//!         }
-//!     })
+//!     .and_then(|path| MyServerConf::load_from_yaml(path).ok())
 //!     .unwrap_or_else(MyServerConf::default);
 //!
 //! let mut server = Server::new_with_opt_and_conf(opt.server, conf.server);
@@ -144,7 +139,7 @@
 //!
 //! let mut static_files_conf = conf.static_files;
 //! static_files_conf.merge_with_opt(opt.static_files);
-//! let static_files_handler = StaticFilesHandler::new(static_files_conf);
+//! let static_files_handler: StaticFilesHandler = static_files_conf.try_into().unwrap();
 //! ```
 //!
 //! For complete and more comprehensive code see `single-static-root` example in the repository.
@@ -172,6 +167,7 @@
 //! # use pingora_core::Result;
 //! # use pingora_core::upstreams::peer::HttpPeer;
 //! # use pingora_proxy::{ProxyHttp, Session};
+//! # use pingora_utils_core::RequestFilter;
 //! # use serde::Deserialize;
 //! # use static_files_module::StaticFilesHandler;
 //! #
@@ -181,16 +177,18 @@
 //! #
 //! # #[async_trait]
 //! # impl ProxyHttp for MyServer {
-//! #     type CTX = ();
-//! #     fn new_ctx(&self) -> Self::CTX {}
+//! #     type CTX = <StaticFilesHandler as RequestFilter>::CTX;
+//! #     fn new_ctx(&self) -> Self::CTX {
+//! #         StaticFilesHandler::new_ctx()
+//! #     }
 //! #
 //! async fn request_filter(
 //!     &self,
 //!     session: &mut Session,
-//!     _ctx: &mut Self::CTX
+//!     ctx: &mut Self::CTX
 //! ) -> Result<bool> {
 //!     session.downstream_compression.adjust_level(3);
-//!     self.static_files_handler.handle(session).await
+//!     self.static_files_handler.handle(session, ctx).await
 //! }
 //! #
 //! #     async fn upstream_peer(

@@ -1,0 +1,20 @@
+[package]
+name = "example-virtual-hosts"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+async-trait.workspace = true
+env_logger.workspace = true
+log.workspace = true
+pingora-core.workspace = true
+pingora-proxy.workspace = true
+pingora-utils-core = { path = "../../pingora-utils-core" }
+serde.workspace = true
+static-files-module = { path = "../../static-files-module" }
+virtual-hosts-module = { path = "../../virtual-hosts-module" }
+structopt.workspace = true
+
+[lints]
+workspace = true

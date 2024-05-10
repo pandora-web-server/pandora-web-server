@@ -14,10 +14,12 @@
 
 //! Handler for the `request_filter` phase.
 
+use async_trait::async_trait;
 use log::{debug, info, warn};
 use pingora_core::{Error, ErrorType};
 use pingora_http::{Method, StatusCode};
 use pingora_proxy::Session;
+use pingora_utils_core::{RequestFilter, RequestFilterResult};
 use std::io::ErrorKind;
 
 use crate::compression::Compression;
@@ -35,21 +37,6 @@ pub struct StaticFilesHandler {
 }
 
 impl StaticFilesHandler {
-    /// Creates a new handler with given configuration. This will canonicalize the path to the root
-    /// directory and might result in an error if that path isn’t accessible.
-    pub fn new(mut conf: StaticFilesConf) -> Result<Self, Box<Error>> {
-        conf.root = conf.root.canonicalize().map_err(|err| {
-            Error::because(
-                ErrorType::InternalError,
-                format!("Failed accessing root path {:?}", conf.root),
-                err,
-            )
-        })?;
-
-        debug!("Initialized static files handler, settings: {conf:#?}");
-        Ok(Self { conf })
-    }
-
     /// Provides read-only access to the handler’s configuration.
     pub fn conf(&self) -> &StaticFilesConf {
         &self.conf
@@ -59,12 +46,21 @@ impl StaticFilesHandler {
     pub fn conf_mut(&mut self) -> &mut StaticFilesConf {
         &mut self.conf
     }
+}
 
-    /// Handles the current request. Will typically return `true` (request handled), an error
-    /// should only be returned in exceptional cases.
-    ///
-    /// *Note*: This handler will handle all requests. It never returns `false`.
-    pub async fn handle(&self, session: &mut Session) -> Result<bool, Box<Error>> {
+#[async_trait]
+impl RequestFilter for StaticFilesHandler {
+    type Conf = StaticFilesConf;
+
+    type CTX = ();
+
+    fn new_ctx() -> Self::CTX {}
+
+    async fn request_filter(
+        &self,
+        session: &mut Session,
+        _ctx: &mut Self::CTX,
+    ) -> Result<RequestFilterResult, Box<Error>> {
         let uri = &session.req_header().uri;
         debug!("received URI path {}", uri.path());
 
@@ -88,7 +84,7 @@ impl StaticFilesHandler {
                     (path, true)
                 } else {
                     error_response(session, StatusCode::NOT_FOUND).await?;
-                    return Ok(true);
+                    return Ok(RequestFilterResult::ResponseSent);
                 }
             }
             Err(err) => {
@@ -111,7 +107,7 @@ impl StaticFilesHandler {
                     }
                 };
                 error_response(session, status).await?;
-                return Ok(true);
+                return Ok(RequestFilterResult::ResponseSent);
             }
         };
 
@@ -126,7 +122,7 @@ impl StaticFilesHandler {
                     }
                     info!("redirecting to canonical URI: {canonical}");
                     redirect_response(session, StatusCode::PERMANENT_REDIRECT, &canonical).await?;
-                    return Ok(true);
+                    return Ok(RequestFilterResult::ResponseSent);
                 }
             }
         }
@@ -150,7 +146,7 @@ impl StaticFilesHandler {
             _ => {
                 warn!("Denying method {}", session.req_header().method);
                 error_response(session, StatusCode::METHOD_NOT_ALLOWED).await?;
-                return Ok(true);
+                return Ok(RequestFilterResult::ResponseSent);
             }
         }
 
@@ -168,12 +164,12 @@ impl StaticFilesHandler {
             Err(err) if err.kind() == ErrorKind::InvalidInput => {
                 warn!("Path {path:?} is not a regular file, denying access");
                 error_response(session, StatusCode::FORBIDDEN).await?;
-                return Ok(true);
+                return Ok(RequestFilterResult::ResponseSent);
             }
             Err(err) => {
                 warn!("failed retrieving metadata for path {path:?}: {err}");
                 error_response(session, StatusCode::INTERNAL_SERVER_ERROR).await?;
-                return Ok(true);
+                return Ok(RequestFilterResult::ResponseSent);
             }
         };
 
@@ -182,7 +178,7 @@ impl StaticFilesHandler {
             let header = meta.to_custom_header(StatusCode::PRECONDITION_FAILED)?;
             let header = compression.transform_header(session, header)?;
             session.write_response_header(header).await?;
-            return Ok(true);
+            return Ok(RequestFilterResult::ResponseSent);
         }
 
         if meta.is_not_modified(session) {
@@ -190,7 +186,7 @@ impl StaticFilesHandler {
             let header = meta.to_custom_header(StatusCode::NOT_MODIFIED)?;
             let header = compression.transform_header(session, header)?;
             session.write_response_header(header).await?;
-            return Ok(true);
+            return Ok(RequestFilterResult::ResponseSent);
         }
 
         let (mut header, start, end) = match extract_range(session, &meta) {
@@ -205,7 +201,7 @@ impl StaticFilesHandler {
                 let header = meta.to_custom_header(StatusCode::RANGE_NOT_SATISFIABLE)?;
                 let header = compression.transform_header(session, header)?;
                 session.write_response_header(header).await?;
-                return Ok(true);
+                return Ok(RequestFilterResult::ResponseSent);
             }
             None => {
                 // Range is either missing or cannot be parsed, produce the entire file.
@@ -226,6 +222,23 @@ impl StaticFilesHandler {
             // https://github.com/cloudflare/pingora/issues/160)
             file_response(session, &path, start, end, &compression).await?;
         }
-        Ok(true)
+        Ok(RequestFilterResult::ResponseSent)
+    }
+}
+
+impl TryFrom<StaticFilesConf> for StaticFilesHandler {
+    type Error = Box<Error>;
+
+    fn try_from(mut conf: StaticFilesConf) -> Result<Self, Self::Error> {
+        conf.root = conf.root.canonicalize().map_err(|err| {
+            Error::because(
+                ErrorType::InternalError,
+                format!("Failed accessing root path {:?}", conf.root),
+                err,
+            )
+        })?;
+
+        debug!("Initialized static files handler, settings: {conf:#?}");
+        Ok(Self { conf })
     }
 }

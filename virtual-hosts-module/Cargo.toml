@@ -1,31 +1,36 @@
 [package]
-name = "pingora-utils-core"
+name = "virtual-hosts-module"
 version = "0.1.0"
 authors = ["Wladimir Palant"]
 repository = "https://github.com/palant/pingora-utils"
 categories = ["network-programming", "web-programming::http-server"]
-keywords = ["utilities", "web-server", "http", "pingora"]
+keywords = ["virtual-hosts", "web-server", "http", "pingora"]
 license = "Apache-2.0"
 edition = "2021"
 description = """
-Helpers for Pingora modules such as static-files-module crate.
+A module handling configuration per virtual host with Pingora.
 """
 
 [lib]
-name = "pingora_utils_core"
+name = "virtual_hosts_module"
 path = "src/lib.rs"
 
 [dependencies]
 async-trait.workspace = true
-log.workspace = true
+http.workspace = true
 pingora-core.workspace = true
 pingora-proxy.workspace = true
+pingora-utils-core = { path = "../pingora-utils-core" }
 serde.workspace = true
-serde_yaml.workspace = true
+log.workspace = true
 
 [dev-dependencies]
+env_logger.workspace = true
 static-files-module = { path = "../static-files-module" }
 structopt.workspace = true
+test-log.workspace = true
+tokio.workspace = true
+tokio-test.workspace = true
 
 [lints]
 workspace = true
