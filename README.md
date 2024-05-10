@@ -2,8 +2,9 @@
 
 This repository is meant to contain various crates which can be used to extend Pingora functionality. At the moment these are:
 
-* [Pingora utils core](../../tree/main/pingora-utils-core): Various useful helpers for the other crates
+* [Module utils](../../tree/main/module-utils): Various useful helpers for the other crates
 * [Static Files Module](../../tree/main/static-files-module): Serve static files from a directory
+* [Virtual Hosts Module](../../tree/main/virtual-hosts-module): Handle separate configurations for virtual hosts
 
 ## Rust version
 
