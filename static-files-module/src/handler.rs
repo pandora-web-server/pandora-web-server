@@ -16,10 +16,10 @@
 
 use async_trait::async_trait;
 use log::{debug, info, warn};
+use module_utils::{RequestFilter, RequestFilterResult};
 use pingora_core::{Error, ErrorType};
 use pingora_http::{Method, StatusCode};
 use pingora_proxy::Session;
-use pingora_utils_core::{RequestFilter, RequestFilterResult};
 use std::io::ErrorKind;
 
 use crate::compression::Compression;

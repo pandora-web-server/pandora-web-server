@@ -54,12 +54,12 @@
 
 use async_trait::async_trait;
 use log::error;
+use module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
 use pingora_core::server::configuration::{Opt as ServerOpt, ServerConf};
 use pingora_core::server::Server;
 use pingora_core::upstreams::peer::HttpPeer;
 use pingora_core::Error;
 use pingora_proxy::{http_proxy_service, ProxyHttp, Session};
-use pingora_utils_core::{merge_conf, merge_opt, FromYaml, RequestFilter};
 use serde::Deserialize;
 use static_files_module::{StaticFilesConf, StaticFilesHandler};
 use structopt::StructOpt;

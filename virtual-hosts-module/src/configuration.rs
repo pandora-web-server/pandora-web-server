@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use pingora_utils_core::merge_conf;
+use module_utils::merge_conf;
 use serde::Deserialize;
 use std::collections::HashMap;
 

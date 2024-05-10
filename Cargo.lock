@@ -424,9 +424,9 @@ dependencies = [
  "async-trait",
  "env_logger",
  "log",
+ "module-utils",
  "pingora-core",
  "pingora-proxy",
- "pingora-utils-core",
  "serde",
  "static-files-module",
  "structopt",
@@ -439,9 +439,9 @@ dependencies = [
  "async-trait",
  "env_logger",
  "log",
+ "module-utils",
  "pingora-core",
  "pingora-proxy",
- "pingora-utils-core",
  "serde",
  "static-files-module",
  "structopt",
@@ -960,6 +960,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "module-utils"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "log",
+ "pingora-core",
+ "pingora-proxy",
+ "serde",
+ "serde_yaml",
+ "static-files-module",
+ "structopt",
+]
+
+[[package]]
 name = "nix"
 version = "0.24.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1314,20 +1328,6 @@ dependencies = [
  "pin-project-lite",
  "thread_local",
  "tokio",
-]
-
-[[package]]
-name = "pingora-utils-core"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "log",
- "pingora-core",
- "pingora-proxy",
- "serde",
- "serde_yaml",
- "static-files-module",
- "structopt",
 ]
 
 [[package]]
@@ -1866,11 +1866,11 @@ dependencies = [
  "httpdate",
  "log",
  "mime_guess",
+ "module-utils",
  "percent-encoding",
  "pingora-core",
  "pingora-http",
  "pingora-proxy",
- "pingora-utils-core",
  "serde",
  "serde_yaml",
  "structopt",
@@ -2344,9 +2344,9 @@ dependencies = [
  "env_logger",
  "http 1.1.0",
  "log",
+ "module-utils",
  "pingora-core",
  "pingora-proxy",
- "pingora-utils-core",
  "serde",
  "static-files-module",
  "structopt",

@@ -20,10 +20,10 @@ use crate::standard_response::response_text;
 
 use const_format::{concatcp, str_repeat};
 use httpdate::fmt_http_date;
+use module_utils::{RequestFilter, RequestFilterResult};
 use pingora_core::Error;
 use pingora_http::StatusCode;
 use pingora_proxy::Session;
-use pingora_utils_core::{RequestFilter, RequestFilterResult};
 use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::time::SystemTime;

@@ -1,5 +1,5 @@
 [package]
-name = "pingora-utils-core"
+name = "module-utils"
 version = "0.1.0"
 authors = ["Wladimir Palant"]
 repository = "https://github.com/palant/pingora-utils"
@@ -12,7 +12,7 @@ Helpers for Pingora modules such as static-files-module crate.
 """
 
 [lib]
-name = "pingora_utils_core"
+name = "module_utils"
 path = "src/lib.rs"
 
 [dependencies]

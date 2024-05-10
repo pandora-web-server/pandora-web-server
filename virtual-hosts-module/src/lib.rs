@@ -15,7 +15,7 @@
 //! # Virtual Hosts Module for Pingora
 //!
 //! This module simplifies dealing with virtual hosts. It wraps any handler implementing
-//! [`pingora_utils_core::RequestFilter`] and its configuration, allowing to supply a different
+//! [`module_utils::RequestFilter`] and its configuration, allowing to supply a different
 //! configuration for that handler for each virtual host. For example, if Static Files Module is
 //! the wrapped handler, the configuration file might look like this:
 //!
@@ -50,7 +50,7 @@
 //!
 //! ```rust
 //! use pingora_core::server::configuration::{Opt, ServerConf};
-//! use pingora_utils_core::{FromYaml, merge_conf};
+//! use module_utils::{FromYaml, merge_conf};
 //! use static_files_module::{StaticFilesConf, StaticFilesHandler};
 //! use structopt::StructOpt;
 //! use virtual_hosts_module::{VirtualHostsConf, VirtualHostsHandler};
@@ -82,7 +82,7 @@
 //! use pingora_core::upstreams::peer::HttpPeer;
 //! use pingora_core::Error;
 //! use pingora_proxy::{ProxyHttp, Session};
-//! use pingora_utils_core::RequestFilter;
+//! use module_utils::RequestFilter;
 //! use static_files_module::StaticFilesHandler;
 //! use virtual_hosts_module::VirtualHostsHandler;
 //!

@@ -20,7 +20,7 @@ async-trait.workspace = true
 http.workspace = true
 pingora-core.workspace = true
 pingora-proxy.workspace = true
-pingora-utils-core = { path = "../pingora-utils-core" }
+module-utils = { path = "../module-utils" }
 serde.workspace = true
 log.workspace = true
 

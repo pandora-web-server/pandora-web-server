@@ -48,7 +48,7 @@
 //! use pingora_core::Result;
 //! use pingora_core::upstreams::peer::HttpPeer;
 //! use pingora_proxy::{ProxyHttp, Session};
-//! use pingora_utils_core::RequestFilter;
+//! use module_utils::RequestFilter;
 //! use static_files_module::StaticFilesHandler;
 //!
 //! pub struct MyServer {
@@ -93,15 +93,15 @@
 //! ```
 //! It is also possible to create a configuration from command line options and a configuration
 //! file, extending the default Pingora data structures. The macros
-//! [`pingora_utils_core::merge_opt`] and [`pingora_utils_core::merge_conf`] help merging command
-//! line options and configuration structures respectively, and [`pingora_utils_core::FromYaml`]
+//! [`module_utils::merge_opt`] and [`module_utils::merge_conf`] help merging command
+//! line options and configuration structures respectively, and [`module_utils::FromYaml`]
 //! trait helps reading the configuration file.
 //!
 //! ```rust,no_run
 //! use log::error;
 //! use pingora_core::server::configuration::{Opt as ServerOpt, ServerConf};
 //! use pingora_core::server::Server;
-//! use pingora_utils_core::{FromYaml, merge_opt, merge_conf};
+//! use module_utils::{FromYaml, merge_opt, merge_conf};
 //! use serde::Deserialize;
 //! use static_files_module::{StaticFilesConf, StaticFilesHandler, StaticFilesOpt};
 //! use std::fs::File;
@@ -167,7 +167,7 @@
 //! # use pingora_core::Result;
 //! # use pingora_core::upstreams::peer::HttpPeer;
 //! # use pingora_proxy::{ProxyHttp, Session};
-//! # use pingora_utils_core::RequestFilter;
+//! # use module_utils::RequestFilter;
 //! # use serde::Deserialize;
 //! # use static_files_module::StaticFilesHandler;
 //! #

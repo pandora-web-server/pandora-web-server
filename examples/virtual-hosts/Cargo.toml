@@ -10,7 +10,7 @@ env_logger.workspace = true
 log.workspace = true
 pingora-core.workspace = true
 pingora-proxy.workspace = true
-pingora-utils-core = { path = "../../pingora-utils-core" }
+module-utils = { path = "../../module-utils" }
 serde.workspace = true
 static-files-module = { path = "../../static-files-module" }
 virtual-hosts-module = { path = "../../virtual-hosts-module" }

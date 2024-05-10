@@ -15,9 +15,9 @@
 use async_trait::async_trait;
 use http::header;
 use log::warn;
+use module_utils::{RequestFilter, RequestFilterResult};
 use pingora_core::Error;
 use pingora_proxy::Session;
-use pingora_utils_core::{RequestFilter, RequestFilterResult};
 use std::collections::HashMap;
 
 use crate::configuration::VirtualHostsConf;

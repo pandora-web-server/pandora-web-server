@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! # Helpers for Pingora handlers
+//! # Module helpers
 //!
-//! This crate contains some helpers that are useful when using `static-files-module` crate for
-//! example.
+//! This crate contains some helpers that are useful when using `static-files-module` or
+//! `virtual-hosts-module` crates for example.
 
 use async_trait::async_trait;
 use log::trace;
@@ -71,7 +71,7 @@ where
 ///
 /// ```rust
 /// use pingora_core::server::configuration::Opt as ServerOpt;
-/// use pingora_utils_core::merge_opt;
+/// use module_utils::merge_opt;
 /// use static_files_module::StaticFilesOpt;
 /// use structopt::StructOpt;
 ///
@@ -155,7 +155,7 @@ macro_rules! merge_opt {
 ///
 /// ```rust
 /// use pingora_core::server::configuration::ServerConf;
-/// use pingora_utils_core::{merge_conf, FromYaml};
+/// use module_utils::{merge_conf, FromYaml};
 /// use static_files_module::StaticFilesConf;
 /// use serde::Deserialize;
 ///
