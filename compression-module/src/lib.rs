@@ -106,6 +106,8 @@
 //!     }
 //! }
 //! ```
+//!
+//! For complete and more realistic code, see `single-static-root` example in the repository.
 
 use async_trait::async_trait;
 use module_utils::{RequestFilter, RequestFilterResult};

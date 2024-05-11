@@ -92,3 +92,5 @@ impl ProxyHttp for MyServer {
     }
 }
 ```
+
+For complete and more realistic code, see [`single-static-root` example](https://github.com/palant/pingora-utils/tree/main/examples/single-static-root) in the repository.
