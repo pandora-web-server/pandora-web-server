@@ -10,7 +10,7 @@ listen:
 - "[::]:8080"
 compression_level: 3
 
-# General server settings (https://docs.rs/pingora-core/0.1.1/pingora_core/server/configuration/struct.ServerConf.html)
+# General server settings (https://docs.rs/pingora-core/0.2.0/pingora_core/server/configuration/struct.ServerConf.html)
 daemon: false
 
 # Virtual hosts settings (https://docs.rs/static-files-module/latest/static_files_module/struct.StaticFilesConf.html)

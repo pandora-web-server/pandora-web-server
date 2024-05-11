@@ -23,7 +23,7 @@
 //! listen:
 //! - "[::]:8080"
 //!
-//! # General server settings (https://docs.rs/pingora-core/0.1.1/pingora_core/server/configuration/struct.ServerConf.html)
+//! # General server settings (https://docs.rs/pingora-core/0.2.0/pingora_core/server/configuration/struct.ServerConf.html)
 //! daemon: false
 //!
 //! # Virtual hosts settings:
