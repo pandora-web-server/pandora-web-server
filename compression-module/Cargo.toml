@@ -1,31 +1,27 @@
 [package]
-name = "module-utils"
+name = "compression-module"
 version = "0.1.0"
 authors = ["Wladimir Palant"]
 repository = "https://github.com/palant/pingora-utils"
 categories = ["network-programming", "web-programming::http-server"]
-keywords = ["utilities", "web-server", "http", "pingora"]
+keywords = ["compression", "web-server", "http", "pingora"]
 license = "Apache-2.0"
 edition = "2021"
 description = """
-Helpers for Pingora modules such as static-files-module crate.
+A helper module to configure Pingora's built-in compression.
 """
 
 [lib]
-name = "module_utils"
+name = "compression_module"
 path = "src/lib.rs"
 
 [dependencies]
 async-trait.workspace = true
-log.workspace = true
 pingora-core.workspace = true
 pingora-proxy.workspace = true
+log.workspace = true
+module-utils.workspace = true
 serde.workspace = true
-serde_yaml.workspace = true
-
-[dev-dependencies]
-compression-module.workspace = true
-static-files-module.workspace = true
 structopt.workspace = true
 
 [lints]

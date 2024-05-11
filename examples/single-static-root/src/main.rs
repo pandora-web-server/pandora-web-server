@@ -14,18 +14,13 @@
 
 //! # Single static root example
 //!
-//! This is a simple web server using `static-files-module` crate. It combines the usual
-//! [Pingora command line options](Opt) with the
-//! [command line options of `static-files-module`](static_files_module::StaticFilesOpt)
-//! and the usual [Pingora config file settings](ServerConf) with the
-//! [config file settings of `static-files-module`](static_files_module::StaticFilesConf).
-//! In addition, it provides the following settings:
+//! This is a simple web server using `compression-module` and `static-files-module` crates. It
+//! combines their command line options with the usual [Pingora command line options](Opt) and
+//! their config file settings with [Pingora`s](ServerConf). In addition, it provides the following
+//! setting:
 //!
 //! * `listen` (`--listen` as command line flag): A list of IP address/port combinations the server
 //!   should listen on, e.g. `0.0.0.0:8080`.
-//! * `compression_level` (`--compression-level` as command line flag): If present, dynamic
-//!   compression will be enabled and compression level set to the value provided for all
-//!   algorithms (see [Pingora issue #228](https://github.com/cloudflare/pingora/issues/228)).
 //!
 //! An example config file is provided in this directory. You can run this example with the
 //! following command:
@@ -41,8 +36,9 @@
 //! ```
 
 use async_trait::async_trait;
+use compression_module::{CompressionHandler, CompressionOpt};
 use log::error;
-use module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
+use module_utils::{chain_handlers, merge_conf, merge_opt, FromYaml, RequestFilter};
 use pingora_core::server::configuration::{Opt as ServerOpt, ServerConf};
 use pingora_core::server::Server;
 use pingora_core::upstreams::peer::HttpPeer;
@@ -54,17 +50,21 @@ use structopt::StructOpt;
 
 /// The application implementing the Pingora Proxy interface
 struct StaticRootApp {
-    handler: StaticFilesHandler,
-    compression_level: Option<u32>,
+    handler: Handler,
 }
 
 impl StaticRootApp {
-    /// Creates a new application instance with the given static files handler.
-    fn new(handler: StaticFilesHandler, compression_level: Option<u32>) -> Self {
-        Self {
-            handler,
-            compression_level,
-        }
+    /// Creates a new application instance with the given handler.
+    fn new(handler: Handler) -> Self {
+        Self { handler }
+    }
+}
+
+chain_handlers! {
+    /// Handler combining Compression and Static Files modules
+    struct Handler {
+        compression: CompressionHandler,
+        static_files: StaticFilesHandler,
     }
 }
 
@@ -75,10 +75,6 @@ struct StaticRootAppOpt {
     /// specified multiple times.
     #[structopt(short, long)]
     listen: Option<Vec<String>>,
-
-    /// Compression level to be used for dynamic compression (omit to disable compression).
-    #[structopt(long)]
-    compression_level: Option<u32>,
 }
 
 merge_opt! {
@@ -88,6 +84,7 @@ merge_opt! {
     struct Opt {
         app: StaticRootAppOpt,
         server: ServerOpt,
+        compression: CompressionOpt,
         static_files: StaticFilesOpt,
     }
 }
@@ -97,16 +94,12 @@ merge_opt! {
 struct StaticRootAppConf {
     /// List of address/port combinations to listen on, e.g. "127.0.0.1:8080".
     listen: Vec<String>,
-
-    /// Compression level to be used for dynamic compression (omit to disable compression).
-    compression_level: Option<u32>,
 }
 
 impl Default for StaticRootAppConf {
     fn default() -> Self {
         Self {
             listen: vec!["127.0.0.1:8080".to_owned(), "[::1]:8080".to_owned()],
-            compression_level: None,
         }
     }
 }
@@ -116,16 +109,16 @@ merge_conf! {
     struct Conf {
         app: StaticRootAppConf,
         server: ServerConf,
-        static_files: <StaticFilesHandler as RequestFilter>::Conf,
+        handler: <Handler as RequestFilter>::Conf,
     }
 }
 
 #[async_trait]
 impl ProxyHttp for StaticRootApp {
-    type CTX = <StaticFilesHandler as RequestFilter>::CTX;
+    type CTX = <Handler as RequestFilter>::CTX;
 
     fn new_ctx(&self) -> Self::CTX {
-        StaticFilesHandler::new_ctx()
+        Handler::new_ctx()
     }
 
     async fn request_filter(
@@ -133,9 +126,6 @@ impl ProxyHttp for StaticRootApp {
         session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> Result<bool, Box<Error>> {
-        if let Some(level) = self.compression_level {
-            session.downstream_compression.adjust_level(level);
-        }
         self.handler.handle(session, ctx).await
     }
 
@@ -152,7 +142,7 @@ fn main() {
     env_logger::init();
 
     let opt = Opt::from_args();
-    let conf = opt
+    let mut conf = opt
         .server
         .conf
         .as_ref()
@@ -168,21 +158,18 @@ fn main() {
     let mut server = Server::new_with_opt_and_conf(opt.server, conf.server);
     server.bootstrap();
 
-    let mut static_files_conf = conf.static_files;
-    static_files_conf.merge_with_opt(opt.static_files);
-    let handler = match StaticFilesHandler::new(static_files_conf) {
+    conf.handler.compression.merge_with_opt(opt.compression);
+    conf.handler.static_files.merge_with_opt(opt.static_files);
+
+    let handler = match Handler::new(conf.handler) {
         Ok(handler) => handler,
         Err(err) => {
             error!("{err}");
             return;
         }
     };
-    let compression_level = opt.app.compression_level.or(conf.app.compression_level);
 
-    let mut proxy = http_proxy_service(
-        &server.configuration,
-        StaticRootApp::new(handler, compression_level),
-    );
+    let mut proxy = http_proxy_service(&server.configuration, StaticRootApp::new(handler));
     for addr in opt.app.listen.unwrap_or(conf.app.listen) {
         proxy.add_tcp(&addr);
     }

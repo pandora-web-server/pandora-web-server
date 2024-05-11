@@ -27,6 +27,65 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 
+/// Request filter result indicating how the current request should be processed further
+#[derive(Debug, Copy, Clone, PartialEq, Default)]
+pub enum RequestFilterResult {
+    /// Response has been sent, no further processing should happen. Other Pingora phases should
+    /// not be triggered.
+    ResponseSent,
+
+    /// Request has been handled and further request filters should not run. Response hasn’t been
+    /// sent however, next Pingora phase should deal with that.
+    Handled,
+
+    /// Request filter could not handle this request, next request filter should run if it exists.
+    #[default]
+    Unhandled,
+}
+
+/// Trait to be implemented by request filters.
+#[async_trait]
+pub trait RequestFilter {
+    /// Configuration type of this handler.
+    type Conf;
+
+    /// Creates a new instance of the handler from its configuration.
+    fn new(conf: Self::Conf) -> Result<Self, Box<Error>>
+    where
+        Self: Sized,
+        Self::Conf: TryInto<Self, Error = Box<Error>>,
+    {
+        conf.try_into()
+    }
+
+    /// Handles the current request.
+    ///
+    /// This is essentially identical to the `request_filter` method but is supposed to be called
+    /// when there is only a single handler. Consequently, its result can be returned directly.
+    async fn handle(&self, session: &mut Session, ctx: &mut Self::CTX) -> Result<bool, Box<Error>>
+    where
+        Self::CTX: Send,
+    {
+        let result = self.request_filter(session, ctx).await?;
+        Ok(result == RequestFilterResult::ResponseSent)
+    }
+
+    /// Per-request state of this handler, see [`pingora_proxy::ProxyHttp::CTX`]
+    type CTX;
+
+    /// Creates a new sate object, see [`pingora_proxy::ProxyHttp::new_ctx`]
+    fn new_ctx() -> Self::CTX;
+
+    /// Handler to run during Pingora’s `request_filter` state, see
+    /// [`pingora_proxy::ProxyHttp::request_filter`]. This uses a different return type to account
+    /// for the existence of multiple request filters.
+    async fn request_filter(
+        &self,
+        session: &mut Session,
+        ctx: &mut Self::CTX,
+    ) -> Result<RequestFilterResult, Box<Error>>;
+}
+
 /// Trait for configuration structures that can be loaded from YAML files. This trait has a blanket
 /// implementation for any structure implementing [`serde::Deserialize`].
 pub trait FromYaml {
@@ -216,61 +275,140 @@ macro_rules! merge_conf {
     }
 }
 
-/// Request filter result indicating how the current request should be processed further
-#[derive(Debug, Copy, Clone, PartialEq, Default)]
-pub enum RequestFilterResult {
-    /// Response has been sent, no further processing should happen. Other Pingora phases should
-    /// not be triggered.
-    ResponseSent,
+/// This macro chains multiple handlers implementing [`RequestFilter`] and merges their respective
+/// configurations.
+///
+/// The handlers will be called in the order in which they are listed. Each handler can prevent the
+/// subsequent handlers from being called by returning [`RequestFilterResult::ResponseSent`] or
+/// [`RequestFilterResult::Handled`].
+///
+/// *Note*: Support for `struct` syntax is limited when it comes to generics.
+///
+/// ```rust,no_run
+/// use module_utils::{chain_handlers, FromYaml, RequestFilter};
+/// use compression_module::CompressionHandler;
+/// use static_files_module::StaticFilesHandler;
+///
+/// chain_handlers!{
+///     struct Handler {
+///         compression: CompressionHandler,
+///         static_files: StaticFilesHandler,
+///     }
+/// }
+///
+/// type Conf = <Handler as RequestFilter>::Conf;
+///
+/// let conf = Conf::load_from_yaml("test.yaml").ok().unwrap_or_else(Conf::default);
+/// let handler: Handler = conf.try_into().unwrap();
+/// ```
+#[macro_export]
+macro_rules! chain_handlers {
+    (
+        $(#[$struct_attr:meta])*
+        $struct_vis:vis struct $struct_name:ident $(<$($generic:ident $(: $bound:path)?),+>)?
+        $(
+            where
+                $(
+                    $where_type:ty: $where_bounds:path
+                ),+
+        )?
+        {
+            $(
+                $(#[$field_attr:meta])*
+                $field_vis:vis $field_name:ident: $field_type:ty,
+            )*
+        }
+    ) => {
+        $(#[$struct_attr])*
+        #[derive(Debug)]
+        $struct_vis struct $struct_name $(<$($generic $(: $bound)?),+>)?
+        $(
+            where
+                $(
+                    $where_type: $where_bounds
+                ),+
+        )?
+        {
+            $(
+                $(#[$field_attr])*
+                $field_vis $field_name: $field_type,
+            )*
+        }
 
-    /// Request has been handled and further request filters should not run. Response hasn’t been
-    /// sent however, next Pingora phase should deal with that.
-    Handled,
+        /// Merged handler configuration
+        module_utils::merge_conf!{
+            $struct_vis struct __Conf $(<$($generic $(: $bound)?),+>)?
+            $(
+                where
+                    $(
+                        $where_type: $where_bounds
+                    ),+
+            )?
+            {
+                $(
+                    $field_vis $field_name: <$field_type as module_utils::RequestFilter>::Conf,
+                )*
+            }
+        }
 
-    /// Request filter could not handle this request, next request filter should run if it exists.
-    #[default]
-    Unhandled,
-}
+        /// Merged handler context
+        $struct_vis struct __CTX $(<$($generic $(: $bound)?),+>)?
+        $(
+            where
+                $(
+                    $where_type: $where_bounds
+                ),+
+        )?
+        {
+            $(
+                $field_vis $field_name: <$field_type as module_utils::RequestFilter>::CTX,
+            )*
+        }
 
-/// Trait to be implemented by request filters.
-#[async_trait]
-pub trait RequestFilter {
-    /// Configuration type of this handler.
-    type Conf;
+        impl std::convert::TryFrom<__Conf> for $struct_name {
+            type Error = std::boxed::Box<pingora_core::Error>;
 
-    /// Creates a new instance of the handler from its configuration.
-    fn new(conf: Self::Conf) -> Result<Self, Box<Error>>
-    where
-        Self: Sized,
-        Self::Conf: TryInto<Self, Error = Box<Error>>,
-    {
-        conf.try_into()
+            fn try_from(conf: __Conf) -> std::result::Result<Self, Self::Error> {
+                $(
+                    let $field_name = <$field_type>::try_from(conf.$field_name)?;
+                )*
+                Ok(Self {
+                    $(
+                        $field_name,
+                    )*
+                })
+            }
+        }
+
+        #[async_trait::async_trait]
+        impl module_utils::RequestFilter for $struct_name {
+            type Conf = __Conf;
+            type CTX = __CTX;
+
+            fn new_ctx() -> Self::CTX {
+                $(
+                    let $field_name = <$field_type>::new_ctx();
+                )*
+                Self::CTX {
+                    $(
+                        $field_name,
+                    )*
+                }
+            }
+
+            async fn request_filter(
+                &self,
+                _session: &mut pingora_proxy::Session,
+                _ctx: &mut Self::CTX,
+            ) -> std::result::Result<module_utils::RequestFilterResult, std::boxed::Box<pingora_core::Error>> {
+                $(
+                    let result = self.$field_name.request_filter(_session, &mut _ctx.$field_name).await?;
+                    if result != module_utils::RequestFilterResult::Unhandled {
+                        return Ok(result);
+                    }
+                )*
+                Ok(module_utils::RequestFilterResult::Unhandled)
+            }
+        }
     }
-
-    /// Handles the current request.
-    ///
-    /// This is essentially identical to the `request_filter` method but is supposed to be called
-    /// when there is only a single handler. Consequently, its result can be returned directly.
-    async fn handle(&self, session: &mut Session, ctx: &mut Self::CTX) -> Result<bool, Box<Error>>
-    where
-        Self::CTX: Send,
-    {
-        let result = self.request_filter(session, ctx).await?;
-        Ok(result == RequestFilterResult::ResponseSent)
-    }
-
-    /// Per-request state of this handler, see [`pingora_proxy::ProxyHttp::CTX`]
-    type CTX;
-
-    /// Creates a new sate object, see [`pingora_proxy::ProxyHttp::new_ctx`]
-    fn new_ctx() -> Self::CTX;
-
-    /// Handler to run during Pingora’s `request_filter` state, see
-    /// [`pingora_proxy::ProxyHttp::request_filter`]. This uses a different return type to account
-    /// for the existence of multiple request filters.
-    async fn request_filter(
-        &self,
-        session: &mut Session,
-        ctx: &mut Self::CTX,
-    ) -> Result<RequestFilterResult, Box<Error>>;
 }

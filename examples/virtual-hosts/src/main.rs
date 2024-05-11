@@ -14,20 +14,22 @@
 
 //! # Virtual hosts example
 //!
-//! This web server uses `virtual-hosts-module` crate to handle virtual hosts and
-//! `static-files-module` crate for each individual virtual host. The configuration file looks like
-//! this:
+//! This web server uses `virtual-hosts-module` crate to handle virtual hosts. The
+//! `compression-module` and `static-files-module` crates are used for each individual virtual
+//! host. The configuration file looks like this:
 //!
 //! ```yaml
 //! # Application-specific settings
 //! listen:
 //! - "[::]:8080"
-//! compression_level: 3
 //!
 //! # General server settings (https://docs.rs/pingora-core/0.1.1/pingora_core/server/configuration/struct.ServerConf.html)
 //! daemon: false
 //!
-//! # Virtual hosts settings (https://docs.rs/static-files-module/latest/static_files_module/struct.StaticFilesConf.html)
+//! # Virtual hosts settings:
+//! # * https://docs.rs/virtual-hosts-module/latest/virtual_hosts_module/struct.VirtualHostsConf.html
+//! # * https://docs.rs/compression-module/latest/compression_module/struct.CompressionConf.html
+//! # * https://docs.rs/static-files-module/latest/static_files_module/struct.StaticFilesConf.html
 //! vhosts:
 //!     localhost:8080:
 //!         aliases:
@@ -36,6 +38,7 @@
 //!         root: ./local-debug-root
 //!     example.com:
 //!         default: true
+//!         compression_level: 3
 //!         root: ./production-root
 //! ```
 //!
@@ -53,34 +56,35 @@
 //! ```
 
 use async_trait::async_trait;
+use compression_module::CompressionHandler;
 use log::error;
-use module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
+use module_utils::{chain_handlers, merge_conf, merge_opt, FromYaml, RequestFilter};
 use pingora_core::server::configuration::{Opt as ServerOpt, ServerConf};
 use pingora_core::server::Server;
 use pingora_core::upstreams::peer::HttpPeer;
 use pingora_core::Error;
 use pingora_proxy::{http_proxy_service, ProxyHttp, Session};
 use serde::Deserialize;
-use static_files_module::{StaticFilesConf, StaticFilesHandler};
+use static_files_module::StaticFilesHandler;
 use structopt::StructOpt;
 use virtual_hosts_module::{VirtualHostsConf, VirtualHostsHandler};
-
-type HostConf = StaticFilesConf;
-type HostHandler = StaticFilesHandler;
 
 /// The application implementing the Pingora Proxy interface
 struct VirtualHostsApp {
     handler: VirtualHostsHandler<HostHandler>,
-    compression_level: Option<u32>,
 }
 
 impl VirtualHostsApp {
     /// Creates a new application instance with the given virtual hosts handler.
-    fn new(handler: VirtualHostsHandler<HostHandler>, compression_level: Option<u32>) -> Self {
-        Self {
-            handler,
-            compression_level,
-        }
+    fn new(handler: VirtualHostsHandler<HostHandler>) -> Self {
+        Self { handler }
+    }
+}
+
+chain_handlers! {
+    struct HostHandler {
+        compression: CompressionHandler,
+        static_files: StaticFilesHandler,
     }
 }
 
@@ -91,10 +95,6 @@ struct VirtualHostsAppOpt {
     /// specified multiple times.
     #[structopt(short, long)]
     listen: Option<Vec<String>>,
-
-    /// Compression level to be used for dynamic compression (omit to disable compression).
-    #[structopt(long)]
-    compression_level: Option<u32>,
 }
 
 merge_opt! {
@@ -112,16 +112,12 @@ merge_opt! {
 struct VirtualHostsAppConf {
     /// List of address/port combinations to listen on, e.g. "127.0.0.1:8080".
     listen: Vec<String>,
-
-    /// Compression level to be used for dynamic compression (omit to disable compression).
-    compression_level: Option<u32>,
 }
 
 impl Default for VirtualHostsAppConf {
     fn default() -> Self {
         Self {
             listen: vec!["127.0.0.1:8080".to_owned(), "[::1]:8080".to_owned()],
-            compression_level: None,
         }
     }
 }
@@ -131,7 +127,7 @@ merge_conf! {
     struct Conf {
         app: VirtualHostsAppConf,
         server: ServerConf,
-        virtual_hosts: VirtualHostsConf<HostConf>,
+        virtual_hosts: VirtualHostsConf<<HostHandler as RequestFilter>::Conf>,
     }
 }
 
@@ -148,9 +144,6 @@ impl ProxyHttp for VirtualHostsApp {
         session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> Result<bool, Box<Error>> {
-        if let Some(level) = self.compression_level {
-            session.downstream_compression.adjust_level(level);
-        }
         self.handler.handle(session, ctx).await
     }
 
@@ -194,12 +187,8 @@ fn main() {
             return;
         }
     };
-    let compression_level = opt.app.compression_level.or(conf.app.compression_level);
 
-    let mut proxy = http_proxy_service(
-        &server.configuration,
-        VirtualHostsApp::new(handler, compression_level),
-    );
+    let mut proxy = http_proxy_service(&server.configuration, VirtualHostsApp::new(handler));
     for addr in opt.app.listen.unwrap_or(conf.app.listen) {
         proxy.add_tcp(&addr);
     }

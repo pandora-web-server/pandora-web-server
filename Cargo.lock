@@ -266,6 +266,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "compression-module"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "log",
+ "module-utils",
+ "pingora-core",
+ "pingora-proxy",
+ "serde",
+ "structopt",
+]
+
+[[package]]
 name = "const_format"
 version = "0.2.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -422,6 +435,7 @@ name = "example-single-static-root"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "compression-module",
  "env_logger",
  "log",
  "module-utils",
@@ -437,6 +451,7 @@ name = "example-virtual-hosts"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "compression-module",
  "env_logger",
  "log",
  "module-utils",
@@ -964,6 +979,7 @@ name = "module-utils"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "compression-module",
  "log",
  "pingora-core",
  "pingora-proxy",

@@ -2,12 +2,14 @@
 resolver = "2"
 members = [
   "module-utils",
+  "compression-module",
   "static-files-module",
   "virtual-hosts-module",
   "examples/*",
 ]
 default-members = [
   "module-utils",
+  "compression-module",
   "static-files-module",
   "virtual-hosts-module",
 ]
@@ -15,6 +17,7 @@ default-members = [
 [workspace.dependencies]
 async-trait = "0.1.42"
 bytes = "1.0"
+compression-module = { path = "compression-module" }
 env_logger = "0.9"
 http = "1.0.0"
 httpdate = "1"
