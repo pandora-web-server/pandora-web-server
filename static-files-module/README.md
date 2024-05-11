@@ -96,20 +96,18 @@ use structopt::StructOpt;
 
 // The command line flags from both structures are merged, so that the user doesn't need to
 // care which structure they belong to.
-merge_opt!{
-    struct MyServerOpt {
-        server: ServerOpt,
-        static_files: StaticFilesOpt,
-    }
+#[merge_opt]
+struct MyServerOpt {
+    server: ServerOpt,
+    static_files: StaticFilesOpt,
 }
 
 // The configuration settings from both structures are merged, so that the user doesn't need to
 // care which structure they belong to.
-merge_conf!{
-    struct MyServerConf {
-        server: ServerConf,
-        static_files: StaticFilesConf,
-    }
+#[merge_conf]
+struct MyServerConf {
+    server: ServerConf,
+    static_files: StaticFilesConf,
 }
 
 let opt = MyServerOpt::from_args();

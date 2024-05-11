@@ -27,17 +27,15 @@ pub struct VirtualHostConf {
     pub default: bool,
 }
 
-merge_conf! {
-    /// Combined configuration structure for virtual hosts
-    ///
-    /// This merges the settings from both member fields via `serde(flatten)`.
-    pub struct HostConfig<C: Default>
-    {
-        /// Virtual host specific settings
-        pub host: VirtualHostConf,
-        /// Generic handler settings
-        pub config: C,
-    }
+/// Combined configuration structure for virtual hosts
+///
+/// This merges the settings from both member fields via `serde(flatten)`.
+#[merge_conf]
+pub struct HostConfig<C: Default> {
+    /// Virtual host specific settings
+    pub host: VirtualHostConf,
+    /// Generic handler settings
+    pub config: C,
 }
 
 /// Virtual hosts configuration

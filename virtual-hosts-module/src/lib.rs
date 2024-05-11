@@ -56,11 +56,10 @@
 //! use virtual_hosts_module::{VirtualHostsConf, VirtualHostsHandler};
 //!
 //! // Combine Pingora server configuration with virtual hosts wrapping static files configuration.
-//! merge_conf! {
-//!     struct Conf {
-//!         server: ServerConf,
-//!         virtual_hosts: VirtualHostsConf<StaticFilesConf>,
-//!     }
+//! #[merge_conf]
+//! struct Conf {
+//!     server: ServerConf,
+//!     virtual_hosts: VirtualHostsConf<StaticFilesConf>,
 //! }
 //!
 //! // Read command line options and configuration file.

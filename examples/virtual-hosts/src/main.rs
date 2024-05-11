@@ -58,7 +58,7 @@
 use async_trait::async_trait;
 use compression_module::CompressionHandler;
 use log::error;
-use module_utils::{chain_handlers, merge_conf, merge_opt, FromYaml, RequestFilter};
+use module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
 use pingora_core::server::configuration::{Opt as ServerOpt, ServerConf};
 use pingora_core::server::Server;
 use pingora_core::upstreams::peer::HttpPeer;
@@ -81,11 +81,10 @@ impl VirtualHostsApp {
     }
 }
 
-chain_handlers! {
-    struct HostHandler {
-        compression: CompressionHandler,
-        static_files: StaticFilesHandler,
-    }
+#[derive(Debug, RequestFilter)]
+struct HostHandler {
+    compression: CompressionHandler,
+    static_files: StaticFilesHandler,
 }
 
 /// Command line options of this application
@@ -97,14 +96,13 @@ struct VirtualHostsAppOpt {
     listen: Option<Vec<String>>,
 }
 
-merge_opt! {
-    /// Run a web server exposing static content under several virtual hosts.
-    ///
-    /// This application is based on pingora-proxy and virtual-hosts-module.
-    struct Opt {
-        app: VirtualHostsAppOpt,
-        server: ServerOpt,
-    }
+/// Run a web server exposing static content under several virtual hosts.
+///
+/// This application is based on pingora-proxy and virtual-hosts-module.
+#[merge_opt]
+struct Opt {
+    app: VirtualHostsAppOpt,
+    server: ServerOpt,
 }
 
 /// Application-specific configuration settings
@@ -122,13 +120,12 @@ impl Default for VirtualHostsAppConf {
     }
 }
 
-merge_conf! {
-    /// The combined configuration of Pingora server and [`VirtualHostsHandler`].
-    struct Conf {
-        app: VirtualHostsAppConf,
-        server: ServerConf,
-        virtual_hosts: VirtualHostsConf<<HostHandler as RequestFilter>::Conf>,
-    }
+/// The combined configuration of Pingora server and [`VirtualHostsHandler`].
+#[merge_conf]
+struct Conf {
+    app: VirtualHostsAppConf,
+    server: ServerConf,
+    virtual_hosts: VirtualHostsConf<<HostHandler as RequestFilter>::Conf>,
 }
 
 #[async_trait]

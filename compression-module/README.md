@@ -22,18 +22,16 @@ use pingora_core::server::Server;
 use pingora_core::server::configuration::{Opt as ServerOpt, ServerConf};
 use structopt::StructOpt;
 
-merge_opt! {
-    struct Opt {
-        server: ServerOpt,
-        compression: CompressionOpt,
-    }
+#[merge_opt]
+struct Opt {
+    server: ServerOpt,
+    compression: CompressionOpt,
 }
 
-merge_conf! {
-    struct Conf {
-        server: ServerConf,
-        compression: CompressionConf,
-    }
+#[merge_conf]
+struct Conf {
+    server: ServerConf,
+    compression: CompressionConf,
 }
 
 let opt = Opt::from_args();

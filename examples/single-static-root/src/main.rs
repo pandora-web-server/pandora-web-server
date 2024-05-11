@@ -38,7 +38,7 @@
 use async_trait::async_trait;
 use compression_module::{CompressionHandler, CompressionOpt};
 use log::error;
-use module_utils::{chain_handlers, merge_conf, merge_opt, FromYaml, RequestFilter};
+use module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
 use pingora_core::server::configuration::{Opt as ServerOpt, ServerConf};
 use pingora_core::server::Server;
 use pingora_core::upstreams::peer::HttpPeer;
@@ -60,12 +60,11 @@ impl StaticRootApp {
     }
 }
 
-chain_handlers! {
-    /// Handler combining Compression and Static Files modules
-    struct Handler {
-        compression: CompressionHandler,
-        static_files: StaticFilesHandler,
-    }
+/// Handler combining Compression and Static Files modules
+#[derive(Debug, RequestFilter)]
+struct Handler {
+    compression: CompressionHandler,
+    static_files: StaticFilesHandler,
 }
 
 /// Command line options of this application
@@ -77,16 +76,15 @@ struct StaticRootAppOpt {
     listen: Option<Vec<String>>,
 }
 
-merge_opt! {
-    /// Run a web server exposing a single directory with static content.
-    ///
-    /// This application is based on pingora-proxy and static-files-module.
-    struct Opt {
-        app: StaticRootAppOpt,
-        server: ServerOpt,
-        compression: CompressionOpt,
-        static_files: StaticFilesOpt,
-    }
+/// Run a web server exposing a single directory with static content.
+///
+/// This application is based on pingora-proxy and static-files-module.
+#[merge_opt]
+struct Opt {
+    app: StaticRootAppOpt,
+    server: ServerOpt,
+    compression: CompressionOpt,
+    static_files: StaticFilesOpt,
 }
 
 /// Application-specific configuration settings
@@ -104,13 +102,12 @@ impl Default for StaticRootAppConf {
     }
 }
 
-merge_conf! {
-    /// The combined configuration of Pingora server and [`StaticFilesHandler`].
-    struct Conf {
-        app: StaticRootAppConf,
-        server: ServerConf,
-        handler: <Handler as RequestFilter>::Conf,
-    }
+/// The combined configuration of Pingora server and [`StaticFilesHandler`].
+#[merge_conf]
+struct Conf {
+    app: StaticRootAppConf,
+    server: ServerConf,
+    handler: <Handler as RequestFilter>::Conf,
 }
 
 #[async_trait]

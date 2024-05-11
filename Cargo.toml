@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
   "module-utils",
+  "module-utils-macros",
   "compression-module",
   "static-files-module",
   "virtual-hosts-module",
@@ -9,6 +10,7 @@ members = [
 ]
 default-members = [
   "module-utils",
+  "module-utils-macros",
   "compression-module",
   "static-files-module",
   "virtual-hosts-module",

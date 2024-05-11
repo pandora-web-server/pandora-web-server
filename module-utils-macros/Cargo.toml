@@ -1,5 +1,5 @@
 [package]
-name = "module-utils"
+name = "module-utils-macros"
 version = "0.1.0"
 authors = ["Wladimir Palant"]
 repository = "https://github.com/palant/pingora-utils"
@@ -8,21 +8,27 @@ keywords = ["utilities", "web-server", "http", "pingora"]
 license = "Apache-2.0"
 edition = "2021"
 description = """
-Helpers for Pingora modules such as static-files-module crate.
+Macro definitions for module-utils crate.
 """
 
 [lib]
-name = "module_utils"
+name = "module_utils_macros"
 path = "src/lib.rs"
+proc-macro = true
 
 [dependencies]
+quote = "1.0.36"
+syn = "2.0.62"
+
+[dev-dependencies]
 async-trait.workspace = true
-log.workspace = true
-module-utils-macros = { path = "../module-utils-macros" }
+compression-module.workspace = true
+module-utils.workspace = true
 pingora-core.workspace = true
 pingora-proxy.workspace = true
+static-files-module.workspace = true
 serde.workspace = true
-serde_yaml.workspace = true
+structopt.workspace = true
 
 [lints]
 workspace = true
