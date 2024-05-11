@@ -175,12 +175,13 @@ macro_rules! merge_opt {
             )*
         }
     ) => {
-        #[derive(Debug, structopt::StructOpt)]
+        #[derive(::std::fmt::Debug, ::structopt::StructOpt)]
+        #[doc(hidden)]
         $(#[$struct_attr])*
-        struct Dummy {}
+        struct __Dummy {}
 
         $(#[$struct_attr])*
-        #[derive(Debug, structopt::StructOpt)]
+        #[derive(::std::fmt::Debug, ::structopt::StructOpt)]
         $struct_vis struct $struct_name $(<$($generic $(: $bound)?),+>)?
         $(
             where
@@ -198,7 +199,7 @@ macro_rules! merge_opt {
             // This is a work-around for a https://github.com/TeXitoi/structopt/issues/539 (this
             // bug won't be fixed).
             #[structopt(flatten)]
-            _dummy: Dummy,
+            _dummy: __Dummy,
         }
     }
 }
@@ -256,7 +257,7 @@ macro_rules! merge_conf {
         }
     ) => {
         $(#[$struct_attr])*
-        #[derive(Debug, Default, serde::Deserialize)]
+        #[derive(::std::fmt::Debug, ::std::default::Default, ::serde::Deserialize)]
         #[serde(default)]
         $struct_vis struct $struct_name $(<$($generic $(: $bound)?),+>)?
         $(
@@ -320,7 +321,7 @@ macro_rules! chain_handlers {
         }
     ) => {
         $(#[$struct_attr])*
-        #[derive(Debug)]
+        #[derive(::std::fmt::Debug)]
         $struct_vis struct $struct_name $(<$($generic $(: $bound)?),+>)?
         $(
             where
@@ -336,7 +337,7 @@ macro_rules! chain_handlers {
         }
 
         /// Merged handler configuration
-        module_utils::merge_conf!{
+        ::module_utils::merge_conf!{
             $struct_vis struct __Conf $(<$($generic $(: $bound)?),+>)?
             $(
                 where
@@ -346,7 +347,7 @@ macro_rules! chain_handlers {
             )?
             {
                 $(
-                    $field_vis $field_name: <$field_type as module_utils::RequestFilter>::Conf,
+                    $field_vis $field_name: <$field_type as ::module_utils::RequestFilter>::Conf,
                 )*
             }
         }
@@ -361,18 +362,18 @@ macro_rules! chain_handlers {
         )?
         {
             $(
-                $field_vis $field_name: <$field_type as module_utils::RequestFilter>::CTX,
+                $field_vis $field_name: <$field_type as ::module_utils::RequestFilter>::CTX,
             )*
         }
 
-        impl std::convert::TryFrom<__Conf> for $struct_name {
-            type Error = std::boxed::Box<pingora_core::Error>;
+        impl ::std::convert::TryFrom<__Conf> for $struct_name {
+            type Error = ::std::boxed::Box<::pingora_core::Error>;
 
-            fn try_from(conf: __Conf) -> std::result::Result<Self, Self::Error> {
+            fn try_from(conf: __Conf) -> ::std::result::Result<Self, Self::Error> {
                 $(
                     let $field_name = <$field_type>::try_from(conf.$field_name)?;
                 )*
-                Ok(Self {
+                ::std::result::Result::Ok(Self {
                     $(
                         $field_name,
                     )*
@@ -381,7 +382,7 @@ macro_rules! chain_handlers {
         }
 
         #[async_trait::async_trait]
-        impl module_utils::RequestFilter for $struct_name {
+        impl ::module_utils::RequestFilter for $struct_name {
             type Conf = __Conf;
             type CTX = __CTX;
 
@@ -398,16 +399,16 @@ macro_rules! chain_handlers {
 
             async fn request_filter(
                 &self,
-                _session: &mut pingora_proxy::Session,
+                _session: &mut ::pingora_proxy::Session,
                 _ctx: &mut Self::CTX,
-            ) -> std::result::Result<module_utils::RequestFilterResult, std::boxed::Box<pingora_core::Error>> {
+            ) -> ::std::result::Result<::module_utils::RequestFilterResult, ::std::boxed::Box<::pingora_core::Error>> {
                 $(
                     let result = self.$field_name.request_filter(_session, &mut _ctx.$field_name).await?;
-                    if result != module_utils::RequestFilterResult::Unhandled {
-                        return Ok(result);
+                    if result != ::module_utils::RequestFilterResult::Unhandled {
+                        return ::std::result::Result::Ok(result);
                     }
                 )*
-                Ok(module_utils::RequestFilterResult::Unhandled)
+                ::std::result::Result::Ok(module_utils::RequestFilterResult::Unhandled)
             }
         }
     }
