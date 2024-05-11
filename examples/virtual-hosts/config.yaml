@@ -18,12 +18,14 @@ vhosts:
     - gz
     - br
   localhost:8081:
-    aliases:
-      - 127.0.0.1:8081
-      - "[::1]:8081"
     root: ../../static-files-module/testdata/root
     canonicalize_url: false
     index_file:
     - file.txt
     precompressed:
     - zst
+  127.0.0.1:8081:
+    aliases:
+      - "[::1]:8081"
+    upstream: https://example.com/
+    root: .

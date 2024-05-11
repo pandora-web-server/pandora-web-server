@@ -14,8 +14,9 @@ pingora-proxy.workspace = true
 module-utils.workspace = true
 serde.workspace = true
 static-files-module.workspace = true
-virtual-hosts-module.workspace = true
 structopt.workspace = true
+upstream-module.workspace = true
+virtual-hosts-module.workspace = true
 
 [lints]
 workspace = true

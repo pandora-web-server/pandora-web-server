@@ -67,6 +67,7 @@ use pingora_proxy::{http_proxy_service, ProxyHttp, Session};
 use serde::Deserialize;
 use static_files_module::StaticFilesHandler;
 use structopt::StructOpt;
+use upstream_module::UpstreamHandler;
 use virtual_hosts_module::{VirtualHostsConf, VirtualHostsHandler};
 
 /// The application implementing the Pingora Proxy interface
@@ -84,6 +85,7 @@ impl VirtualHostsApp {
 #[derive(Debug, RequestFilter)]
 struct HostHandler {
     compression: CompressionHandler,
+    upstream: UpstreamHandler,
     static_files: StaticFilesHandler,
 }
 
@@ -146,14 +148,10 @@ impl ProxyHttp for VirtualHostsApp {
 
     async fn upstream_peer(
         &self,
-        _session: &mut Session,
-        _ctx: &mut Self::CTX,
+        session: &mut Session,
+        ctx: &mut Self::CTX,
     ) -> Result<Box<HttpPeer>, Box<Error>> {
-        Ok(Box::new(HttpPeer::new(
-            "example.com:443",
-            true,
-            "example.com".to_owned(),
-        )))
+        UpstreamHandler::upstream_peer(session, &mut ctx.upstream).await
     }
 }
 
