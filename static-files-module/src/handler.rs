@@ -15,7 +15,7 @@
 //! Handler for the `request_filter` phase.
 
 use async_trait::async_trait;
-use log::{debug, info, warn};
+use log::{debug, error, info, warn};
 use module_utils::{RequestFilter, RequestFilterResult};
 use pingora_core::{Error, ErrorType};
 use pingora_http::{Method, StatusCode};
@@ -61,17 +61,25 @@ impl RequestFilter for StaticFilesHandler {
         session: &mut Session,
         _ctx: &mut Self::CTX,
     ) -> Result<RequestFilterResult, Box<Error>> {
+        let root = if let Some(root) = self.conf.root.as_ref() {
+            root
+        } else {
+            error!("static files handler is not configured, yet it receives requests");
+            error_response(session, StatusCode::NOT_FOUND).await?;
+            return Ok(RequestFilterResult::ResponseSent);
+        };
+
         let uri = &session.req_header().uri;
         debug!("received URI path {}", uri.path());
 
-        let (mut path, not_found) = match resolve_uri(uri.path(), &self.conf.root) {
+        let (mut path, not_found) = match resolve_uri(uri.path(), root) {
             Ok(path) => (path, false),
             Err(err) if err.kind() == ErrorKind::NotFound => {
                 debug!("canonicalizing resulted in NotFound error");
 
                 let path = self.conf.page_404.as_ref().and_then(|page_404| {
                     debug!("error page is {page_404}");
-                    match resolve_uri(page_404, &self.conf.root) {
+                    match resolve_uri(page_404, root) {
                         Ok(path) => Some(path),
                         Err(err) => {
                             warn!("Failed resolving error page {page_404}: {err}");
@@ -114,7 +122,7 @@ impl RequestFilter for StaticFilesHandler {
         debug!("translated into file path {path:?}");
 
         if self.conf.canonicalize_uri && !not_found {
-            if let Some(mut canonical) = path_to_uri(&path, &self.conf.root) {
+            if let Some(mut canonical) = path_to_uri(&path, root) {
                 if canonical != uri.path() {
                     if let Some(query) = uri.query() {
                         canonical.push('?');
@@ -230,13 +238,17 @@ impl TryFrom<StaticFilesConf> for StaticFilesHandler {
     type Error = Box<Error>;
 
     fn try_from(mut conf: StaticFilesConf) -> Result<Self, Self::Error> {
-        conf.root = conf.root.canonicalize().map_err(|err| {
-            Error::because(
-                ErrorType::InternalError,
-                format!("Failed accessing root path {:?}", conf.root),
-                err,
-            )
-        })?;
+        conf.root = if let Some(root) = conf.root {
+            Some(root.canonicalize().map_err(|err| {
+                Error::because(
+                    ErrorType::InternalError,
+                    format!("Failed accessing root path {:?}", root),
+                    err,
+                )
+            })?)
+        } else {
+            None
+        };
 
         debug!("Initialized static files handler, settings: {conf:#?}");
         Ok(Self { conf })

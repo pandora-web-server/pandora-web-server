@@ -86,7 +86,7 @@ fn root_path(filename: &str) -> PathBuf {
 
 fn handler() -> StaticFilesHandler {
     StaticFilesConf {
-        root: root_path(""),
+        root: Some(root_path("")),
         ..Default::default()
     }
     .try_into()
@@ -124,6 +124,33 @@ async fn make_session(request: Request<'_>, response: Response<'_>) -> Session {
     let mut session = Session::new_h1(Box::new(mock.build()));
     assert!(session.read_request().await.unwrap());
     session
+}
+
+#[test(tokio::test)]
+async fn unconfigured() -> Result<(), Box<Error>> {
+    let mut handler = handler();
+    handler.conf_mut().root = None;
+
+    let text = response_text(StatusCode::NOT_FOUND);
+
+    let mut session = make_session(
+        request("GET", "/file.txt"),
+        response(
+            "404 Not Found",
+            vec![
+                ("Content-Length", text.len().to_string()),
+                ("Content-Type", "text/html".into()),
+            ],
+            &text,
+        ),
+    )
+    .await;
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
+
+    Ok(())
 }
 
 #[test(tokio::test)]

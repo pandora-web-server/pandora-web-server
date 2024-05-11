@@ -20,8 +20,6 @@ use structopt::StructOpt;
 
 use crate::compression_algorithm::CompressionAlgorithm;
 
-const DEFAULT_ROOT: &str = "./static";
-
 /// Command line options of the static files module
 #[derive(Debug, Default, StructOpt)]
 pub struct StaticFilesOpt {
@@ -54,7 +52,7 @@ pub struct StaticFilesOpt {
 #[serde(default)]
 pub struct StaticFilesConf {
     /// The root directory.
-    pub root: PathBuf,
+    pub root: Option<PathBuf>,
 
     /// Redirect /file%2e.txt to /file.txt and /dir to /dir/.
     pub canonicalize_uri: bool,
@@ -75,8 +73,8 @@ impl StaticFilesConf {
     /// Merges the command line options into the current configuration. Any command line options
     /// present overwrite existing settings.
     pub fn merge_with_opt(&mut self, opt: StaticFilesOpt) {
-        if let Some(root) = opt.root {
-            self.root = root;
+        if opt.root.is_some() {
+            self.root = opt.root;
         }
 
         if let Some(canonicalize_uri) = opt.canonicalize_uri {
@@ -100,7 +98,7 @@ impl StaticFilesConf {
 impl Default for StaticFilesConf {
     fn default() -> Self {
         Self {
-            root: DEFAULT_ROOT.into(),
+            root: None,
             canonicalize_uri: true,
             index_file: vec!["index.html".into()],
             page_404: None,

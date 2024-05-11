@@ -28,4 +28,3 @@ vhosts:
     aliases:
       - "[::1]:8081"
     upstream: https://example.com/
-    root: .
