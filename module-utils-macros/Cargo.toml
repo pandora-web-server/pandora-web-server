@@ -26,8 +26,8 @@ compression-module.workspace = true
 module-utils.workspace = true
 pingora-core.workspace = true
 pingora-proxy.workspace = true
-static-files-module.workspace = true
 serde.workspace = true
+static-files-module.workspace = true
 structopt.workspace = true
 
 [lints]

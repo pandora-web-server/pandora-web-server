@@ -60,7 +60,7 @@ pub fn merge_opt(_args: TokenStream, input: TokenStream) -> TokenStream {
 }
 
 /// This attribute macro merges the configuration settings from all structs identified as field of
-/// the current struct. The result will implement [`serde::Deserialize`], [`Debug`] and [`Default`]
+/// the current struct. The result will implement `serde::Deserialize`, `Debug` and `Default`
 /// automatically. All field types are required to implement `serde::Deserialize`, `Debug` and
 /// `Default`.
 ///
@@ -93,12 +93,12 @@ pub fn merge_conf(_args: TokenStream, input: TokenStream) -> TokenStream {
     merge_conf::merge_conf(input).unwrap_or_else(|err| err.into_compile_error().into())
 }
 
-/// This macro will automatically implement [`RequestFilter`] by chaining the handlers identified
+/// This macro will automatically implement `RequestFilter` by chaining the handlers identified
 /// in the struct’s fields.
 ///
-/// Each handler has to implement [`RequestFilter`] trait. The handlers will be called in the order
+/// Each handler has to implement `RequestFilter` trait. The handlers will be called in the order
 /// in which they are listed. Each handler can prevent the subsequent handlers from being called by
-/// returning [`RequestFilterResult::ResponseSent`] or [`RequestFilterResult::Handled`].
+/// returning `RequestFilterResult::ResponseSent` or `RequestFilterResult::Handled`.
 ///
 /// The configuration and context for the struct will be implemented implicitly. These will have
 /// the configuration/context of the respective handler in a field with the same name as the
