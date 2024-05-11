@@ -15,7 +15,7 @@
 //! Handler for the `request_filter` phase.
 
 use async_trait::async_trait;
-use log::{debug, error, info, warn};
+use log::{debug, info, warn};
 use module_utils::{RequestFilter, RequestFilterResult};
 use pingora_core::{Error, ErrorType};
 use pingora_http::{Method, StatusCode};
@@ -64,9 +64,8 @@ impl RequestFilter for StaticFilesHandler {
         let root = if let Some(root) = self.conf.root.as_ref() {
             root
         } else {
-            error!("static files handler is not configured, yet it receives requests");
-            error_response(session, StatusCode::NOT_FOUND).await?;
-            return Ok(RequestFilterResult::ResponseSent);
+            debug!("received request but static files handler is not configured, ignoring");
+            return Ok(RequestFilterResult::Unhandled);
         };
 
         let uri = &session.req_header().uri;

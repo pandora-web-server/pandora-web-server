@@ -93,7 +93,7 @@ fn handler() -> StaticFilesHandler {
     .unwrap()
 }
 
-async fn make_session(request: Request<'_>, response: Response<'_>) -> Session {
+fn mock(request: Request<'_>) -> Builder {
     let mut mock = Builder::new();
 
     let method = request.method;
@@ -104,6 +104,19 @@ async fn make_session(request: Request<'_>, response: Response<'_>) -> Session {
         mock.read(format!("{name}: {value}\r\n").as_bytes());
     }
     mock.read(b"\r\n");
+    mock
+}
+
+async fn make_session_no_response(request: Request<'_>) -> Session {
+    let mut mock = mock(request);
+
+    let mut session = Session::new_h1(Box::new(mock.build()));
+    assert!(session.read_request().await.unwrap());
+    session
+}
+
+async fn make_session(request: Request<'_>, response: Response<'_>) -> Session {
+    let mut mock = mock(request);
 
     let expected_status = response.expected_status;
     mock.write(format!("HTTP/1.1 {expected_status}\r\n").as_bytes());
@@ -131,23 +144,10 @@ async fn unconfigured() -> Result<(), Box<Error>> {
     let mut handler = handler();
     handler.conf_mut().root = None;
 
-    let text = response_text(StatusCode::NOT_FOUND);
-
-    let mut session = make_session(
-        request("GET", "/file.txt"),
-        response(
-            "404 Not Found",
-            vec![
-                ("Content-Length", text.len().to_string()),
-                ("Content-Type", "text/html".into()),
-            ],
-            &text,
-        ),
-    )
-    .await;
+    let mut session = make_session_no_response(request("GET", "/file.txt")).await;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
-        RequestFilterResult::ResponseSent
+        RequestFilterResult::Unhandled
     );
 
     Ok(())
