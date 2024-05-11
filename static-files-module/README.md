@@ -72,7 +72,7 @@ You can create a `StaticFilesHandler` instance by specifying its configuration d
 use static_files_module::{StaticFilesConf, StaticFilesHandler};
 
 let conf = StaticFilesConf {
-    root: "/var/www/html".into(),
+    root: Some("/var/www/html".into()),
     ..Default::default()
 };
 let static_files_handler: StaticFilesHandler = conf.try_into().unwrap();
@@ -136,7 +136,7 @@ You can activate support for selected compression algorithms via the `precompres
 use static_files_module::{CompressionAlgorithm, StaticFilesConf};
 
 let conf = StaticFilesConf {
-    root: "/var/www/html".into(),
+    root: Some("/var/www/html".into()),
     precompressed: vec![CompressionAlgorithm::Gzip, CompressionAlgorithm::Brotli],
     ..Default::default()
 };
