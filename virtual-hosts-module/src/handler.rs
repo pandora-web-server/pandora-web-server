@@ -14,29 +14,110 @@
 
 use async_trait::async_trait;
 use http::header;
+use http::uri::Uri;
 use log::warn;
 use module_utils::{RequestFilter, RequestFilterResult};
 use pingora_core::Error;
 use pingora_proxy::Session;
 use std::collections::HashMap;
+use trie_rs::map::{Trie, TrieBuilder};
 
 use crate::configuration::VirtualHostsConf;
 
-/// Handler for Pingora’s `request_filter` phase
-#[derive(Debug)]
-pub struct VirtualHostsHandler<H> {
-    handlers: HashMap<String, H>,
-    aliases: HashMap<String, String>,
-    default: Option<String>,
+struct Path {
+    segments: Vec<Vec<u8>>,
+    trailing_slash: bool,
 }
 
-fn host_from_uri(uri: &http::uri::Uri) -> Option<String> {
+impl Path {
+    fn new<T: AsRef<[u8]>>(path: T) -> Self {
+        let path = path.as_ref();
+        let trailing_slash = path.last().is_some_and(|c| *c == b'/');
+
+        let segments = path
+            .split(|c| *c == b'/')
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_owned())
+            .collect();
+        Self {
+            segments,
+            trailing_slash,
+        }
+    }
+
+    fn len(&self) -> usize {
+        self.segments.len()
+    }
+
+    fn to_key<T: AsRef<[u8]>>(&self, host: T) -> Vec<Vec<u8>> {
+        let mut key = vec![host.as_ref().to_owned()];
+        key.extend_from_slice(&self.segments);
+        key
+    }
+
+    fn to_vec(&self, strip_segments: usize) -> Vec<u8> {
+        let mut path =
+            self.segments[strip_segments..]
+                .iter()
+                .fold(Vec::new(), |mut path, segment| {
+                    path.push(b'/');
+                    path.extend_from_slice(segment);
+                    path
+                });
+        if self.trailing_slash || path.is_empty() {
+            path.push(b'/');
+        }
+        path
+    }
+}
+
+fn host_from_uri(uri: &Uri) -> Option<String> {
     let mut host = uri.host()?.to_owned();
     if let Some(port) = uri.port() {
         host.push(':');
         host.push_str(port.as_str());
     }
     Some(host)
+}
+
+fn set_uri_path(uri: &Uri, path: &[u8]) -> Uri {
+    let mut parts = uri.clone().into_parts();
+    let mut path_and_query = String::from_utf8_lossy(path).to_string();
+    let query = parts
+        .path_and_query
+        .as_ref()
+        .and_then(|path_and_query| path_and_query.query());
+    if let Some(query) = query {
+        path_and_query.push('?');
+        path_and_query.push_str(query);
+    }
+    parts.path_and_query = path_and_query.parse().ok();
+    parts.try_into().unwrap_or_else(|_| uri.clone())
+}
+
+/// Handler for Pingora’s `request_filter` phase
+#[derive(Debug)]
+pub struct VirtualHostsHandler<H> {
+    handlers: Trie<Vec<u8>, (bool, H)>,
+    aliases: HashMap<String, String>,
+    default: Option<String>,
+}
+
+impl<H> VirtualHostsHandler<H> {
+    fn best_match<T: AsRef<[u8]>>(&self, host: T, path: &Path) -> Option<(Option<Vec<u8>>, &H)> {
+        self.handlers
+            .common_prefix_search(path.to_key(host))
+            .last()
+            .map(
+                |(prefix, (strip_prefix, handler)): (Vec<Vec<u8>>, &(bool, H))| {
+                    if *strip_prefix && prefix.len() > 1 {
+                        (Some(path.to_vec(prefix.len() - 1)), handler)
+                    } else {
+                        (None, handler)
+                    }
+                },
+            )
+    }
 }
 
 #[async_trait]
@@ -65,12 +146,13 @@ where
             .map(|host| host.to_owned())
             .or_else(|| host_from_uri(&session.req_header().uri));
 
+        let path = Path::new(session.req_header().uri.path());
         let handler = host
             .and_then(|host| {
-                if let Some(handler) = self.handlers.get(&host) {
+                if let Some(handler) = self.best_match(&host, &path) {
                     Some(handler)
                 } else if let Some(alias) = self.aliases.get(&host) {
-                    self.handlers.get(alias)
+                    self.best_match(alias, &path)
                 } else {
                     None
                 }
@@ -78,10 +160,14 @@ where
             .or_else(|| {
                 self.default
                     .as_ref()
-                    .and_then(|default| self.handlers.get(default))
+                    .and_then(|default| self.best_match(default, &path))
             });
 
-        if let Some(handler) = handler {
+        if let Some((new_path, handler)) = handler {
+            if let Some(new_path) = new_path {
+                let header = session.req_header_mut();
+                header.set_uri(set_uri_path(&header.uri, &new_path));
+            }
             handler.request_filter(session, ctx).await
         } else {
             Ok(RequestFilterResult::Unhandled)
@@ -96,7 +182,7 @@ where
     type Error = Box<Error>;
 
     fn try_from(conf: VirtualHostsConf<C>) -> Result<Self, Box<Error>> {
-        let mut handlers = HashMap::new();
+        let mut handlers = TrieBuilder::new();
         let mut aliases = HashMap::new();
         let mut default = None;
         for (host, host_conf) in conf.vhosts.into_iter() {
@@ -110,8 +196,28 @@ where
                     default = Some(host.clone());
                 }
             }
-            handlers.insert(host, host_conf.config.try_into()?);
+            handlers.push(
+                Path::new(b"").to_key(&host),
+                (false, host_conf.config.try_into()?),
+            );
+
+            // Work-around for https://github.com/laysakura/trie-rs/issues/32, insert shorter paths
+            // first.
+            let mut subdirs = host_conf
+                .host
+                .subdirs
+                .into_iter()
+                .map(|(path, conf)| (Path::new(path), conf))
+                .collect::<Vec<_>>();
+            subdirs.sort_by_key(|(path, _)| path.len());
+            for (path, conf) in subdirs {
+                handlers.push(
+                    path.to_key(&host),
+                    (conf.subdir.strip_prefix, conf.config.try_into()?),
+                );
+            }
         }
+        let handlers = handlers.build();
 
         Ok(Self {
             handlers,
@@ -124,12 +230,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::configuration::{HostConfig, VirtualHostConf};
+    use crate::configuration::{SubDirCombined, SubDirConf, VirtualHostCombined, VirtualHostConf};
 
     use async_trait::async_trait;
     use test_log::test;
     use tokio_test::io::Builder;
 
+    #[derive(Debug)]
     struct Handler {
         result: RequestFilterResult,
     }
@@ -158,22 +265,44 @@ mod tests {
 
     fn handler(add_default: bool) -> VirtualHostsHandler<Handler> {
         let mut vhosts = HashMap::new();
+
+        let mut subdirs = HashMap::new();
+        subdirs.insert(
+            "/subdir/".to_owned(),
+            SubDirCombined::<RequestFilterResult> {
+                subdir: SubDirConf { strip_prefix: true },
+                config: RequestFilterResult::Unhandled,
+            },
+        );
+        subdirs.insert(
+            "/subdir/subsub".to_owned(),
+            SubDirCombined::<RequestFilterResult> {
+                subdir: SubDirConf {
+                    strip_prefix: false,
+                },
+                config: RequestFilterResult::Handled,
+            },
+        );
+
         vhosts.insert(
             "localhost:8080".to_owned(),
-            HostConfig::<RequestFilterResult> {
+            VirtualHostCombined::<RequestFilterResult> {
                 host: VirtualHostConf {
                     aliases: vec!["127.0.0.1:8080".to_owned(), "[::1]:8080".to_owned()],
                     default: add_default,
+                    subdirs,
                 },
                 config: RequestFilterResult::ResponseSent,
             },
         );
+
         vhosts.insert(
             "example.com".to_owned(),
-            HostConfig::<RequestFilterResult> {
+            VirtualHostCombined::<RequestFilterResult> {
                 host: VirtualHostConf {
                     aliases: vec!["example.com:8080".to_owned()],
                     default: false,
+                    subdirs: HashMap::new(),
                 },
                 config: RequestFilterResult::Handled,
             },
@@ -277,6 +406,78 @@ mod tests {
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::Unhandled
         );
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn subdir_match() -> Result<(), Box<Error>> {
+        let handler = handler(true);
+        let mut session = make_session("/subdir/", Some("localhost:8080")).await;
+        assert_eq!(
+            handler.request_filter(&mut session, &mut ()).await?,
+            RequestFilterResult::Unhandled
+        );
+        assert_eq!(session.req_header().uri, "/");
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn subdir_match_without_slash() -> Result<(), Box<Error>> {
+        let handler = handler(true);
+        let mut session = make_session("/subdir", Some("localhost:8080")).await;
+        assert_eq!(
+            handler.request_filter(&mut session, &mut ()).await?,
+            RequestFilterResult::Unhandled
+        );
+        assert_eq!(session.req_header().uri, "/");
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn subdir_match_with_suffix() -> Result<(), Box<Error>> {
+        let handler = handler(true);
+        let mut session = make_session("/subdir/xyz?abc", Some("localhost:8080")).await;
+        assert_eq!(
+            handler.request_filter(&mut session, &mut ()).await?,
+            RequestFilterResult::Unhandled
+        );
+        assert_eq!(session.req_header().uri, "/xyz?abc");
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn subdir_match_extra_slashes() -> Result<(), Box<Error>> {
+        let handler = handler(true);
+        let mut session = make_session("//subdir///xyz//", Some("localhost:8080")).await;
+        assert_eq!(
+            handler.request_filter(&mut session, &mut ()).await?,
+            RequestFilterResult::Unhandled
+        );
+        assert_eq!(session.req_header().uri, "/xyz/");
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn subdir_no_match() -> Result<(), Box<Error>> {
+        let handler = handler(true);
+        let mut session = make_session("/subdir_xyz", Some("localhost:8080")).await;
+        assert_eq!(
+            handler.request_filter(&mut session, &mut ()).await?,
+            RequestFilterResult::ResponseSent
+        );
+        assert_eq!(session.req_header().uri, "/subdir_xyz");
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn subdir_longer_match() -> Result<(), Box<Error>> {
+        let handler = handler(true);
+        let mut session = make_session("/subdir/subsub/xyz", Some("localhost:8080")).await;
+        assert_eq!(
+            handler.request_filter(&mut session, &mut ()).await?,
+            RequestFilterResult::Handled
+        );
+        assert_eq!(session.req_header().uri, "/subdir/subsub/xyz");
         Ok(())
     }
 }

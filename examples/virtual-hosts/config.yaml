@@ -9,22 +9,30 @@ vhosts:
       - 127.0.0.1:8080
       - "[::1]:8080"
     default: true
-    compression_level: 3
     root: ../../static-files-module/testdata/root
     canonicalize_url: true
     index_file:
     - index.html
+    compression_level: 3
     precompressed:
     - gz
     - br
+    subdirs:
+      /uncompressed:
+        strip_prefix: true
+        root: ../../static-files-module/testdata/root
+        redirect_prefix: /uncompressed
+      /reindexed:
+        strip_prefix: true
+        index_file:
+        - file.txt
+        canonicalize_url: false
+        compression_level: 3
+        precompressed:
+        - gz
+        - br
   localhost:8081:
-    root: ../../static-files-module/testdata/root
-    canonicalize_url: false
-    index_file:
-    - file.txt
-    precompressed:
-    - zst
-  127.0.0.1:8081:
     aliases:
+      - 127.0.0.1:8081
       - "[::1]:8081"
     upstream: https://example.com/

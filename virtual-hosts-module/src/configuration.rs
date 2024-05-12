@@ -16,24 +16,45 @@ use module_utils::merge_conf;
 use serde::Deserialize;
 use std::collections::HashMap;
 
-/// Additional configuration settings for a virtual host
+/// Additional configuration settings for a subdirectory
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
-pub struct VirtualHostConf {
-    /// List of additional names for the virtual host
-    pub aliases: Vec<String>,
-    /// If true, this virtual host should be used as fallback when no other virtual host
-    /// configuration applies
-    pub default: bool,
+pub struct SubDirConf {
+    /// If `true`, subdirectory will be removed from the URI before passing it on to the handler.
+    pub strip_prefix: bool,
 }
 
 /// Combined configuration structure for virtual hosts
 ///
 /// This merges the settings from both member fields via `serde(flatten)`.
 #[merge_conf]
-pub struct HostConfig<C: Default> {
+pub struct SubDirCombined<C: Default> {
+    /// Subdirectory specific settings
+    pub subdir: SubDirConf,
+    /// Generic handler settings
+    pub config: C,
+}
+
+/// Additional configuration settings for a virtual host
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct VirtualHostConf<C: Default> {
+    /// List of additional names for the virtual host
+    pub aliases: Vec<String>,
+    /// If true, this virtual host should be used as fallback when no other virtual host
+    /// configuration applies
+    pub default: bool,
+    /// Maps virtual host's subdirectories to their special configurations
+    pub subdirs: HashMap<String, SubDirCombined<C>>,
+}
+
+/// Combined configuration structure for virtual hosts
+///
+/// This merges the settings from both member fields via `serde(flatten)`.
+#[merge_conf]
+pub struct VirtualHostCombined<C: Default> {
     /// Virtual host specific settings
-    pub host: VirtualHostConf,
+    pub host: VirtualHostConf<C>,
     /// Generic handler settings
     pub config: C,
 }
@@ -43,5 +64,5 @@ pub struct HostConfig<C: Default> {
 #[serde(default)]
 pub struct VirtualHostsConf<C: Default> {
     /// Maps virtual host names to their configuration
-    pub vhosts: HashMap<String, HostConfig<C>>,
+    pub vhosts: HashMap<String, VirtualHostCombined<C>>,
 }

@@ -277,6 +277,28 @@ async fn no_trailing_slash() -> Result<(), Box<Error>> {
         RequestFilterResult::ResponseSent
     );
 
+    // Add redirect prefix
+    handler.conf_mut().redirect_prefix = Some("/static".to_owned());
+
+    let mut session = make_session(
+        request("GET", "/subdir?xyz"),
+        response(
+            "308 Permanent Redirect",
+            vec![
+                ("Content-Length", text.len().to_string()),
+                ("Content-Type", "text/html".into()),
+                ("location", "/static/subdir/?xyz".into()),
+            ],
+            &text,
+        ),
+    )
+    .await;
+
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
+
     // Without canonicalize_uri this should just produce the response
     // (Forbidden because no index file).
     handler.conf_mut().canonicalize_uri = false;

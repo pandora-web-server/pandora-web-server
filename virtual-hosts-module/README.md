@@ -2,8 +2,8 @@
 
 This module simplifies dealing with virtual hosts. It wraps any handler implementing
 `module_utils::RequestFilter` and its configuration, allowing to supply a different
-configuration for that handler for each virtual host. For example, if Static Files Module is
-the wrapped handler, the configuration file might look like this:
+configuration for that handler for each virtual host and subdirectories of that host. For
+example, if Static Files Module is the wrapped handler, the configuration file might look like this:
 
 ```yaml
 vhosts:
@@ -17,17 +17,39 @@ vhosts:
             - www.example.com
         default: true
         root: ./production-root
+        subdirs:
+            /metrics
+                root: ./metrics
+            /test:
+                strip_prefix: true
+                root: ./local-debug-root
+                redirect_prefix: /test
 ```
 
-This module adds two configuration settings to the configuration of the wrapped handler:
+A virtual host configuration adds three configuration settings to the configuration of the
+wrapped handler:
 
 * `aliases` lists additional host names that should share the same configuration.
 * `default` can be set to `true` to indicate that this configuration should apply to all host
   names not listed explicitly.
+* `subdirs` maps subdirectories to their respective configuration. The configuration is that of
+  the wrapped handler with the added `strip_prefix` setting. If `true`, this setting will
+  remove the subdirectory path from the URI before the request is passed on to the handler.
 
 If no default host entry is present and a request is made for an unknown host name, this
 handler will leave the request unhandled. Otherwise the handling is delegated to the wrapped
 handler.
+
+When selecting a subdirectory configuration, longer matching paths are preferred. Matching
+always happens against full file names, meaning that URI `/test/abc` matches the subdirectory
+`/test` whereas the URI `/test_abc` doesn’t. If no matching path is found, the host
+configuration will be used.
+
+*Note*: When the `strip_prefix` option is used, the subsequent handlers will receive a URI
+which doesn’t match the actual URI of the request. This might result in wrong links or
+redirects. When using Static Files Module you can set `redirect_prefix` setting like in the
+example above to compensate. Upstream responses might have to be corrected via Pingora’s
+`upstream_response_filter`.
 
 ## Code example
 
