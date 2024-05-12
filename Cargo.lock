@@ -267,7 +267,7 @@ dependencies = [
 
 [[package]]
 name = "compression-module"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "log",
@@ -457,7 +457,7 @@ checksum = "5443807d6dff69373d433ab9ef5378ad8df50ca6298caf15de6e52e24aaf54d5"
 
 [[package]]
 name = "example-single-static-root"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "compression-module",
@@ -473,7 +473,7 @@ dependencies = [
 
 [[package]]
 name = "example-virtual-hosts"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "compression-module",
@@ -1020,7 +1020,7 @@ dependencies = [
 
 [[package]]
 name = "module-utils"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "log",
@@ -1033,7 +1033,7 @@ dependencies = [
 
 [[package]]
 name = "module-utils-macros"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "compression-module",
@@ -1951,7 +1951,7 @@ checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
 
 [[package]]
 name = "static-files-module"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -2402,7 +2402,7 @@ checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
 name = "upstream-module"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "http 1.1.0",
@@ -2456,7 +2456,7 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
 name = "virtual-hosts-module"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "env_logger",

@@ -1,6 +1,6 @@
 [package]
 name = "module-utils-macros"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Wladimir Palant"]
 repository = "https://github.com/palant/pingora-utils"
 categories = ["network-programming", "web-programming::http-server"]
