@@ -2318,9 +2318,9 @@ dependencies = [
 
 [[package]]
 name = "trie-rs"
-version = "0.4.0"
+version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a66cfc6f0a975ed796e09b7140c4174afa2feaab0d38a047fbb28bd9a094f82"
+checksum = "f6f88f4b0a1ebd6c3d16be3e45eb0e8089372ccadd88849b7ca162ba64b5e6f6"
 dependencies = [
  "louds-rs",
 ]

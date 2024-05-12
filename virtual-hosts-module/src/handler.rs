@@ -45,10 +45,6 @@ impl Path {
         }
     }
 
-    fn len(&self) -> usize {
-        self.segments.len()
-    }
-
     fn to_key<T: AsRef<[u8]>>(&self, host: T) -> Vec<Vec<u8>> {
         let mut key = vec![host.as_ref().to_owned()];
         key.extend_from_slice(&self.segments);
@@ -201,18 +197,9 @@ where
                 (false, host_conf.config.try_into()?),
             );
 
-            // Work-around for https://github.com/laysakura/trie-rs/issues/32, insert shorter paths
-            // first.
-            let mut subdirs = host_conf
-                .host
-                .subdirs
-                .into_iter()
-                .map(|(path, conf)| (Path::new(path), conf))
-                .collect::<Vec<_>>();
-            subdirs.sort_by_key(|(path, _)| path.len());
-            for (path, conf) in subdirs {
+            for (path, conf) in host_conf.host.subdirs {
                 handlers.push(
-                    path.to_key(&host),
+                    Path::new(path).to_key(&host),
                     (conf.subdir.strip_prefix, conf.config.try_into()?),
                 );
             }

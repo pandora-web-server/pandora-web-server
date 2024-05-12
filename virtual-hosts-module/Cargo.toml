@@ -23,7 +23,7 @@ pingora-proxy.workspace = true
 log.workspace = true
 module-utils.workspace = true
 serde.workspace = true
-trie-rs = "0.4.0"
+trie-rs = "0.4.2"
 
 [dev-dependencies]
 env_logger.workspace = true
