@@ -40,8 +40,8 @@
 //! ## Code example
 //!
 //! You will typically create a [`StaticFilesHandler`] instance and call it during the
-//! `request_filter` stage. If called unconditionally it will handle all requests so that
-//! subsequent stages won’t be reached at all.
+//! `request_filter` stage. If configured and called unconditionally it will handle all requests
+//! so that subsequent stages won’t be reached at all.
 //!
 //! ```rust
 //! use async_trait::async_trait;
