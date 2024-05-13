@@ -112,10 +112,8 @@ use async_trait::async_trait;
 use http::header;
 use http::uri::{Scheme, Uri};
 use log::error;
+use module_utils::pingora::{Error, ErrorType, HttpPeer, Session};
 use module_utils::{RequestFilter, RequestFilterResult};
-use pingora_core::upstreams::peer::HttpPeer;
-use pingora_core::{Error, ErrorType};
-use pingora_proxy::Session;
 use serde::{
     de::{Deserializer, Error as _},
     Deserialize,

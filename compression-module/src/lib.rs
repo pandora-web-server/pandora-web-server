@@ -110,9 +110,8 @@
 //! For complete and more realistic code, see `single-static-root` example in the repository.
 
 use async_trait::async_trait;
+use module_utils::pingora::{Error, Session};
 use module_utils::{RequestFilter, RequestFilterResult};
-use pingora_core::Error;
-use pingora_proxy::Session;
 use serde::Deserialize;
 use structopt::StructOpt;
 

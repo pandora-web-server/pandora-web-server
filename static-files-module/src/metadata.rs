@@ -14,11 +14,10 @@
 
 //! File metadata handling
 
-use http::header;
+use http::{header, status::StatusCode};
 use httpdate::fmt_http_date;
 use mime_guess::MimeGuess;
-use pingora_http::{ResponseHeader, StatusCode};
-use pingora_proxy::Session;
+use module_utils::pingora::{ResponseHeader, Session};
 use std::io::{Error, ErrorKind};
 use std::path::Path;
 use std::time::SystemTime;
@@ -127,7 +126,7 @@ impl Metadata {
     fn add_common_headers(
         &self,
         header: &mut ResponseHeader,
-    ) -> Result<(), Box<pingora_core::Error>> {
+    ) -> Result<(), Box<module_utils::pingora::Error>> {
         header.append_header(
             header::CONTENT_TYPE,
             self.mime.first_or_octet_stream().as_ref(),
@@ -142,7 +141,7 @@ impl Metadata {
     /// Produces a `200 OK` response and adds headers according to file metadata.
     pub(crate) fn to_response_header(
         &self,
-    ) -> Result<Box<ResponseHeader>, Box<pingora_core::Error>> {
+    ) -> Result<Box<ResponseHeader>, Box<module_utils::pingora::Error>> {
         let mut header = ResponseHeader::build(StatusCode::OK, Some(8))?;
         header.append_header(header::CONTENT_LENGTH, self.size.to_string())?;
         header.append_header(header::ACCEPT_RANGES, "bytes")?;
@@ -155,7 +154,7 @@ impl Metadata {
         &self,
         start: u64,
         end: u64,
-    ) -> Result<Box<ResponseHeader>, Box<pingora_core::Error>> {
+    ) -> Result<Box<ResponseHeader>, Box<module_utils::pingora::Error>> {
         let mut header = ResponseHeader::build(StatusCode::PARTIAL_CONTENT, Some(8))?;
         header.append_header(header::CONTENT_LENGTH, (end - start + 1).to_string())?;
         header.append_header(
@@ -171,7 +170,7 @@ impl Metadata {
     pub(crate) fn to_custom_header(
         &self,
         status: StatusCode,
-    ) -> Result<Box<ResponseHeader>, Box<pingora_core::Error>> {
+    ) -> Result<Box<ResponseHeader>, Box<module_utils::pingora::Error>> {
         let mut header = ResponseHeader::build(status, Some(4))?;
         self.add_common_headers(&mut header)?;
         Ok(Box::new(header))

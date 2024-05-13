@@ -17,12 +17,14 @@ path = "src/lib.rs"
 
 [dependencies]
 async-trait.workspace = true
-pingora-core.workspace = true
-pingora-proxy.workspace = true
 log.workspace = true
 module-utils.workspace = true
 serde.workspace = true
 structopt.workspace = true
+
+[dev-dependencies]
+pingora-core.workspace = true
+pingora-proxy.workspace = true
 
 [lints]
 workspace = true

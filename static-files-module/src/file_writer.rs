@@ -15,10 +15,9 @@
 //! Writing files to Pingora session.
 
 use bytes::BytesMut;
+use http::status::StatusCode;
 use log::error;
-use pingora_core::{Error, ErrorType};
-use pingora_http::StatusCode;
-use pingora_proxy::Session;
+use module_utils::pingora::{Error, ErrorType, Session};
 use std::cmp::min;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};

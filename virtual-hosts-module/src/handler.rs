@@ -16,9 +16,8 @@ use async_trait::async_trait;
 use http::header;
 use http::uri::Uri;
 use log::warn;
+use module_utils::pingora::{Error, Session};
 use module_utils::{RequestFilter, RequestFilterResult};
-use pingora_core::Error;
-use pingora_proxy::Session;
 use std::collections::HashMap;
 use trie_rs::map::{Trie, TrieBuilder};
 

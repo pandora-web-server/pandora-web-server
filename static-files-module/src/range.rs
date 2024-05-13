@@ -15,7 +15,7 @@
 //! Byte range processing (`Range` HTTP header)
 
 use http::header;
-use pingora_proxy::Session;
+use module_utils::pingora::Session;
 use std::str::FromStr;
 
 use crate::metadata::Metadata;

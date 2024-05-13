@@ -15,11 +15,10 @@
 //! Handler for the `request_filter` phase.
 
 use async_trait::async_trait;
+use http::{method::Method, status::StatusCode};
 use log::{debug, info, warn};
+use module_utils::pingora::{Error, ErrorType, Session};
 use module_utils::{RequestFilter, RequestFilterResult};
-use pingora_core::{Error, ErrorType};
-use pingora_http::{Method, StatusCode};
-use pingora_proxy::Session;
 use std::io::ErrorKind;
 
 use crate::compression::Compression;

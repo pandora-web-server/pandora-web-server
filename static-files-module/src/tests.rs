@@ -19,11 +19,10 @@ use crate::metadata::Metadata;
 use crate::standard_response::response_text;
 
 use const_format::{concatcp, str_repeat};
+use http::status::StatusCode;
 use httpdate::fmt_http_date;
+use module_utils::pingora::{Error, Session};
 use module_utils::{RequestFilter, RequestFilterResult};
-use pingora_core::Error;
-use pingora_http::StatusCode;
-use pingora_proxy::Session;
 use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::time::SystemTime;

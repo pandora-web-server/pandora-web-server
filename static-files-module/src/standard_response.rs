@@ -14,10 +14,8 @@
 
 //! Standard responses for various conditions
 
-use http::header;
-use pingora_core::Error;
-use pingora_http::{Method, ResponseHeader, StatusCode};
-use pingora_proxy::Session;
+use http::{header, method::Method, status::StatusCode};
+use module_utils::pingora::{Error, ResponseHeader, Session};
 
 /// Produces the text of a standard response page for the given status code.
 pub(crate) fn response_text(status: StatusCode) -> String {

@@ -17,10 +17,11 @@
 //! This crate contains some helpers that are useful when using `static-files-module` or
 //! `virtual-hosts-module` crates for example.
 
+pub mod pingora;
+
 use async_trait::async_trait;
 use log::trace;
-use pingora_core::{Error, ErrorType};
-use pingora_proxy::Session;
+use pingora::{Error, ErrorType, Session};
 use serde::de::DeserializeOwned;
 use std::fmt::Debug;
 use std::fs::File;

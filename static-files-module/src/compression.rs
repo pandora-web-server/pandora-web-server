@@ -15,11 +15,8 @@
 //! Handles compression for a Pingora session, both static (precompressed files) and dynamic.
 
 use bytes::Bytes;
-use http::header;
-use pingora_core::protocols::http::HttpTask;
-use pingora_core::Error;
-use pingora_http::{ResponseHeader, StatusCode};
-use pingora_proxy::Session;
+use http::{header, status::StatusCode};
+use module_utils::pingora::{Error, HttpTask, ResponseHeader, Session};
 use std::path::{Path, PathBuf};
 
 use crate::compression_algorithm::{find_matches, CompressionAlgorithm};
