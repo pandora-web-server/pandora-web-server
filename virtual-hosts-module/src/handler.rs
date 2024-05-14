@@ -57,9 +57,13 @@ pub struct VirtualHostsHandler<H: Debug> {
 }
 
 impl<H: Debug> VirtualHostsHandler<H> {
-    fn best_match(&self, host: &[u8], path: &[u8]) -> Option<(&H, Option<Vec<u8>>)> {
+    fn best_match(
+        &self,
+        host: impl AsRef<[u8]>,
+        path: impl AsRef<[u8]>,
+    ) -> Option<(&H, Option<Vec<u8>>)> {
         self.handlers
-            .lookup(host, path)
+            .lookup(&host, &path)
             .map(|((strip_prefix, handler), tail)| {
                 (
                     handler,
@@ -95,13 +99,13 @@ where
             .map(|host| host.to_owned())
             .or_else(|| host_from_uri(&session.req_header().uri));
 
-        let path = session.req_header().uri.path().as_bytes();
+        let path = session.req_header().uri.path();
         let handler = host
             .and_then(|host| {
-                if let Some(handler) = self.best_match(host.as_bytes(), path) {
+                if let Some(handler) = self.best_match(&host, path) {
                     Some(handler)
                 } else if let Some(alias) = self.aliases.get(&host) {
-                    self.best_match(alias.as_bytes(), path)
+                    self.best_match(alias, path)
                 } else {
                     None
                 }
@@ -109,7 +113,7 @@ where
             .or_else(|| {
                 self.default
                     .as_ref()
-                    .and_then(|default| self.best_match(default.as_bytes(), path))
+                    .and_then(|default| self.best_match(default, path))
             });
 
         if let Some((handler, new_path)) = handler {

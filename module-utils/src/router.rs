@@ -44,8 +44,8 @@ use crate::trie::{Trie, TrieBuilder, SEPARATOR};
 /// builder.push("example.com", "/dir/", "Website subdirectory");
 ///
 /// let router = builder.build();
-/// assert!(matches!(router.lookup("localhost".as_bytes(), "/".as_bytes()), Some((&"Localhost root", _))));
-/// assert!(matches!(router.lookup("example.com".as_bytes(), "/dir/file".as_bytes()), Some((&"Website subdirectory", _))));
+/// assert!(matches!(router.lookup("localhost", "/"), Some((&"Localhost root", _))));
+/// assert!(matches!(router.lookup("example.com", "/dir/file"), Some((&"Website subdirectory", _))));
 /// ```
 #[derive(Debug)]
 pub struct Router<Value: Debug> {
@@ -73,9 +73,10 @@ impl<Value: Debug> Router<Value> {
     /// and `/dir/` against the rule `/dir/` will both result in the tail path `/` being returned.
     pub fn lookup<'a>(
         &self,
-        host: &[u8],
-        path: &'a [u8],
+        host: &(impl AsRef<[u8]> + ?Sized),
+        path: &'a (impl AsRef<[u8]> + ?Sized),
     ) -> Option<(&Value, Option<impl AsRef<[u8]> + 'a>)> {
+        let path = path.as_ref();
         let (value, matched_segments) = self.trie.lookup(make_key(host, path))?;
         let tail = if matched_segments > 1 {
             Some(PathTail {
@@ -90,8 +91,15 @@ impl<Value: Debug> Router<Value> {
     }
 }
 
-fn make_key<'a>(host: &'a [u8], path: &'a [u8]) -> impl Iterator<Item = &'a [u8]> {
-    std::iter::once(host).chain(path.split(|c| *c == SEPARATOR).filter(|s| !s.is_empty()))
+fn make_key<'a>(
+    host: &'a (impl AsRef<[u8]> + ?Sized),
+    path: &'a (impl AsRef<[u8]> + ?Sized),
+) -> impl Iterator<Item = &'a [u8]> {
+    std::iter::once(host.as_ref()).chain(
+        path.as_ref()
+            .split(|c| *c == SEPARATOR)
+            .filter(|s| !s.is_empty()),
+    )
 }
 
 struct PathTail<'a> {
@@ -134,8 +142,8 @@ pub struct RouterBuilder<Value: Debug> {
 
 impl<Value: Debug> RouterBuilder<Value> {
     /// Adds a host/path combination with the respective value to the routing table.
-    pub fn push<H: AsRef<[u8]>, P: AsRef<[u8]>>(&mut self, host: H, path: P, value: Value) {
-        let key = make_key(host.as_ref(), path.as_ref()).fold(Vec::new(), |mut result, segment| {
+    pub fn push(&mut self, host: impl AsRef<[u8]>, path: impl AsRef<[u8]>, value: Value) {
+        let key = make_key(&host, &path).fold(Vec::new(), |mut result, segment| {
             if !result.is_empty() {
                 result.push(SEPARATOR);
             }
@@ -164,7 +172,7 @@ mod tests {
     use super::*;
 
     fn lookup(router: &Router<u8>, host: &str, path: &str) -> Option<(u8, String)> {
-        let (value, tail) = router.lookup(host.as_bytes(), path.as_bytes())?;
+        let (value, tail) = router.lookup(host, path)?;
         let tail = if let Some(tail) = tail {
             String::from_utf8_lossy(tail.as_ref()).to_string()
         } else {
