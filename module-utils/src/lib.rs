@@ -18,6 +18,8 @@
 //! `virtual-hosts-module` crates for example.
 
 pub mod pingora;
+pub mod router;
+mod trie;
 
 use async_trait::async_trait;
 use log::trace;

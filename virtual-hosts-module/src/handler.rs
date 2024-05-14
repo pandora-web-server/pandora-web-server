@@ -17,54 +17,12 @@ use http::header;
 use http::uri::Uri;
 use log::warn;
 use module_utils::pingora::{Error, Session};
+use module_utils::router::Router;
 use module_utils::{RequestFilter, RequestFilterResult};
 use std::collections::HashMap;
-use trie_rs::map::{Trie, TrieBuilder};
+use std::fmt::Debug;
 
 use crate::configuration::VirtualHostsConf;
-
-struct Path {
-    segments: Vec<Vec<u8>>,
-    trailing_slash: bool,
-}
-
-impl Path {
-    fn new<T: AsRef<[u8]>>(path: T) -> Self {
-        let path = path.as_ref();
-        let trailing_slash = path.last().is_some_and(|c| *c == b'/');
-
-        let segments = path
-            .split(|c| *c == b'/')
-            .filter(|s| !s.is_empty())
-            .map(|s| s.to_owned())
-            .collect();
-        Self {
-            segments,
-            trailing_slash,
-        }
-    }
-
-    fn to_key<T: AsRef<[u8]>>(&self, host: T) -> Vec<Vec<u8>> {
-        let mut key = vec![host.as_ref().to_owned()];
-        key.extend_from_slice(&self.segments);
-        key
-    }
-
-    fn to_vec(&self, strip_segments: usize) -> Vec<u8> {
-        let mut path =
-            self.segments[strip_segments..]
-                .iter()
-                .fold(Vec::new(), |mut path, segment| {
-                    path.push(b'/');
-                    path.extend_from_slice(segment);
-                    path
-                });
-        if self.trailing_slash || path.is_empty() {
-            path.push(b'/');
-        }
-        path
-    }
-}
 
 fn host_from_uri(uri: &Uri) -> Option<String> {
     let mut host = uri.host()?.to_owned();
@@ -92,33 +50,37 @@ fn set_uri_path(uri: &Uri, path: &[u8]) -> Uri {
 
 /// Handler for Pingora’s `request_filter` phase
 #[derive(Debug)]
-pub struct VirtualHostsHandler<H> {
-    handlers: Trie<Vec<u8>, (bool, H)>,
+pub struct VirtualHostsHandler<H: Debug> {
+    handlers: Router<(bool, H)>,
     aliases: HashMap<String, String>,
     default: Option<String>,
 }
 
-impl<H> VirtualHostsHandler<H> {
-    fn best_match<T: AsRef<[u8]>>(&self, host: T, path: &Path) -> Option<(Option<Vec<u8>>, &H)> {
+impl<H: Debug> VirtualHostsHandler<H> {
+    fn best_match<'a>(&self, host: &'a [u8], path: &'a [u8]) -> Option<(&H, Option<Vec<u8>>)> {
         self.handlers
-            .common_prefix_search(path.to_key(host))
-            .last()
-            .map(
-                |(prefix, (strip_prefix, handler)): (Vec<Vec<u8>>, &(bool, H))| {
-                    if *strip_prefix && prefix.len() > 1 {
-                        (Some(path.to_vec(prefix.len() - 1)), handler)
-                    } else {
-                        (None, handler)
-                    }
-                },
-            )
+            .lookup(host.as_ref(), path.as_ref())
+            .map(|((strip_prefix, handler), tail)| {
+                if *strip_prefix {
+                    let tail = tail.map(|t| {
+                        let mut t: Vec<_> = t.collect();
+                        if t.is_empty() {
+                            t.push(b'/');
+                        }
+                        t
+                    });
+                    (handler, tail)
+                } else {
+                    (handler, None)
+                }
+            })
     }
 }
 
 #[async_trait]
 impl<H> RequestFilter for VirtualHostsHandler<H>
 where
-    H: RequestFilter + Sync,
+    H: RequestFilter + Sync + Debug,
     H::Conf: Default,
     H::CTX: Send,
 {
@@ -141,13 +103,13 @@ where
             .map(|host| host.to_owned())
             .or_else(|| host_from_uri(&session.req_header().uri));
 
-        let path = Path::new(session.req_header().uri.path());
+        let path = session.req_header().uri.path().as_bytes();
         let handler = host
             .and_then(|host| {
-                if let Some(handler) = self.best_match(&host, &path) {
+                if let Some(handler) = self.best_match(host.as_bytes(), path) {
                     Some(handler)
                 } else if let Some(alias) = self.aliases.get(&host) {
-                    self.best_match(alias, &path)
+                    self.best_match(alias.as_bytes(), path)
                 } else {
                     None
                 }
@@ -155,10 +117,10 @@ where
             .or_else(|| {
                 self.default
                     .as_ref()
-                    .and_then(|default| self.best_match(default, &path))
+                    .and_then(|default| self.best_match(default.as_bytes(), path))
             });
 
-        if let Some((new_path, handler)) = handler {
+        if let Some((handler, new_path)) = handler {
             if let Some(new_path) = new_path {
                 let header = session.req_header_mut();
                 header.set_uri(set_uri_path(&header.uri, &new_path));
@@ -172,12 +134,13 @@ where
 
 impl<C, H> TryFrom<VirtualHostsConf<C>> for VirtualHostsHandler<H>
 where
+    H: Debug,
     C: TryInto<H, Error = Box<Error>> + Default,
 {
     type Error = Box<Error>;
 
     fn try_from(conf: VirtualHostsConf<C>) -> Result<Self, Box<Error>> {
-        let mut handlers = TrieBuilder::new();
+        let mut handlers = Router::builder();
         let mut aliases = HashMap::new();
         let mut default = None;
         for (host, host_conf) in conf.vhosts.into_iter() {
@@ -191,14 +154,12 @@ where
                     default = Some(host.clone());
                 }
             }
-            handlers.push(
-                Path::new(b"").to_key(&host),
-                (false, host_conf.config.try_into()?),
-            );
+            handlers.push(&host, "", (false, host_conf.config.try_into()?));
 
             for (path, conf) in host_conf.host.subdirs {
                 handlers.push(
-                    Path::new(path).to_key(&host),
+                    &host,
+                    path,
                     (conf.subdir.strip_prefix, conf.config.try_into()?),
                 );
             }
@@ -439,7 +400,7 @@ mod tests {
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.req_header().uri, "/xyz/");
+        assert_eq!(session.req_header().uri, "///xyz//");
         Ok(())
     }
 
