@@ -59,7 +59,7 @@ pub struct VirtualHostsHandler<H: Debug> {
 impl<H: Debug> VirtualHostsHandler<H> {
     fn best_match<'a>(&self, host: &'a [u8], path: &'a [u8]) -> Option<(&H, Option<Vec<u8>>)> {
         self.handlers
-            .lookup(host.as_ref(), path.as_ref())
+            .lookup(host, path)
             .map(|((strip_prefix, handler), tail)| {
                 if *strip_prefix {
                     let tail = tail.map(|t| {
