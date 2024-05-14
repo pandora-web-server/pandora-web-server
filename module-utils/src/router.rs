@@ -69,31 +69,19 @@ impl<Value: Debug> Router<Value> {
     /// path matched the rule’s path. The iterator will produce the remaining part of the path
     /// then.
     ///
-    /// *Note*: While the tail path will usually start with a slash, it could also be empty. For
-    /// example, matching request path `/dir/` and `/dir/file` against the rule `/dir/` will result
-    /// in the tail path `/` and `/file` respectively, but matching `/dir` will result in an empty
-    /// tail path.
+    /// *Note*: Tail path will always start with a slash. For example, matching request path `/dir`
+    /// and `/dir/` against the rule `/dir/` will both result in the tail path `/` being returned.
     pub fn lookup<'a>(
         &self,
-        host: &'a [u8],
+        host: &[u8],
         path: &'a [u8],
-    ) -> Option<(&Value, Option<impl Iterator<Item = u8> + 'a>)> {
+    ) -> Option<(&Value, Option<impl AsRef<[u8]> + 'a>)> {
         let (value, matched_segments) = self.trie.lookup(make_key(host, path))?;
         let tail = if matched_segments > 1 {
-            let mut skip_segments = matched_segments - 1;
-            let mut expect_separator = true;
-            Some(path.iter().copied().filter(move |c| {
-                if skip_segments > 0 {
-                    if *c != SEPARATOR {
-                        expect_separator = false;
-                    } else if !expect_separator {
-                        expect_separator = true;
-                        skip_segments -= 1;
-                    }
-                }
-
-                skip_segments == 0
-            }))
+            Some(PathTail {
+                path,
+                skip_segments: matched_segments - 1,
+            })
         } else {
             None
         };
@@ -104,6 +92,38 @@ impl<Value: Debug> Router<Value> {
 
 fn make_key<'a>(host: &'a [u8], path: &'a [u8]) -> impl Iterator<Item = &'a [u8]> {
     std::iter::once(host).chain(path.split(|c| *c == SEPARATOR).filter(|s| !s.is_empty()))
+}
+
+struct PathTail<'a> {
+    path: &'a [u8],
+    skip_segments: usize,
+}
+
+impl<'a> AsRef<[u8]> for PathTail<'a> {
+    fn as_ref(&self) -> &'a [u8] {
+        let mut tail_start = 0;
+        let mut segments = self.skip_segments;
+        let mut expect_separator = true;
+
+        while segments > 0 && tail_start < self.path.len() {
+            if self.path[tail_start] != SEPARATOR {
+                expect_separator = false;
+            } else if !expect_separator {
+                expect_separator = true;
+                segments -= 1;
+            }
+
+            if segments > 0 {
+                tail_start += 1;
+            }
+        }
+
+        if tail_start < self.path.len() {
+            &self.path[tail_start..]
+        } else {
+            b"/"
+        }
+    }
 }
 
 /// The router builder used to set up a [`Router`] instance
@@ -146,8 +166,7 @@ mod tests {
     fn lookup(router: &Router<u8>, host: &str, path: &str) -> Option<(u8, String)> {
         let (value, tail) = router.lookup(host.as_bytes(), path.as_bytes())?;
         let tail = if let Some(tail) = tail {
-            let tail: Vec<_> = tail.collect();
-            String::from_utf8_lossy(&tail).to_string()
+            String::from_utf8_lossy(tail.as_ref()).to_string()
         } else {
             path.to_owned()
         };
@@ -167,7 +186,7 @@ mod tests {
 
         assert_eq!(lookup(&router, "localhost", "/"), Some((1, "/".into())));
         assert_eq!(lookup(&router, "localhost", "/ab"), Some((1, "/ab".into())));
-        assert_eq!(lookup(&router, "localhost", "/abc"), Some((2, "".into())));
+        assert_eq!(lookup(&router, "localhost", "/abc"), Some((2, "/".into())));
         assert_eq!(lookup(&router, "localhost", "/abc/"), Some((2, "/".into())));
         assert_eq!(
             lookup(&router, "localhost", "/abc/d"),
@@ -187,7 +206,7 @@ mod tests {
         );
         assert_eq!(
             lookup(&router, "localhost", "/xyz/abc"),
-            Some((3, "".into()))
+            Some((3, "/".into()))
         );
         assert_eq!(lookup(&router, "example.com", "/"), Some((4, "/".into())));
         assert_eq!(
@@ -196,7 +215,7 @@ mod tests {
         );
         assert_eq!(
             lookup(&router, "example.com", "/abc/def"),
-            Some((5, "".into()))
+            Some((5, "/".into()))
         );
         assert_eq!(lookup(&router, "example.com", "/x/"), Some((6, "/".into())));
         assert_eq!(
@@ -211,7 +230,7 @@ mod tests {
         // is not an issue but it might become one as the implementation changes.
         assert_eq!(
             lookup(&router, "localhost/def", "/abc"),
-            Some((2, "".into()))
+            Some((2, "/".into()))
         );
     }
 }
