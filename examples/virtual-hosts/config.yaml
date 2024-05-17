@@ -36,3 +36,16 @@ vhosts:
       - 127.0.0.1:8081
       - "[::1]:8081"
     upstream: https://example.com/
+custom_headers:
+- headers:
+    Cache-Control: "max-age=604800"
+  include: [localhost:8080]
+  exclude: [localhost:8080/large.txt]
+- headers:
+    Cache-Control: "max-age=3600"
+  include: [localhost:8080/uncompressed/*]
+  exclude: [localhost:8080/uncompressed/large.txt]
+- headers:
+    Cache-Control: "no-cache"
+    X-From: "https://example.com/"
+  include: [localhost:8081, example.com]

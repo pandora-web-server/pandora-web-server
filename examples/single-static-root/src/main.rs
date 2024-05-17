@@ -37,6 +37,7 @@
 
 use async_trait::async_trait;
 use compression_module::{CompressionHandler, CompressionOpt};
+use headers_module::HeadersHandler;
 use log::error;
 use module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
 use pingora_core::server::configuration::{Opt as ServerOpt, ServerConf};
@@ -64,6 +65,7 @@ impl StaticRootApp {
 #[derive(Debug, RequestFilter)]
 struct Handler {
     compression: CompressionHandler,
+    headers: HeadersHandler,
     static_files: StaticFilesHandler,
 }
 

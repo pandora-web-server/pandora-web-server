@@ -8,6 +8,7 @@ publish = false
 async-trait.workspace = true
 compression-module.workspace = true
 env_logger.workspace = true
+headers-module.workspace = true
 log.workspace = true
 pingora-core.workspace = true
 pingora-proxy.workspace = true

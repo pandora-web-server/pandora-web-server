@@ -15,7 +15,7 @@
 //! Byte range processing (`Range` HTTP header)
 
 use http::header;
-use module_utils::pingora::Session;
+use module_utils::pingora::SessionWrapper;
 use std::str::FromStr;
 
 use crate::metadata::Metadata;
@@ -70,7 +70,7 @@ impl Range {
 /// all result in `None` being returned.
 ///
 /// Note: Multiple ranges are not supported.
-pub fn extract_range(session: &Session, meta: &Metadata) -> Option<Range> {
+pub fn extract_range(session: &impl SessionWrapper, meta: &Metadata) -> Option<Range> {
     let headers = &session.req_header().headers;
     if let Some(value) = headers
         .get(header::IF_RANGE)
@@ -97,6 +97,7 @@ mod tests {
     use super::*;
 
     use mime_guess::MimeGuess;
+    use module_utils::pingora::TestSession;
     use test_log::test;
     use tokio_test::io::Builder;
 
@@ -109,7 +110,7 @@ mod tests {
         }
     }
 
-    async fn make_session(range: &str, if_range: &str) -> Session {
+    async fn make_session(range: &str, if_range: &str) -> TestSession {
         let mut mock = Builder::new();
 
         mock.read(b"GET / HTTP/1.1\r\n");
@@ -122,9 +123,7 @@ mod tests {
         }
         mock.read(b"\r\n");
 
-        let mut session = Session::new_h1(Box::new(mock.build()));
-        assert!(session.read_request().await.unwrap());
-        session
+        TestSession::from(mock.build()).await
     }
 
     #[test(tokio::test)]

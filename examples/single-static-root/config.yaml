@@ -9,3 +9,8 @@ index_file:
 precompressed:
 - gz
 - br
+custom_headers:
+- headers:
+    Cache-Control: "max-age=604800"
+  include: [/*]
+  exclude: [/large.txt]

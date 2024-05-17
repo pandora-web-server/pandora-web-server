@@ -16,7 +16,7 @@
 
 use bytes::Bytes;
 use http::{header, status::StatusCode};
-use module_utils::pingora::{Error, HttpTask, ResponseHeader, Session};
+use module_utils::pingora::{Error, HttpTask, ResponseHeader, SessionWrapper};
 use std::path::{Path, PathBuf};
 
 use crate::compression_algorithm::{find_matches, CompressionAlgorithm};
@@ -32,7 +32,10 @@ pub(crate) struct Compression<'a> {
 impl<'a> Compression<'a> {
     /// Creates a new compression state supporting the given compression algorithms for
     /// pre-compressed files. *Note*: Dynamic compression is determined by the Pingora session.
-    pub(crate) fn new(session: &Session, precompressed: &'a [CompressionAlgorithm]) -> Self {
+    pub(crate) fn new(
+        session: &impl SessionWrapper,
+        precompressed: &'a [CompressionAlgorithm],
+    ) -> Self {
         Self {
             precompressed,
             precompressed_active: None,
@@ -43,7 +46,11 @@ impl<'a> Compression<'a> {
     }
 
     /// Checks whether the given path should be rewritten to a pre-compressed version of the file.
-    pub(crate) fn rewrite_path(&mut self, session: &Session, path: &Path) -> Option<PathBuf> {
+    pub(crate) fn rewrite_path(
+        &mut self,
+        session: &impl SessionWrapper,
+        path: &Path,
+    ) -> Option<PathBuf> {
         if self.precompressed.is_empty() {
             return None;
         }
@@ -72,7 +79,7 @@ impl<'a> Compression<'a> {
     /// add `Content-Encoding` HTTP header among other thins.
     pub(crate) fn transform_header(
         &mut self,
-        session: &mut Session,
+        session: &mut impl SessionWrapper,
         mut header: Box<ResponseHeader>,
     ) -> Result<Box<ResponseHeader>, Box<Error>> {
         let mut header = if header.status != StatusCode::OK
@@ -87,15 +94,19 @@ impl<'a> Compression<'a> {
         } else if header.status == StatusCode::OK {
             // Delegate to Pingora's dynamic compression implementation
             self.dynamic_active = true;
-            session
+
+            let raw_session = session.deref_mut();
+            raw_session
                 .downstream_compression
-                .request_filter(session.downstream_session.req_header());
+                .request_filter(raw_session.downstream_session.req_header());
 
             // Always pass false for end, even if no body follows. This will result in compression headers
             // on HEAD responses but that should be the right thing to do anyway.
             let mut task = HttpTask::Header(header, false);
 
-            session.downstream_compression.response_filter(&mut task);
+            raw_session
+                .downstream_compression
+                .response_filter(&mut task);
             if let HttpTask::Header(mut header, false) = task {
                 if header.headers.get(header::CONTENT_ENCODING).is_some() {
                     // Response is compressed dynamically, no support for ranged requests.
@@ -128,7 +139,7 @@ impl<'a> Compression<'a> {
     /// indicates end of body.
     pub(crate) fn transform_body(
         &self,
-        session: &mut Session,
+        session: &mut impl SessionWrapper,
         bytes: Option<Bytes>,
     ) -> Option<Bytes> {
         if !self.dynamic_active {

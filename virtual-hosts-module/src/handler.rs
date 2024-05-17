@@ -13,25 +13,15 @@
 // limitations under the License.
 
 use async_trait::async_trait;
-use http::header;
 use http::uri::Uri;
 use log::warn;
-use module_utils::pingora::{Error, Session};
+use module_utils::pingora::{Error, SessionWrapper};
 use module_utils::router::Router;
 use module_utils::{RequestFilter, RequestFilterResult};
 use std::collections::HashMap;
 use std::fmt::Debug;
 
 use crate::configuration::VirtualHostsConf;
-
-fn host_from_uri(uri: &Uri) -> Option<String> {
-    let mut host = uri.host()?.to_owned();
-    if let Some(port) = uri.port() {
-        host.push(':');
-        host.push_str(port.as_str());
-    }
-    Some(host)
-}
 
 fn set_uri_path(uri: &Uri, path: &[u8]) -> Uri {
     let mut parts = uri.clone().into_parts();
@@ -90,21 +80,16 @@ where
 
     async fn request_filter(
         &self,
-        session: &mut Session,
+        session: &mut impl SessionWrapper,
         ctx: &mut Self::CTX,
     ) -> Result<RequestFilterResult, Box<Error>> {
-        let host = session
-            .get_header(header::HOST)
-            .and_then(|host| host.to_str().ok())
-            .map(|host| host.to_owned())
-            .or_else(|| host_from_uri(&session.req_header().uri));
-
         let path = session.req_header().uri.path();
-        let handler = host
+        let handler = session
+            .host()
             .and_then(|host| {
-                if let Some(handler) = self.best_match(&host, path) {
+                if let Some(handler) = self.best_match(host.as_ref(), path) {
                     Some(handler)
-                } else if let Some(alias) = self.aliases.get(&host) {
+                } else if let Some(alias) = self.aliases.get(host.as_ref()) {
                     self.best_match(alias, path)
                 } else {
                     None
@@ -176,6 +161,7 @@ mod tests {
     use crate::configuration::{SubDirCombined, SubDirConf, VirtualHostCombined, VirtualHostConf};
 
     use async_trait::async_trait;
+    use module_utils::pingora::TestSession;
     use test_log::test;
     use tokio_test::io::Builder;
 
@@ -191,7 +177,7 @@ mod tests {
         fn new_ctx() -> Self::CTX {}
         async fn request_filter(
             &self,
-            _session: &mut Session,
+            _session: &mut impl SessionWrapper,
             _ctx: &mut Self::CTX,
         ) -> Result<RequestFilterResult, Box<Error>> {
             Ok(self.result)
@@ -256,7 +242,7 @@ mod tests {
             .unwrap()
     }
 
-    async fn make_session(uri: &str, host: Option<&str>) -> Session {
+    async fn make_session(uri: &str, host: Option<&str>) -> TestSession {
         let mut mock = Builder::new();
 
         mock.read(format!("GET {uri} HTTP/1.1\r\n").as_bytes());
@@ -266,8 +252,7 @@ mod tests {
         mock.read(b"Connection: close\r\n");
         mock.read(b"\r\n");
 
-        let mut session = Session::new_h1(Box::new(mock.build()));
-        assert!(session.read_request().await.unwrap());
+        let mut session = TestSession::from(mock.build()).await;
 
         // Set URI explicitly, otherwise with a H1 session it will all end up in the path.
         session.req_header_mut().set_uri(uri.try_into().unwrap());

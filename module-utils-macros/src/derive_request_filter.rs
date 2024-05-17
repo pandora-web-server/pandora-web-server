@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use proc_macro::TokenStream;
-use quote::quote;
+use quote::{format_ident, quote};
 use syn::{Data, DeriveInput, Error, Fields, Stmt};
 
 pub(crate) fn derive_request_filter(input: TokenStream) -> Result<TokenStream, Error> {
@@ -24,8 +24,11 @@ pub(crate) fn derive_request_filter(input: TokenStream) -> Result<TokenStream, E
     let (try_from, request_filter) = match &input.data {
         Data::Struct(struct_) => {
             if let Fields::Named(fields) = &struct_.fields {
+                let struct_name = &input.ident;
+
                 // Produce merged handler configuration
-                conf.ident = syn::parse2(quote!(__Conf))?;
+                conf.ident = format_ident!("{struct_name}__Conf");
+                let conf_name = &conf.ident;
                 if let Data::Struct(struct_) = &mut conf.data {
                     if let Fields::Named(fields) = &mut struct_.fields {
                         for field in fields.named.iter_mut() {
@@ -37,7 +40,8 @@ pub(crate) fn derive_request_filter(input: TokenStream) -> Result<TokenStream, E
                 }
 
                 // Produce merged context
-                ctx.ident = syn::parse2(quote!(__CTX))?;
+                ctx.ident = format_ident!("{struct_name}__CTX");
+                let ctx_name = &ctx.ident;
                 if let Data::Struct(struct_) = &mut ctx.data {
                     if let Fields::Named(fields) = &mut struct_.fields {
                         for field in fields.named.iter_mut() {
@@ -49,7 +53,6 @@ pub(crate) fn derive_request_filter(input: TokenStream) -> Result<TokenStream, E
                 }
 
                 // Collect field data
-                let struct_name = &input.ident;
                 let mut field_names = Vec::new();
                 let mut conv_statements = Vec::new();
                 let mut ctx_statements = Vec::new();
@@ -72,10 +75,10 @@ pub(crate) fn derive_request_filter(input: TokenStream) -> Result<TokenStream, E
 
                 // Produce TryFrom implementation
                 let try_from = quote!(
-                    impl ::std::convert::TryFrom<__Conf> for #struct_name {
-                        type Error = ::std::boxed::Box<::pingora_core::Error>;
+                    impl ::std::convert::TryFrom<#conf_name> for #struct_name {
+                        type Error = ::std::boxed::Box<::module_utils::pingora::Error>;
 
-                        fn try_from(conf: __Conf) -> ::std::result::Result<Self, Self::Error> {
+                        fn try_from(conf: #conf_name) -> ::std::result::Result<Self, Self::Error> {
                             #( #conv_statements )*
                             ::std::result::Result::Ok(Self {
                                 #( #field_names, )*
@@ -88,8 +91,8 @@ pub(crate) fn derive_request_filter(input: TokenStream) -> Result<TokenStream, E
                 let request_filter = quote! {
                     #[async_trait::async_trait]
                     impl ::module_utils::RequestFilter for #struct_name {
-                        type Conf = __Conf;
-                        type CTX = __CTX;
+                        type Conf = #conf_name;
+                        type CTX = #ctx_name;
 
                         fn new_ctx() -> Self::CTX {
                             #( #ctx_statements )*
@@ -100,9 +103,9 @@ pub(crate) fn derive_request_filter(input: TokenStream) -> Result<TokenStream, E
 
                         async fn request_filter(
                             &self,
-                            _session: &mut ::pingora_proxy::Session,
+                            _session: &mut impl ::module_utils::pingora::SessionWrapper,
                             _ctx: &mut Self::CTX,
-                        ) -> ::std::result::Result<::module_utils::RequestFilterResult, ::std::boxed::Box<::pingora_core::Error>> {
+                        ) -> ::std::result::Result<::module_utils::RequestFilterResult, ::std::boxed::Box<::module_utils::pingora::Error>> {
                             #(
                                 let result = self.#field_names.request_filter(_session, &mut _ctx.#field_names).await?;
                                 if result != ::module_utils::RequestFilterResult::Unhandled {
@@ -110,6 +113,28 @@ pub(crate) fn derive_request_filter(input: TokenStream) -> Result<TokenStream, E
                                 }
                             )*
                             ::std::result::Result::Ok(module_utils::RequestFilterResult::Unhandled)
+                        }
+
+                        fn request_filter_done(
+                            &self,
+                            _session: &mut impl ::module_utils::pingora::SessionWrapper,
+                            _ctx: &mut Self::CTX,
+                            _result: ::module_utils::RequestFilterResult,
+                        ) {
+                            #(
+                                self.#field_names.request_filter_done(_session, &mut _ctx.#field_names, _result);
+                            )*
+                        }
+
+                        fn response_filter(
+                            &self,
+                            _session: &mut impl ::module_utils::pingora::SessionWrapper,
+                            _response: &mut ::module_utils::pingora::ResponseHeader,
+                            mut _ctx: ::std::option::Option<&mut Self::CTX>,
+                        ) {
+                            #(
+                                self.#field_names.response_filter(_session, _response, _ctx.as_mut().map(|ctx| &mut ctx.#field_names));
+                            )*
                         }
                     }
                 };

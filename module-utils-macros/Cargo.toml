@@ -25,7 +25,6 @@ async-trait.workspace = true
 compression-module.workspace = true
 module-utils.workspace = true
 pingora-core.workspace = true
-pingora-proxy.workspace = true
 serde.workspace = true
 static-files-module.workspace = true
 structopt.workspace = true

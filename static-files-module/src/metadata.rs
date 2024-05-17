@@ -17,7 +17,7 @@
 use http::{header, status::StatusCode};
 use httpdate::fmt_http_date;
 use mime_guess::MimeGuess;
-use module_utils::pingora::{ResponseHeader, Session};
+use module_utils::pingora::{ResponseHeader, SessionWrapper};
 use std::io::{Error, ErrorKind};
 use std::path::Path;
 use std::time::SystemTime;
@@ -74,7 +74,7 @@ impl Metadata {
 
     /// Checks `If-Match` and `If-Unmodified-Since` headers of the request to determine whether
     /// a `412 Precondition Failed` response should be produced.
-    pub fn has_failed_precondition(&self, session: &Session) -> bool {
+    pub fn has_failed_precondition(&self, session: &impl SessionWrapper) -> bool {
         let headers = &session.req_header().headers;
         if let Some(value) = headers
             .get(header::IF_MATCH)
@@ -99,7 +99,7 @@ impl Metadata {
 
     /// Checks `If-None-Match` and `If-Modified-Since` headers of the request to determine whether
     /// a `304 Not Modified` response should be produced.
-    pub fn is_not_modified(&self, session: &Session) -> bool {
+    pub fn is_not_modified(&self, session: &impl SessionWrapper) -> bool {
         let headers = &session.req_header().headers;
         if let Some(value) = headers
             .get(header::IF_NONE_MATCH)

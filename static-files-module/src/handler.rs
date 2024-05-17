@@ -17,7 +17,7 @@
 use async_trait::async_trait;
 use http::{method::Method, status::StatusCode};
 use log::{debug, info, warn};
-use module_utils::pingora::{Error, ErrorType, Session};
+use module_utils::pingora::{Error, ErrorType, SessionWrapper};
 use module_utils::{RequestFilter, RequestFilterResult};
 use std::io::ErrorKind;
 
@@ -57,7 +57,7 @@ impl RequestFilter for StaticFilesHandler {
 
     async fn request_filter(
         &self,
-        session: &mut Session,
+        session: &mut impl SessionWrapper,
         _ctx: &mut Self::CTX,
     ) -> Result<RequestFilterResult, Box<Error>> {
         let root = if let Some(root) = self.conf.root.as_ref() {

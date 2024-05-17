@@ -57,29 +57,35 @@
 
 use async_trait::async_trait;
 use compression_module::CompressionHandler;
+use headers_module::HeadersHandler;
 use log::error;
+use module_utils::pingora::{Error, HttpPeer, ResponseHeader, Session};
 use module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
 use pingora_core::server::configuration::{Opt as ServerOpt, ServerConf};
 use pingora_core::server::Server;
-use pingora_core::upstreams::peer::HttpPeer;
-use pingora_core::Error;
-use pingora_proxy::{http_proxy_service, ProxyHttp, Session};
+use pingora_proxy::{http_proxy_service, ProxyHttp};
 use serde::Deserialize;
 use static_files_module::StaticFilesHandler;
 use structopt::StructOpt;
 use upstream_module::UpstreamHandler;
-use virtual_hosts_module::{VirtualHostsConf, VirtualHostsHandler};
+use virtual_hosts_module::VirtualHostsHandler;
 
 /// The application implementing the Pingora Proxy interface
 struct VirtualHostsApp {
-    handler: VirtualHostsHandler<HostHandler>,
+    handler: Handler,
 }
 
 impl VirtualHostsApp {
     /// Creates a new application instance with the given virtual hosts handler.
-    fn new(handler: VirtualHostsHandler<HostHandler>) -> Self {
+    fn new(handler: Handler) -> Self {
         Self { handler }
     }
+}
+
+#[derive(Debug, RequestFilter)]
+struct Handler {
+    headers: HeadersHandler,
+    virtual_hosts: VirtualHostsHandler<HostHandler>,
 }
 
 #[derive(Debug, RequestFilter)]
@@ -127,15 +133,15 @@ impl Default for VirtualHostsAppConf {
 struct Conf {
     app: VirtualHostsAppConf,
     server: ServerConf,
-    virtual_hosts: VirtualHostsConf<<HostHandler as RequestFilter>::Conf>,
+    handler: <Handler as RequestFilter>::Conf,
 }
 
 #[async_trait]
 impl ProxyHttp for VirtualHostsApp {
-    type CTX = <VirtualHostsHandler<HostHandler> as RequestFilter>::CTX;
+    type CTX = <Handler as RequestFilter>::CTX;
 
     fn new_ctx(&self) -> Self::CTX {
-        VirtualHostsHandler::<HostHandler>::new_ctx()
+        Handler::new_ctx()
     }
 
     async fn request_filter(
@@ -151,7 +157,17 @@ impl ProxyHttp for VirtualHostsApp {
         session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> Result<Box<HttpPeer>, Box<Error>> {
-        UpstreamHandler::upstream_peer(session, &mut ctx.upstream).await
+        UpstreamHandler::upstream_peer(session, &mut ctx.virtual_hosts.upstream).await
+    }
+
+    fn upstream_response_filter(
+        &self,
+        session: &mut Session,
+        upstream_response: &mut ResponseHeader,
+        ctx: &mut Self::CTX,
+    ) {
+        self.handler
+            .handle_response(session, upstream_response, ctx)
     }
 }
 
@@ -175,7 +191,7 @@ fn main() {
     let mut server = Server::new_with_opt_and_conf(opt.server, conf.server);
     server.bootstrap();
 
-    let handler = match VirtualHostsHandler::new(conf.virtual_hosts) {
+    let handler = match Handler::new(conf.handler) {
         Ok(handler) => handler,
         Err(err) => {
             error!("{err}");

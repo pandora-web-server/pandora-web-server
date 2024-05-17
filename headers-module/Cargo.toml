@@ -1,31 +1,34 @@
 [package]
-name = "module-utils"
+name = "headers-module"
 version = "0.2.0"
 authors = ["Wladimir Palant"]
 repository = "https://github.com/palant/pingora-utils"
 categories = ["network-programming", "web-programming::http-server"]
-keywords = ["utilities", "web-server", "http", "pingora"]
+keywords = ["http-headers", "headers", "web-server", "http", "pingora"]
 license = "Apache-2.0"
 edition = "2021"
 description = """
-Helpers for Pingora modules such as static-files-module crate.
+A module adding configurable HTTP headers to server responses.
 """
 
 [lib]
-name = "module_utils"
+name = "headers_module"
 path = "src/lib.rs"
 
 [dependencies]
 async-trait.workspace = true
 http.workspace = true
 log.workspace = true
-module-utils-macros.workspace = true
+module-utils.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+compression-module.workspace = true
 pingora-core.workspace = true
 pingora-http.workspace = true
 pingora-proxy.workspace = true
-serde.workspace = true
-serde_yaml.workspace = true
-tokio-test.workspace = true
+upstream-module.workspace = true
+structopt.workspace = true
 
 [lints]
 workspace = true

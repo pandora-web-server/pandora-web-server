@@ -21,7 +21,7 @@ use crate::standard_response::response_text;
 use const_format::{concatcp, str_repeat};
 use http::status::StatusCode;
 use httpdate::fmt_http_date;
-use module_utils::pingora::{Error, Session};
+use module_utils::pingora::{Error, TestSession};
 use module_utils::{RequestFilter, RequestFilterResult};
 use std::io::ErrorKind;
 use std::path::PathBuf;
@@ -106,15 +106,13 @@ fn mock(request: Request<'_>) -> Builder {
     mock
 }
 
-async fn make_session_no_response(request: Request<'_>) -> Session {
+async fn make_session_no_response(request: Request<'_>) -> TestSession {
     let mut mock = mock(request);
 
-    let mut session = Session::new_h1(Box::new(mock.build()));
-    assert!(session.read_request().await.unwrap());
-    session
+    TestSession::from(mock.build()).await
 }
 
-async fn make_session(request: Request<'_>, response: Response<'_>) -> Session {
+async fn make_session(request: Request<'_>, response: Response<'_>) -> TestSession {
     let mut mock = mock(request);
 
     let expected_status = response.expected_status;
@@ -133,9 +131,7 @@ async fn make_session(request: Request<'_>, response: Response<'_>) -> Session {
         mock.write(response.expected_body.as_bytes());
     }
 
-    let mut session = Session::new_h1(Box::new(mock.build()));
-    assert!(session.read_request().await.unwrap());
-    session
+    TestSession::from(mock.build()).await
 }
 
 #[test(tokio::test)]

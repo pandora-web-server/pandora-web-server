@@ -23,7 +23,7 @@ mod trie;
 
 use async_trait::async_trait;
 use log::trace;
-use pingora::{Error, ErrorType, Session};
+use pingora::{wrap_session, Error, ErrorType, ResponseHeader, Session, SessionWrapper};
 use serde::de::DeserializeOwned;
 use std::fmt::Debug;
 use std::fs::File;
@@ -50,7 +50,7 @@ pub enum RequestFilterResult {
 
 /// Trait to be implemented by request filters.
 #[async_trait]
-pub trait RequestFilter {
+pub trait RequestFilter: Sized {
     /// Configuration type of this handler.
     type Conf;
 
@@ -63,16 +63,35 @@ pub trait RequestFilter {
         conf.try_into()
     }
 
-    /// Handles the current request.
+    /// Handles the `request_filter` phase of the current request.
     ///
-    /// This is essentially identical to the `request_filter` method but is supposed to be called
-    /// when there is only a single handler. Consequently, its result can be returned directly.
+    /// This will wrap the current session and call `request_filter` methods of the individual
+    /// handlers then. It will then create a result that can be returned from the `request_filter`
+    /// phase directly.
     async fn handle(&self, session: &mut Session, ctx: &mut Self::CTX) -> Result<bool, Box<Error>>
     where
         Self::CTX: Send,
     {
-        let result = self.request_filter(session, ctx).await?;
+        let mut session = wrap_session(session, self);
+        let result = self.request_filter(&mut session, ctx).await?;
+        self.request_filter_done(&mut session, ctx, result);
         Ok(result == RequestFilterResult::ResponseSent)
+    }
+
+    /// Handles the `upstream_response_filter` or `response_filter` phase of the current request.
+    ///
+    /// This will wrap the current session and call `response_filter` methods of the individual
+    /// handlers then.
+    fn handle_response(
+        &self,
+        session: &mut Session,
+        response: &mut ResponseHeader,
+        ctx: &mut Self::CTX,
+    ) where
+        Self: Sync,
+    {
+        let mut session = wrap_session(session, self);
+        self.response_filter(&mut session, response, Some(ctx))
     }
 
     /// Per-request state of this handler, see [`pingora_proxy::ProxyHttp::CTX`]
@@ -86,9 +105,31 @@ pub trait RequestFilter {
     /// for the existence of multiple request filters.
     async fn request_filter(
         &self,
-        session: &mut Session,
+        session: &mut impl SessionWrapper,
         ctx: &mut Self::CTX,
     ) -> Result<RequestFilterResult, Box<Error>>;
+
+    /// Called after `request_filter` was called for all handlers and a result was produced. This
+    /// allows the handler to perform some post-processing.
+    fn request_filter_done(
+        &self,
+        _session: &mut impl SessionWrapper,
+        _ctx: &mut Self::CTX,
+        _result: RequestFilterResult,
+    ) {
+    }
+
+    /// Called when a response header is about to be sent, either from a request filter or an
+    /// upstream response.
+    ///
+    /// *Note*: A context will only be available for the latter call.
+    fn response_filter(
+        &self,
+        _session: &mut impl SessionWrapper,
+        _response: &mut ResponseHeader,
+        _ctx: Option<&mut Self::CTX>,
+    ) {
+    }
 }
 
 /// Trait for configuration structures that can be loaded from YAML files. This trait has a blanket

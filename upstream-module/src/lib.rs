@@ -112,7 +112,7 @@ use async_trait::async_trait;
 use http::header;
 use http::uri::{Scheme, Uri};
 use log::error;
-use module_utils::pingora::{Error, ErrorType, HttpPeer, Session};
+use module_utils::pingora::{Error, ErrorType, HttpPeer, Session, SessionWrapper};
 use module_utils::{RequestFilter, RequestFilterResult};
 use serde::{
     de::{Deserializer, Error as _},
@@ -267,7 +267,7 @@ impl RequestFilter for UpstreamHandler {
 
     async fn request_filter(
         &self,
-        session: &mut Session,
+        session: &mut impl SessionWrapper,
         ctx: &mut Self::CTX,
     ) -> Result<RequestFilterResult, Box<Error>> {
         if let Some(context) = &self.context {

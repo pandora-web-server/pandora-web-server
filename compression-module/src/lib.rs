@@ -110,7 +110,7 @@
 //! For complete and more realistic code, see `single-static-root` example in the repository.
 
 use async_trait::async_trait;
-use module_utils::pingora::{Error, Session};
+use module_utils::pingora::{Error, SessionWrapper};
 use module_utils::{RequestFilter, RequestFilterResult};
 use serde::Deserialize;
 use structopt::StructOpt;
@@ -174,7 +174,7 @@ impl RequestFilter for CompressionHandler {
 
     async fn request_filter(
         &self,
-        session: &mut Session,
+        session: &mut impl SessionWrapper,
         _ctx: &mut Self::CTX,
     ) -> Result<RequestFilterResult, Box<Error>> {
         if let Some(level) = self.conf.compression_level {
