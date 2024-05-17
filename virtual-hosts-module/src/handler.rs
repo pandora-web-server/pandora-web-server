@@ -161,9 +161,8 @@ mod tests {
     use crate::configuration::{SubDirCombined, SubDirConf, VirtualHostCombined, VirtualHostConf};
 
     use async_trait::async_trait;
-    use module_utils::pingora::TestSession;
+    use module_utils::pingora::{RequestHeader, TestSession};
     use test_log::test;
-    use tokio_test::io::Builder;
 
     #[derive(Debug)]
     struct Handler {
@@ -243,16 +242,15 @@ mod tests {
     }
 
     async fn make_session(uri: &str, host: Option<&str>) -> TestSession {
-        let mut mock = Builder::new();
+        let header = RequestHeader::build("GET", uri.as_bytes(), None).unwrap();
+        let mut session = TestSession::from(header).await;
 
-        mock.read(format!("GET {uri} HTTP/1.1\r\n").as_bytes());
         if let Some(host) = host {
-            mock.read(format!("Host: {host}\r\n").as_bytes());
+            session
+                .req_header_mut()
+                .insert_header("Host", host)
+                .unwrap();
         }
-        mock.read(b"Connection: close\r\n");
-        mock.read(b"\r\n");
-
-        let mut session = TestSession::from(mock.build()).await;
 
         // Set URI explicitly, otherwise with a H1 session it will all end up in the path.
         session.req_header_mut().set_uri(uri.try_into().unwrap());

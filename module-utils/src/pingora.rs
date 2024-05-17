@@ -16,15 +16,16 @@
 //! longer need them as direct dependencies.
 
 use async_trait::async_trait;
+use bytes::{Bytes, BytesMut};
 use http::{header, Extensions};
 pub use pingora_core::protocols::http::HttpTask;
 pub use pingora_core::upstreams::peer::HttpPeer;
 pub use pingora_core::{Error, ErrorType};
-pub use pingora_http::{IntoCaseHeaderName, ResponseHeader};
+pub use pingora_http::{IntoCaseHeaderName, RequestHeader, ResponseHeader};
 pub use pingora_proxy::Session;
 use std::borrow::Cow;
 use std::ops::{Deref, DerefMut};
-use tokio_test::io::Mock;
+use tokio_test::io::Builder;
 
 use crate::RequestFilter;
 
@@ -71,14 +72,24 @@ pub trait SessionWrapper: Send + Deref<Target = Session> + DerefMut {
     /// or `CTX` data, they don’t survive across Pingora phases.
     fn extensions_mut(&mut self) -> &mut Extensions;
 
-    /// Modifies `Session::write_response_header` to ensure that additional response headers are
-    /// written.
-    async fn write_response_header(&mut self, resp: Box<ResponseHeader>) -> Result<(), Box<Error>>;
+    /// See [`Session::write_response_header`](pingora_core::protocols::http::server::Session::write_response_header)
+    async fn write_response_header(&mut self, resp: Box<ResponseHeader>) -> Result<(), Box<Error>> {
+        self.deref_mut().write_response_header(resp).await
+    }
 
-    /// Modifies `Session::write_response_header_ref` to ensure that additional response headers
-    /// are written.
+    /// See [`Session::write_response_header_ref`](pingora_core::protocols::http::server::Session::write_response_header_ref)
     async fn write_response_header_ref(&mut self, resp: &ResponseHeader) -> Result<(), Box<Error>> {
-        self.write_response_header(Box::new(resp.clone())).await
+        self.deref_mut().write_response_header_ref(resp).await
+    }
+
+    /// See [`Session::response_written`](pingora_core::protocols::http::server::Session::response_written)
+    fn response_written(&self) -> Option<&ResponseHeader> {
+        self.deref().response_written()
+    }
+
+    /// See [`Session::write_response_body`](pingora_core::protocols::http::server::Session::write_response_body)
+    async fn write_response_body(&mut self, data: Bytes) -> Result<(), Box<Error>> {
+        self.deref_mut().write_response_body(data).await
     }
 }
 
@@ -123,6 +134,10 @@ where
 
         self.deref_mut().write_response_header(resp).await
     }
+
+    async fn write_response_header_ref(&mut self, resp: &ResponseHeader) -> Result<(), Box<Error>> {
+        self.write_response_header(Box::new(resp.clone())).await
+    }
 }
 
 impl<H> Deref for SessionWrapperImpl<'_, H> {
@@ -154,16 +169,31 @@ where
 pub struct TestSession {
     inner: Session,
     extensions: Extensions,
+
+    /// The response header written if any
+    pub response_header: Option<ResponseHeader>,
+
+    /// The response body written if any
+    pub response_body: BytesMut,
 }
 
 impl TestSession {
     /// Creates a new test session based on a mock of the network communication.
-    pub async fn from(mock: Mock) -> Self {
-        let mut inner = Session::new_h1(Box::new(mock));
+    pub async fn from(header: RequestHeader) -> Self {
+        let mut builder = Builder::new();
+        builder.read(b"GET / HTTP/1.1\r\n");
+        builder.read(b"Connection: close\r\n");
+        builder.read(b"\r\n");
+
+        let mut inner = Session::new_h1(Box::new(builder.build()));
         assert!(inner.read_request().await.unwrap());
+        *inner.req_header_mut() = header;
+
         Self {
             inner,
             extensions: Extensions::new(),
+            response_header: None,
+            response_body: BytesMut::new(),
         }
     }
 }
@@ -179,7 +209,21 @@ impl SessionWrapper for TestSession {
     }
 
     async fn write_response_header(&mut self, resp: Box<ResponseHeader>) -> Result<(), Box<Error>> {
-        self.deref_mut().write_response_header(resp).await
+        self.response_header = Some(*resp);
+        Ok(())
+    }
+
+    async fn write_response_header_ref(&mut self, resp: &ResponseHeader) -> Result<(), Box<Error>> {
+        self.write_response_header(Box::new(resp.clone())).await
+    }
+
+    fn response_written(&self) -> Option<&ResponseHeader> {
+        self.response_header.as_ref()
+    }
+
+    async fn write_response_body(&mut self, data: Bytes) -> Result<(), Box<Error>> {
+        self.response_body.extend(std::iter::once(data));
+        Ok(())
     }
 }
 

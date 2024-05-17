@@ -97,9 +97,8 @@ mod tests {
     use super::*;
 
     use mime_guess::MimeGuess;
-    use module_utils::pingora::TestSession;
+    use module_utils::pingora::{RequestHeader, TestSession};
     use test_log::test;
-    use tokio_test::io::Builder;
 
     fn metadata() -> Metadata {
         Metadata {
@@ -110,31 +109,25 @@ mod tests {
         }
     }
 
-    async fn make_session(range: &str, if_range: &str) -> TestSession {
-        let mut mock = Builder::new();
+    async fn make_session(range: &str) -> TestSession {
+        let mut header = RequestHeader::build("GET", b"/", None).unwrap();
 
-        mock.read(b"GET / HTTP/1.1\r\n");
-        mock.read(b"Connection: close\r\n");
         if !range.is_empty() {
-            mock.read(format!("Range: {range}\r\n").as_bytes());
+            header.insert_header("Range", range).unwrap();
         }
-        if !if_range.is_empty() {
-            mock.read(format!("If-Range: {if_range}\r\n").as_bytes());
-        }
-        mock.read(b"\r\n");
 
-        TestSession::from(mock.build()).await
+        TestSession::from(header).await
     }
 
     #[test(tokio::test)]
     async fn no_range() {
-        let session = make_session("", "").await;
+        let session = make_session("").await;
         assert_eq!(extract_range(&session, &metadata()), None);
     }
 
     #[test(tokio::test)]
     async fn valid_range() {
-        let session = make_session("bytes=0-499", "").await;
+        let session = make_session("bytes=0-499").await;
         assert_eq!(
             extract_range(&session, &metadata()),
             Some(Range::Valid(0, 499))
@@ -143,13 +136,13 @@ mod tests {
 
     #[test(tokio::test)]
     async fn unknown_units() {
-        let session = make_session("eur=0-499", "").await;
+        let session = make_session("eur=0-499").await;
         assert_eq!(extract_range(&session, &metadata()), None);
     }
 
     #[test(tokio::test)]
     async fn open_range() {
-        let session = make_session("bytes=500-", "").await;
+        let session = make_session("bytes=500-").await;
         assert_eq!(
             extract_range(&session, &metadata()),
             Some(Range::Valid(500, 999))
@@ -158,7 +151,7 @@ mod tests {
 
     #[test(tokio::test)]
     async fn end_range() {
-        let session = make_session("bytes=-10", "").await;
+        let session = make_session("bytes=-10").await;
         assert_eq!(
             extract_range(&session, &metadata()),
             Some(Range::Valid(990, 999))
@@ -167,19 +160,19 @@ mod tests {
 
     #[test(tokio::test)]
     async fn out_of_bounds_ranges() {
-        let session = make_session("bytes=-2000", "").await;
+        let session = make_session("bytes=-2000").await;
         assert_eq!(
             extract_range(&session, &metadata()),
             Some(Range::OutOfBounds)
         );
 
-        let session = make_session("bytes=23-22", "").await;
+        let session = make_session("bytes=23-22").await;
         assert_eq!(
             extract_range(&session, &metadata()),
             Some(Range::OutOfBounds)
         );
 
-        let session = make_session("bytes=1000-", "").await;
+        let session = make_session("bytes=1000-").await;
         assert_eq!(
             extract_range(&session, &metadata()),
             Some(Range::OutOfBounds)
@@ -189,31 +182,51 @@ mod tests {
     #[test(tokio::test)]
     async fn multiple_ranges() {
         // Multiple ranges are unsupported, should be treated like no Range header.
-        let session = make_session("bytes=1-2,3-4", "").await;
+        let session = make_session("bytes=1-2,3-4").await;
         assert_eq!(extract_range(&session, &metadata()), None);
     }
 
     #[test(tokio::test)]
     async fn if_range() {
-        let session = make_session("bytes=0-499", "\"abc\"").await;
+        let mut session = make_session("bytes=0-499").await;
+        session
+            .req_header_mut()
+            .insert_header("If-Range", "\"abc\"")
+            .unwrap();
         assert_eq!(
             extract_range(&session, &metadata()),
             Some(Range::Valid(0, 499))
         );
 
-        let session = make_session("bytes=0-499", "\"xyz\"").await;
+        let mut session = make_session("bytes=0-499").await;
+        session
+            .req_header_mut()
+            .insert_header("If-Range", "\"xyz\"")
+            .unwrap();
         assert_eq!(extract_range(&session, &metadata()), None);
 
-        let session = make_session("bytes=0-499", "Fri, 15 May 2015 15:34:21 GMT").await;
+        let mut session = make_session("bytes=0-499").await;
+        session
+            .req_header_mut()
+            .insert_header("If-Range", "Fri, 15 May 2015 15:34:21 GMT")
+            .unwrap();
         assert_eq!(
             extract_range(&session, &metadata()),
             Some(Range::Valid(0, 499))
         );
 
-        let session = make_session("bytes=0-499", "Thu, 01 Jan 1970 00:00:00 GMT").await;
+        let mut session = make_session("bytes=0-499").await;
+        session
+            .req_header_mut()
+            .insert_header("If-Range", "Thu, 01 Jan 1970 00:00:00 GMT")
+            .unwrap();
         assert_eq!(extract_range(&session, &metadata()), None);
 
-        let session = make_session("bytes=0-499", "bogus").await;
+        let mut session = make_session("bytes=0-499").await;
+        session
+            .req_header_mut()
+            .insert_header("If-Range", "bogus")
+            .unwrap();
         assert_eq!(extract_range(&session, &metadata()), None);
     }
 }

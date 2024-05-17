@@ -1005,6 +1005,7 @@ name = "module-utils"
 version = "0.2.0"
 dependencies = [
  "async-trait",
+ "bytes",
  "http 1.1.0",
  "log",
  "module-utils-macros",
@@ -1934,7 +1935,6 @@ dependencies = [
  "structopt",
  "test-log",
  "tokio",
- "tokio-test",
 ]
 
 [[package]]
@@ -2424,7 +2424,6 @@ dependencies = [
  "structopt",
  "test-log",
  "tokio",
- "tokio-test",
 ]
 
 [[package]]

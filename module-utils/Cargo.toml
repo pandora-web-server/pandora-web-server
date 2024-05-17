@@ -17,6 +17,7 @@ path = "src/lib.rs"
 
 [dependencies]
 async-trait.workspace = true
+bytes.workspace = true
 http.workspace = true
 log.workspace = true
 module-utils-macros.workspace = true

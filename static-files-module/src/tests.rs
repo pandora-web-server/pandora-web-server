@@ -20,58 +20,10 @@ use crate::standard_response::response_text;
 
 use const_format::{concatcp, str_repeat};
 use http::status::StatusCode;
-use httpdate::fmt_http_date;
-use module_utils::pingora::{Error, TestSession};
+use module_utils::pingora::{Error, RequestHeader, SessionWrapper, TestSession};
 use module_utils::{RequestFilter, RequestFilterResult};
-use std::io::ErrorKind;
 use std::path::PathBuf;
-use std::time::SystemTime;
 use test_log::test;
-use tokio_test::io::Builder;
-
-struct Request<'a> {
-    method: &'a str,
-    uri: &'a str,
-    headers: Vec<(&'a str, String)>,
-}
-
-struct Response<'a> {
-    expected_status: &'a str,
-    expected_headers: Vec<(&'a str, String)>,
-    expected_body: &'a str,
-}
-
-fn request<'a>(method: &'a str, uri: &'a str) -> Request<'a> {
-    Request {
-        method,
-        uri,
-        headers: Vec::new(),
-    }
-}
-
-fn request_with_headers<'a>(
-    method: &'a str,
-    uri: &'a str,
-    headers: Vec<(&'a str, String)>,
-) -> Request<'a> {
-    Request {
-        method,
-        uri,
-        headers,
-    }
-}
-
-fn response<'a>(
-    expected_status: &'a str,
-    expected_headers: Vec<(&'a str, String)>,
-    expected_body: &'a str,
-) -> Response<'a> {
-    Response {
-        expected_status,
-        expected_headers,
-        expected_body,
-    }
-}
 
 fn root_path(filename: &str) -> PathBuf {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -92,46 +44,48 @@ fn handler() -> StaticFilesHandler {
     .unwrap()
 }
 
-fn mock(request: Request<'_>) -> Builder {
-    let mut mock = Builder::new();
+async fn make_session(method: &str, path: &str) -> TestSession {
+    let header = RequestHeader::build(method, path.as_bytes(), None).unwrap();
 
-    let method = request.method;
-    let uri = request.uri;
-    mock.read(format!("{method} {uri} HTTP/1.1\r\n").as_bytes());
-    mock.read(b"Connection: close\r\n");
-    for (name, value) in request.headers {
-        mock.read(format!("{name}: {value}\r\n").as_bytes());
-    }
-    mock.read(b"\r\n");
-    mock
+    TestSession::from(header).await
 }
 
-async fn make_session_no_response(request: Request<'_>) -> TestSession {
-    let mut mock = mock(request);
-
-    TestSession::from(mock.build()).await
+fn assert_status(session: &TestSession, expected: u16) {
+    assert_eq!(
+        session.response_written().unwrap().status.as_u16(),
+        expected
+    );
 }
 
-async fn make_session(request: Request<'_>, response: Response<'_>) -> TestSession {
-    let mut mock = mock(request);
+fn assert_headers(session: &TestSession, expected: Vec<(&str, &str)>) {
+    let mut headers: Vec<_> = session
+        .response_written()
+        .unwrap()
+        .headers
+        .iter()
+        .map(|(name, value)| {
+            (
+                name.as_str().to_ascii_lowercase(),
+                value.to_str().unwrap().to_owned(),
+            )
+        })
+        .collect();
+    headers.sort();
 
-    let expected_status = response.expected_status;
-    mock.write(format!("HTTP/1.1 {expected_status}\r\n").as_bytes());
-    for (name, value) in response.expected_headers {
-        mock.write(format!("{name}: {value}\r\n").as_bytes());
-    }
-    mock.write(format!("Date: {}\r\n", fmt_http_date(SystemTime::now())).as_bytes());
-    mock.write(b"Connection: close\r\n");
+    let mut expected: Vec<_> = expected
+        .into_iter()
+        .map(|(name, value)| (name.to_ascii_lowercase(), value.to_owned()))
+        .collect();
+    expected.sort();
 
-    mock.write(b"\r\n");
+    assert_eq!(headers, expected);
+}
 
-    if response.expected_body == "<ignore>" {
-        mock.write_error(ErrorKind::Other.into());
-    } else {
-        mock.write(response.expected_body.as_bytes());
-    }
-
-    TestSession::from(mock.build()).await
+fn assert_body(session: &TestSession, expected: &str) {
+    assert_eq!(
+        String::from_utf8_lossy(&session.response_body).as_ref(),
+        expected
+    );
 }
 
 #[test(tokio::test)]
@@ -139,11 +93,13 @@ async fn unconfigured() -> Result<(), Box<Error>> {
     let mut handler = handler();
     handler.conf_mut().root = None;
 
-    let mut session = make_session_no_response(request("GET", "/file.txt")).await;
+    let mut session = make_session("GET", "/file.txt").await;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::Unhandled
     );
+    assert!(session.response_written().is_none());
+    assert_body(&session, "");
 
     Ok(())
 }
@@ -153,48 +109,42 @@ async fn text_file() -> Result<(), Box<Error>> {
     let meta = Metadata::from_path(&root_path("file.txt"), None).unwrap();
 
     let handler = handler();
-    let mut session = make_session(
-        request("GET", "/file.txt"),
-        response(
-            "200 OK",
-            vec![
-                ("Content-Length", meta.size.to_string()),
-                ("accept-ranges", "bytes".into()),
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta.modified.unwrap()),
-                ("etag", meta.etag),
-            ],
-            "Hi!\n",
-        ),
-    )
-    .await;
-
+    let mut session = make_session("GET", "/file.txt").await;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 200);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", &meta.size.to_string()),
+            ("accept-ranges", "bytes"),
+            ("Content-Type", "text/plain"),
+            ("last-modified", &meta.modified.unwrap()),
+            ("etag", &meta.etag),
+        ],
+    );
+    assert_body(&session, "Hi!\n");
 
     let meta = Metadata::from_path(&root_path("large.txt"), None).unwrap();
-    let mut session = make_session(
-        request("GET", "/large.txt"),
-        response(
-            "200 OK",
-            vec![
-                ("Content-Length", meta.size.to_string()),
-                ("accept-ranges", "bytes".into()),
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta.modified.unwrap()),
-                ("etag", meta.etag),
-            ],
-            concatcp!(str_repeat!("0123456789", 10000), "\n"),
-        ),
-    )
-    .await;
-
+    let mut session = make_session("GET", "/large.txt").await;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 200);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", &meta.size.to_string()),
+            ("accept-ranges", "bytes"),
+            ("Content-Type", "text/plain"),
+            ("last-modified", &meta.modified.unwrap()),
+            ("etag", &meta.etag),
+        ],
+    );
+    assert_body(&session, concatcp!(str_repeat!("0123456789", 10000), "\n"));
 
     Ok(())
 }
@@ -204,47 +154,42 @@ async fn dir_index() -> Result<(), Box<Error>> {
     let meta = Metadata::from_path(&root_path("index.html"), None).unwrap();
 
     let mut handler = handler();
-    let mut session = make_session(
-        request("GET", "/"),
-        response(
-            "200 OK",
-            vec![
-                ("Content-Length", meta.size.to_string()),
-                ("accept-ranges", "bytes".into()),
-                ("Content-Type", "text/html".into()),
-                ("last-modified", meta.modified.unwrap()),
-                ("etag", meta.etag),
-            ],
-            "<html>Hi!</html>\n",
-        ),
-    )
-    .await;
-
+    let mut session = make_session("GET", "/").await;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 200);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", &meta.size.to_string()),
+            ("accept-ranges", "bytes"),
+            ("Content-Type", "text/html"),
+            ("last-modified", &meta.modified.unwrap()),
+            ("etag", &meta.etag),
+        ],
+    );
+    assert_body(&session, "<html>Hi!</html>\n");
 
     // Without matching directory index this should produce Forbidden response.
     handler.conf_mut().index_file = vec![];
 
     let text = response_text(StatusCode::FORBIDDEN);
-    let mut session = make_session(
-        request("GET", "/"),
-        response(
-            "403 Forbidden",
-            vec![
-                ("Content-Length", text.len().to_string()),
-                ("Content-Type", "text/html".into()),
-            ],
-            &text,
-        ),
-    )
-    .await;
+    let mut session = make_session("GET", "/").await;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await.unwrap(),
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 403);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", &text.len().to_string()),
+            ("Content-Type", "text/html"),
+        ],
+    );
+    assert_body(&session, &text);
 
     Ok(())
 }
@@ -253,68 +198,61 @@ async fn dir_index() -> Result<(), Box<Error>> {
 async fn no_trailing_slash() -> Result<(), Box<Error>> {
     let mut handler = handler();
     let text = response_text(StatusCode::PERMANENT_REDIRECT);
-    let mut session = make_session(
-        request("GET", "/subdir?xyz"),
-        response(
-            "308 Permanent Redirect",
-            vec![
-                ("Content-Length", text.len().to_string()),
-                ("Content-Type", "text/html".into()),
-                ("location", "/subdir/?xyz".into()),
-            ],
-            &text,
-        ),
-    )
-    .await;
 
+    let mut session = make_session("GET", "/subdir?xyz").await;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 308);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", &text.len().to_string()),
+            ("Content-Type", "text/html"),
+            ("location", "/subdir/?xyz"),
+        ],
+    );
+    assert_body(&session, &text);
 
     // Add redirect prefix
     handler.conf_mut().redirect_prefix = Some("/static".to_owned());
 
-    let mut session = make_session(
-        request("GET", "/subdir?xyz"),
-        response(
-            "308 Permanent Redirect",
-            vec![
-                ("Content-Length", text.len().to_string()),
-                ("Content-Type", "text/html".into()),
-                ("location", "/static/subdir/?xyz".into()),
-            ],
-            &text,
-        ),
-    )
-    .await;
-
+    let mut session = make_session("GET", "/subdir?xyz").await;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 308);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", &text.len().to_string()),
+            ("Content-Type", "text/html"),
+            ("location", "/static/subdir/?xyz"),
+        ],
+    );
+    assert_body(&session, &text);
 
     // Without canonicalize_uri this should just produce the response
     // (Forbidden because no index file).
     handler.conf_mut().canonicalize_uri = false;
 
     let text = response_text(StatusCode::FORBIDDEN);
-    let mut session = make_session(
-        request("GET", "/subdir"),
-        response(
-            "403 Forbidden",
-            vec![
-                ("Content-Length", text.len().to_string()),
-                ("Content-Type", "text/html".into()),
-            ],
-            &text,
-        ),
-    )
-    .await;
+    let mut session = make_session("GET", "/subdir").await;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await.unwrap(),
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 403);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", &text.len().to_string()),
+            ("Content-Type", "text/html"),
+        ],
+    );
+    assert_body(&session, &text);
 
     Ok(())
 }
@@ -323,24 +261,22 @@ async fn no_trailing_slash() -> Result<(), Box<Error>> {
 async fn unnecessary_percent_encoding() -> Result<(), Box<Error>> {
     let handler = handler();
     let text = response_text(StatusCode::PERMANENT_REDIRECT);
-    let mut session = make_session(
-        request("GET", "/file%2Etxt"),
-        response(
-            "308 Permanent Redirect",
-            vec![
-                ("Content-Length", text.len().to_string()),
-                ("Content-Type", "text/html".into()),
-                ("location", "/file.txt".into()),
-            ],
-            &text,
-        ),
-    )
-    .await;
 
+    let mut session = make_session("GET", "/file%2Etxt").await;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 308);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", &text.len().to_string()),
+            ("Content-Type", "text/html"),
+            ("location", "/file.txt"),
+        ],
+    );
+    assert_body(&session, &text);
 
     Ok(())
 }
@@ -349,24 +285,22 @@ async fn unnecessary_percent_encoding() -> Result<(), Box<Error>> {
 async fn complex_path() -> Result<(), Box<Error>> {
     let handler = handler();
     let text = response_text(StatusCode::PERMANENT_REDIRECT);
-    let mut session = make_session(
-        request("GET", "/.//subdir/../file.txt?file%2Etxt"),
-        response(
-            "308 Permanent Redirect",
-            vec![
-                ("Content-Length", text.len().to_string()),
-                ("Content-Type", "text/html".into()),
-                ("location", "/file.txt?file%2Etxt".into()),
-            ],
-            &text,
-        ),
-    )
-    .await;
 
+    let mut session = make_session("GET", "/.//subdir/../file.txt?file%2Etxt").await;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 308);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", &text.len().to_string()),
+            ("Content-Type", "text/html"),
+            ("location", "/file.txt?file%2Etxt"),
+        ],
+    );
+    assert_body(&session, &text);
 
     Ok(())
 }
@@ -377,28 +311,26 @@ async fn utf8_path() -> Result<(), Box<Error>> {
 
     let handler = handler();
     let mut session = make_session(
-        request(
-            "GET",
-            "/subdir/%D1%84%D0%B0%D0%B9%D0%BB%20s%C3%B6nd%C3%A4rzeichen.txt",
-        ),
-        response(
-            "200 OK",
-            vec![
-                ("Content-Length", meta.size.to_string()),
-                ("accept-ranges", "bytes".into()),
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta.modified.unwrap()),
-                ("etag", meta.etag),
-            ],
-            "Hi!\n",
-        ),
+        "GET",
+        "/subdir/%D1%84%D0%B0%D0%B9%D0%BB%20s%C3%B6nd%C3%A4rzeichen.txt",
     )
     .await;
-
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 200);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", &meta.size.to_string()),
+            ("accept-ranges", "bytes"),
+            ("Content-Type", "text/plain"),
+            ("last-modified", &meta.modified.unwrap()),
+            ("etag", &meta.etag),
+        ],
+    );
+    assert_body(&session, "Hi!\n");
 
     Ok(())
 }
@@ -408,22 +340,20 @@ async fn no_file() -> Result<(), Box<Error>> {
     let handler = handler();
     let text = response_text(StatusCode::NOT_FOUND);
 
-    let mut session = make_session(
-        request("GET", "/missing.txt"),
-        response(
-            "404 Not Found",
-            vec![
-                ("Content-Length", text.len().to_string()),
-                ("Content-Type", "text/html".into()),
-            ],
-            &text,
-        ),
-    )
-    .await;
+    let mut session = make_session("GET", "/missing.txt").await;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 404);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", &text.len().to_string()),
+            ("Content-Type", "text/html"),
+        ],
+    );
+    assert_body(&session, &text);
 
     Ok(())
 }
@@ -435,25 +365,23 @@ async fn no_file_with_page_404() -> Result<(), Box<Error>> {
 
     let meta = Metadata::from_path(&root_path("file.txt"), None).unwrap();
 
-    let mut session = make_session(
-        request("GET", "/missing.txt"),
-        response(
-            "404 Not Found",
-            vec![
-                ("Content-Length", meta.size.to_string()),
-                ("accept-ranges", "bytes".into()),
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta.modified.clone().unwrap()),
-                ("etag", meta.etag.clone()),
-            ],
-            "Hi!\n",
-        ),
-    )
-    .await;
+    let mut session = make_session("GET", "/missing.txt").await;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 404);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", &meta.size.to_string()),
+            ("accept-ranges", "bytes"),
+            ("Content-Type", "text/plain"),
+            ("last-modified", meta.modified.as_ref().unwrap()),
+            ("etag", &meta.etag),
+        ],
+    );
+    assert_body(&session, "Hi!\n");
 
     Ok(())
 }
@@ -463,22 +391,20 @@ async fn no_index() -> Result<(), Box<Error>> {
     let handler = handler();
 
     let text = response_text(StatusCode::FORBIDDEN);
-    let mut session = make_session(
-        request("GET", "/subdir/"),
-        response(
-            "403 Forbidden",
-            vec![
-                ("Content-Length", text.len().to_string()),
-                ("Content-Type", "text/html".into()),
-            ],
-            &text,
-        ),
-    )
-    .await;
+    let mut session = make_session("GET", "/subdir/").await;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await.unwrap(),
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 403);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", &text.len().to_string()),
+            ("Content-Type", "text/html"),
+        ],
+    );
+    assert_body(&session, &text);
 
     Ok(())
 }
@@ -488,22 +414,20 @@ async fn wrong_method() -> Result<(), Box<Error>> {
     let handler = handler();
 
     let text = response_text(StatusCode::METHOD_NOT_ALLOWED);
-    let mut session = make_session(
-        request("POST", "/file.txt"),
-        response(
-            "405 Method Not Allowed",
-            vec![
-                ("Content-Length", text.len().to_string()),
-                ("Content-Type", "text/html".into()),
-            ],
-            &text,
-        ),
-    )
-    .await;
+    let mut session = make_session("POST", "/file.txt").await;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await.unwrap(),
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 405);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", &text.len().to_string()),
+            ("Content-Type", "text/html"),
+        ],
+    );
+    assert_body(&session, &text);
 
     Ok(())
 }
@@ -513,22 +437,20 @@ async fn wrong_method_no_file() -> Result<(), Box<Error>> {
     let handler = handler();
     let text = response_text(StatusCode::NOT_FOUND);
 
-    let mut session = make_session(
-        request("POST", "/missing.txt"),
-        response(
-            "404 Not Found",
-            vec![
-                ("Content-Length", text.len().to_string()),
-                ("Content-Type", "text/html".into()),
-            ],
-            &text,
-        ),
-    )
-    .await;
+    let mut session = make_session("POST", "/missing.txt").await;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 404);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", &text.len().to_string()),
+            ("Content-Type", "text/html"),
+        ],
+    );
+    assert_body(&session, &text);
 
     Ok(())
 }
@@ -538,62 +460,56 @@ async fn head_request() -> Result<(), Box<Error>> {
     let meta = Metadata::from_path(&root_path("file.txt"), None).unwrap();
 
     let handler = handler();
-    let mut session = make_session(
-        request("HEAD", "/file.txt"),
-        response(
-            "200 OK",
-            vec![
-                ("Content-Length", meta.size.to_string()),
-                ("accept-ranges", "bytes".into()),
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta.modified.unwrap()),
-                ("etag", meta.etag),
-            ],
-            "",
-        ),
-    )
-    .await;
+    let mut session = make_session("HEAD", "/file.txt").await;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 200);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", &meta.size.to_string()),
+            ("accept-ranges", "bytes"),
+            ("Content-Type", "text/plain"),
+            ("last-modified", &meta.modified.unwrap()),
+            ("etag", &meta.etag),
+        ],
+    );
+    assert_body(&session, "");
 
     let text = response_text(StatusCode::NOT_FOUND);
-    let mut session = make_session(
-        request("HEAD", "/missing.txt"),
-        response(
-            "404 Not Found",
-            vec![
-                ("Content-Length", text.len().to_string()),
-                ("Content-Type", "text/html".into()),
-            ],
-            "",
-        ),
-    )
-    .await;
+    let mut session = make_session("HEAD", "/missing.txt").await;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 404);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", &text.len().to_string()),
+            ("Content-Type", "text/html"),
+        ],
+    );
+    assert_body(&session, "");
 
     let text = response_text(StatusCode::PERMANENT_REDIRECT);
-    let mut session = make_session(
-        request("HEAD", "/subdir"),
-        response(
-            "308 Permanent Redirect",
-            vec![
-                ("Content-Length", text.len().to_string()),
-                ("Content-Type", "text/html".into()),
-                ("location", "/subdir/".into()),
-            ],
-            "",
-        ),
-    )
-    .await;
+    let mut session = make_session("HEAD", "/subdir").await;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 308);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", &text.len().to_string()),
+            ("Content-Type", "text/html"),
+            ("location", "/subdir/"),
+        ],
+    );
+    assert_body(&session, "");
 
     Ok(())
 }
@@ -603,39 +519,35 @@ async fn bad_request() -> Result<(), Box<Error>> {
     let handler = handler();
     let text = response_text(StatusCode::BAD_REQUEST);
 
-    let mut session = make_session(
-        request("GET", "."),
-        response(
-            "400 Bad Request",
-            vec![
-                ("Content-Length", text.len().to_string()),
-                ("Content-Type", "text/html".into()),
-            ],
-            &text,
-        ),
-    )
-    .await;
+    let mut session = make_session("GET", ".").await;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 400);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", &text.len().to_string()),
+            ("Content-Type", "text/html"),
+        ],
+    );
+    assert_body(&session, &text);
 
-    let mut session = make_session(
-        request("GET", "/../"),
-        response(
-            "400 Bad Request",
-            vec![
-                ("Content-Length", text.len().to_string()),
-                ("Content-Type", "text/html".into()),
-            ],
-            &text,
-        ),
-    )
-    .await;
+    let mut session = make_session("GET", "/../").await;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 400);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", &text.len().to_string()),
+            ("Content-Type", "text/html"),
+        ],
+    );
+    assert_body(&session, &text);
 
     Ok(())
 }
@@ -645,141 +557,127 @@ async fn if_none_match() -> Result<(), Box<Error>> {
     let meta = Metadata::from_path(&root_path("file.txt"), None).unwrap();
 
     let handler = handler();
-    let mut session = make_session(
-        request_with_headers(
-            "GET",
-            "/file.txt",
-            vec![("If-None-Match", meta.etag.clone())],
-        ),
-        response(
-            "304 Not Modified",
-            vec![
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta.modified.clone().unwrap()),
-                ("etag", meta.etag.clone()),
-            ],
-            "",
-        ),
-    )
-    .await;
+    let mut session = make_session("GET", "/file.txt").await;
+    session
+        .req_header_mut()
+        .insert_header("If-None-Match", &meta.etag)?;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 304);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Type", "text/plain"),
+            ("last-modified", meta.modified.as_ref().unwrap()),
+            ("etag", &meta.etag),
+        ],
+    );
+    assert_body(&session, "");
 
-    let mut session = make_session(
-        request_with_headers("GET", "/file.txt", vec![("If-None-Match", "*".into())]),
-        response(
-            "304 Not Modified",
-            vec![
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta.modified.clone().unwrap()),
-                ("etag", meta.etag.clone()),
-            ],
-            "",
-        ),
-    )
-    .await;
+    let mut session = make_session("GET", "/file.txt").await;
+    session
+        .req_header_mut()
+        .insert_header("If-None-Match", "*")?;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 304);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Type", "text/plain"),
+            ("last-modified", meta.modified.as_ref().unwrap()),
+            ("etag", &meta.etag),
+        ],
+    );
+    assert_body(&session, "");
 
-    let mut session = make_session(
-        request_with_headers(
-            "GET",
-            "/file.txt",
-            vec![("If-None-Match", format!("\"xyz\", {}", meta.etag.clone()))],
-        ),
-        response(
-            "304 Not Modified",
-            vec![
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta.modified.clone().unwrap()),
-                ("etag", meta.etag.clone()),
-            ],
-            "",
-        ),
-    )
-    .await;
+    let mut session = make_session("GET", "/file.txt").await;
+    session
+        .req_header_mut()
+        .insert_header("If-None-Match", &format!("\"xyz\", {}", &meta.etag))?;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 304);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Type", "text/plain"),
+            ("last-modified", meta.modified.as_ref().unwrap()),
+            ("etag", &meta.etag),
+        ],
+    );
+    assert_body(&session, "");
 
-    let mut session = make_session(
-        request_with_headers(
-            "GET",
-            "/file.txt",
-            vec![
-                ("If-None-Match", meta.etag.clone()),
-                ("If-Modified-Since", "Thu, 01 Jan 1970 00:00:00 GMT".into()),
-            ],
-        ),
-        response(
-            "304 Not Modified",
-            vec![
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta.modified.clone().unwrap()),
-                ("etag", meta.etag.clone()),
-            ],
-            "",
-        ),
-    )
-    .await;
+    let mut session = make_session("GET", "/file.txt").await;
+    session
+        .req_header_mut()
+        .insert_header("If-None-Match", &meta.etag)?;
+    session
+        .req_header_mut()
+        .insert_header("If-Modified-Since", "Thu, 01 Jan 1970 00:00:00 GMT")?;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 304);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Type", "text/plain"),
+            ("last-modified", meta.modified.as_ref().unwrap()),
+            ("etag", &meta.etag),
+        ],
+    );
+    assert_body(&session, "");
 
-    let mut session = make_session(
-        request_with_headers(
-            "GET",
-            "/file.txt",
-            vec![("If-None-Match", "\"xyz\"".into())],
-        ),
-        response(
-            "200 OK",
-            vec![
-                ("Content-Length", meta.size.to_string()),
-                ("accept-ranges", "bytes".into()),
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta.modified.clone().unwrap()),
-                ("etag", meta.etag.clone()),
-            ],
-            "Hi!\n",
-        ),
-    )
-    .await;
+    let mut session = make_session("GET", "/file.txt").await;
+    session
+        .req_header_mut()
+        .insert_header("If-None-Match", "\"xyz\"")?;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 200);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", &meta.size.to_string()),
+            ("accept-ranges", "bytes"),
+            ("Content-Type", "text/plain"),
+            ("last-modified", meta.modified.as_ref().unwrap()),
+            ("etag", &meta.etag),
+        ],
+    );
+    assert_body(&session, "Hi!\n");
 
     // With compression enabled this should produce Vary header
-    let mut session = make_session(
-        request_with_headers(
-            "GET",
-            "/file.txt",
-            vec![("If-None-Match", meta.etag.clone())],
-        ),
-        response(
-            "304 Not Modified",
-            vec![
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta.modified.clone().unwrap()),
-                ("etag", meta.etag.clone()),
-                ("vary", "Accept-Encoding".into()),
-            ],
-            "",
-        ),
-    )
-    .await;
+    let mut session = make_session("GET", "/file.txt").await;
+    session
+        .req_header_mut()
+        .insert_header("If-None-Match", &meta.etag)?;
     session.downstream_compression.adjust_level(3);
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 304);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Type", "text/plain"),
+            ("last-modified", meta.modified.as_ref().unwrap()),
+            ("etag", &meta.etag),
+            ("vary", "Accept-Encoding"),
+        ],
+    );
+    assert_body(&session, "");
 
     Ok(())
 }
@@ -789,138 +687,131 @@ async fn if_match() -> Result<(), Box<Error>> {
     let meta = Metadata::from_path(&root_path("file.txt"), None).unwrap();
 
     let handler = handler();
-    let mut session = make_session(
-        request_with_headers("GET", "/file.txt", vec![("If-Match", meta.etag.clone())]),
-        response(
-            "200 OK",
-            vec![
-                ("Content-Length", meta.size.to_string()),
-                ("accept-ranges", "bytes".into()),
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta.modified.clone().unwrap()),
-                ("etag", meta.etag.clone()),
-            ],
-            "Hi!\n",
-        ),
-    )
-    .await;
+    let mut session = make_session("GET", "/file.txt").await;
+    session
+        .req_header_mut()
+        .insert_header("If-Match", &meta.etag)?;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 200);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", &meta.size.to_string()),
+            ("accept-ranges", "bytes"),
+            ("Content-Type", "text/plain"),
+            ("last-modified", meta.modified.as_ref().unwrap()),
+            ("etag", &meta.etag),
+        ],
+    );
+    assert_body(&session, "Hi!\n");
 
-    let mut session = make_session(
-        request_with_headers("GET", "/file.txt", vec![("If-Match", "*".into())]),
-        response(
-            "200 OK",
-            vec![
-                ("Content-Length", meta.size.to_string()),
-                ("accept-ranges", "bytes".into()),
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta.modified.clone().unwrap()),
-                ("etag", meta.etag.clone()),
-            ],
-            "Hi!\n",
-        ),
-    )
-    .await;
+    let mut session = make_session("GET", "/file.txt").await;
+    session.req_header_mut().insert_header("If-Match", "*")?;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 200);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", &meta.size.to_string()),
+            ("accept-ranges", "bytes"),
+            ("Content-Type", "text/plain"),
+            ("last-modified", meta.modified.as_ref().unwrap()),
+            ("etag", &meta.etag),
+        ],
+    );
+    assert_body(&session, "Hi!\n");
 
-    let mut session = make_session(
-        request_with_headers(
-            "GET",
-            "/file.txt",
-            vec![("If-Match", format!("\"xyz\", {}", meta.etag.clone()))],
-        ),
-        response(
-            "200 OK",
-            vec![
-                ("Content-Length", meta.size.to_string()),
-                ("accept-ranges", "bytes".into()),
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta.modified.clone().unwrap()),
-                ("etag", meta.etag.clone()),
-            ],
-            "Hi!\n",
-        ),
-    )
-    .await;
+    let mut session = make_session("GET", "/file.txt").await;
+    session
+        .req_header_mut()
+        .insert_header("If-Match", &format!("\"xyz\", {}", &meta.etag))?;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 200);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", &meta.size.to_string()),
+            ("accept-ranges", "bytes"),
+            ("Content-Type", "text/plain"),
+            ("last-modified", meta.modified.as_ref().unwrap()),
+            ("etag", &meta.etag),
+        ],
+    );
+    assert_body(&session, "Hi!\n");
 
-    let mut session = make_session(
-        request_with_headers(
-            "GET",
-            "/file.txt",
-            vec![
-                ("If-Match", meta.etag.clone()),
-                (
-                    "If-Unmodified-Since",
-                    "Thu, 01 Jan 1970 00:00:00 GTM".into(),
-                ),
-            ],
-        ),
-        response(
-            "200 OK",
-            vec![
-                ("Content-Length", meta.size.to_string()),
-                ("accept-ranges", "bytes".into()),
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta.modified.clone().unwrap()),
-                ("etag", meta.etag.clone()),
-            ],
-            "Hi!\n",
-        ),
-    )
-    .await;
+    let mut session = make_session("GET", "/file.txt").await;
+    session
+        .req_header_mut()
+        .insert_header("If-Match", &meta.etag)?;
+    session
+        .req_header_mut()
+        .insert_header("If-Unmodified-Since", "Thu, 01 Jan 1970 00:00:00 GTM")?;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 200);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", &meta.size.to_string()),
+            ("accept-ranges", "bytes"),
+            ("Content-Type", "text/plain"),
+            ("last-modified", meta.modified.as_ref().unwrap()),
+            ("etag", &meta.etag),
+        ],
+    );
+    assert_body(&session, "Hi!\n");
 
-    let mut session = make_session(
-        request_with_headers("GET", "/file.txt", vec![("If-Match", "\"xyz\"".into())]),
-        response(
-            "412 Precondition Failed",
-            vec![
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta.modified.clone().unwrap()),
-                ("etag", meta.etag.clone()),
-            ],
-            "",
-        ),
-    )
-    .await;
+    let mut session = make_session("GET", "/file.txt").await;
+    session
+        .req_header_mut()
+        .insert_header("If-Match", "\"xyz\"")?;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 412);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Type", "text/plain"),
+            ("last-modified", meta.modified.as_ref().unwrap()),
+            ("etag", &meta.etag),
+        ],
+    );
+    assert_body(&session, "");
 
     // With compression enabled this should produce Vary header
-    let mut session = make_session(
-        request_with_headers("GET", "/file.txt", vec![("If-Match", "\"xyz\"".into())]),
-        response(
-            "412 Precondition Failed",
-            vec![
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta.modified.clone().unwrap()),
-                ("etag", meta.etag.clone()),
-                ("vary", "Accept-Encoding".into()),
-            ],
-            "",
-        ),
-    )
-    .await;
+    let mut session = make_session("GET", "/file.txt").await;
+    session
+        .req_header_mut()
+        .insert_header("If-Match", "\"xyz\"")?;
     session.downstream_compression.adjust_level(3);
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 412);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Type", "text/plain"),
+            ("last-modified", meta.modified.as_ref().unwrap()),
+            ("etag", &meta.etag),
+            ("vary", "Accept-Encoding"),
+        ],
+    );
+    assert_body(&session, "");
 
     Ok(())
 }
@@ -930,103 +821,91 @@ async fn if_modified_since() -> Result<(), Box<Error>> {
     let meta = Metadata::from_path(&root_path("file.txt"), None).unwrap();
 
     let handler = handler();
-    let mut session = make_session(
-        request_with_headers(
-            "GET",
-            "/file.txt",
-            vec![("If-Modified-Since", meta.modified.clone().unwrap())],
-        ),
-        response(
-            "304 Not Modified",
-            vec![
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta.modified.clone().unwrap()),
-                ("etag", meta.etag.clone()),
-            ],
-            "",
-        ),
-    )
-    .await;
+    let mut session = make_session("GET", "/file.txt").await;
+    session
+        .req_header_mut()
+        .insert_header("If-Modified-Since", meta.modified.as_ref().unwrap())?;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 304);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Type", "text/plain"),
+            ("last-modified", meta.modified.as_ref().unwrap()),
+            ("etag", &meta.etag),
+        ],
+    );
+    assert_body(&session, "");
 
-    let mut session = make_session(
-        request_with_headers(
-            "GET",
-            "/file.txt",
-            vec![("If-Modified-Since", "Thu, 01 Jan 1970 00:00:00 GTM".into())],
-        ),
-        response(
-            "200 OK",
-            vec![
-                ("Content-Length", meta.size.to_string()),
-                ("accept-ranges", "bytes".into()),
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta.modified.clone().unwrap()),
-                ("etag", meta.etag.clone()),
-            ],
-            "Hi!\n",
-        ),
-    )
-    .await;
+    let mut session = make_session("GET", "/file.txt").await;
+    session
+        .req_header_mut()
+        .insert_header("If-Modified-Since", "Thu, 01 Jan 1970 00:00:00 GTM")?;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 200);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", &meta.size.to_string()),
+            ("accept-ranges", "bytes"),
+            ("Content-Type", "text/plain"),
+            ("last-modified", meta.modified.as_ref().unwrap()),
+            ("etag", &meta.etag),
+        ],
+    );
+    assert_body(&session, "Hi!\n");
 
-    let mut session = make_session(
-        request_with_headers(
-            "GET",
-            "/file.txt",
-            vec![
-                ("If-Modified-Since", meta.modified.clone().unwrap()),
-                ("If-None-Match", "\"xyz\"".into()),
-            ],
-        ),
-        response(
-            "200 OK",
-            vec![
-                ("Content-Length", meta.size.to_string()),
-                ("accept-ranges", "bytes".into()),
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta.modified.clone().unwrap()),
-                ("etag", meta.etag.clone()),
-            ],
-            "Hi!\n",
-        ),
-    )
-    .await;
+    let mut session = make_session("GET", "/file.txt").await;
+    session
+        .req_header_mut()
+        .insert_header("If-Modified-Since", meta.modified.as_ref().unwrap())?;
+    session
+        .req_header_mut()
+        .insert_header("If-None-Match", "\"xyz\"")?;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 200);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", &meta.size.to_string()),
+            ("accept-ranges", "bytes"),
+            ("Content-Type", "text/plain"),
+            ("last-modified", meta.modified.as_ref().unwrap()),
+            ("etag", &meta.etag),
+        ],
+    );
+    assert_body(&session, "Hi!\n");
 
     // With compression enabled this should produce Vary header
-    let mut session = make_session(
-        request_with_headers(
-            "GET",
-            "/file.txt",
-            vec![("If-Modified-Since", meta.modified.clone().unwrap())],
-        ),
-        response(
-            "304 Not Modified",
-            vec![
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta.modified.clone().unwrap()),
-                ("etag", meta.etag.clone()),
-                ("vary", "Accept-Encoding".into()),
-            ],
-            "",
-        ),
-    )
-    .await;
+    let mut session = make_session("GET", "/file.txt").await;
+    session
+        .req_header_mut()
+        .insert_header("If-Modified-Since", meta.modified.as_ref().unwrap())?;
     session.downstream_compression.adjust_level(3);
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 304);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Type", "text/plain"),
+            ("last-modified", meta.modified.as_ref().unwrap()),
+            ("etag", &meta.etag),
+            ("vary", "Accept-Encoding"),
+        ],
+    );
+    assert_body(&session, "");
 
     Ok(())
 }
@@ -1036,107 +915,92 @@ async fn if_unmodified_since() -> Result<(), Box<Error>> {
     let meta = Metadata::from_path(&root_path("file.txt"), None).unwrap();
 
     let handler = handler();
-    let mut session = make_session(
-        request_with_headers(
-            "GET",
-            "/file.txt",
-            vec![("If-Unmodified-Since", meta.modified.clone().unwrap())],
-        ),
-        response(
-            "200 OK",
-            vec![
-                ("Content-Length", meta.size.to_string()),
-                ("accept-ranges", "bytes".into()),
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta.modified.clone().unwrap()),
-                ("etag", meta.etag.clone()),
-            ],
-            "Hi!\n",
-        ),
-    )
-    .await;
+    let mut session = make_session("GET", "/file.txt").await;
+    session
+        .req_header_mut()
+        .insert_header("If-Unmodified-Since", meta.modified.as_ref().unwrap())?;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 200);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", &meta.size.to_string()),
+            ("accept-ranges", "bytes"),
+            ("Content-Type", "text/plain"),
+            ("last-modified", meta.modified.as_ref().unwrap()),
+            ("etag", &meta.etag),
+        ],
+    );
+    assert_body(&session, "Hi!\n");
 
-    let mut session = make_session(
-        request_with_headers(
-            "GET",
-            "/file.txt",
-            vec![(
-                "If-Unmodified-Since",
-                "Thu, 01 Jan 1970 00:00:00 GMT".into(),
-            )],
-        ),
-        response(
-            "412 Precondition Failed",
-            vec![
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta.modified.clone().unwrap()),
-                ("etag", meta.etag.clone()),
-            ],
-            "",
-        ),
-    )
-    .await;
+    let mut session = make_session("GET", "/file.txt").await;
+    session
+        .req_header_mut()
+        .insert_header("If-Unmodified-Since", "Thu, 01 Jan 1970 00:00:00 GMT")?;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 412);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Type", "text/plain"),
+            ("last-modified", meta.modified.as_ref().unwrap()),
+            ("etag", &meta.etag),
+        ],
+    );
+    assert_body(&session, "");
 
-    let mut session = make_session(
-        request_with_headers(
-            "GET",
-            "/file.txt",
-            vec![
-                ("If-Unmodified-Since", meta.modified.clone().unwrap()),
-                ("If-Match", "\"xyz\"".into()),
-            ],
-        ),
-        response(
-            "412 Precondition Failed",
-            vec![
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta.modified.clone().unwrap()),
-                ("etag", meta.etag.clone()),
-            ],
-            "",
-        ),
-    )
-    .await;
+    let mut session = make_session("GET", "/file.txt").await;
+    session
+        .req_header_mut()
+        .insert_header("If-Unmodified-Since", meta.modified.as_ref().unwrap())?;
+    session
+        .req_header_mut()
+        .insert_header("If-Match", "\"xyz\"")?;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 412);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Type", "text/plain"),
+            ("last-modified", meta.modified.as_ref().unwrap()),
+            ("etag", &meta.etag),
+        ],
+    );
+    assert_body(&session, "");
 
     // With compression enabled this should produce Vary header
-    let mut session = make_session(
-        request_with_headers(
-            "GET",
-            "/file.txt",
-            vec![
-                ("If-Unmodified-Since", meta.modified.clone().unwrap()),
-                ("If-Match", "\"xyz\"".into()),
-            ],
-        ),
-        response(
-            "412 Precondition Failed",
-            vec![
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta.modified.clone().unwrap()),
-                ("etag", meta.etag.clone()),
-                ("vary", "Accept-Encoding".into()),
-            ],
-            "",
-        ),
-    )
-    .await;
+    let mut session = make_session("GET", "/file.txt").await;
+    session
+        .req_header_mut()
+        .insert_header("If-Unmodified-Since", meta.modified.as_ref().unwrap())?;
+    session
+        .req_header_mut()
+        .insert_header("If-Match", "\"xyz\"")?;
     session.downstream_compression.adjust_level(3);
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 412);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Type", "text/plain"),
+            ("last-modified", meta.modified.as_ref().unwrap()),
+            ("etag", &meta.etag),
+            ("vary", "Accept-Encoding"),
+        ],
+    );
+    assert_body(&session, "");
 
     Ok(())
 }
@@ -1146,104 +1010,109 @@ async fn ranged_request() -> Result<(), Box<Error>> {
     let meta = Metadata::from_path(&root_path("large.txt"), None).unwrap();
 
     let handler = handler();
-    let mut session = make_session(
-        request_with_headers("GET", "/large.txt", vec![("Range", "bytes=2-5".into())]),
-        response(
-            "206 Partial Content",
-            vec![
-                ("Content-Length", "4".into()),
-                ("content-range", "bytes 2-5/100001".into()),
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta.modified.clone().unwrap()),
-                ("etag", meta.etag.clone()),
-            ],
-            "2345",
-        ),
-    )
-    .await;
+    let mut session = make_session("GET", "/large.txt").await;
+    session
+        .req_header_mut()
+        .insert_header("Range", "bytes=2-5")?;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 206);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", "4"),
+            ("content-range", "bytes 2-5/100001"),
+            ("Content-Type", "text/plain"),
+            ("last-modified", meta.modified.as_ref().unwrap()),
+            ("etag", &meta.etag),
+        ],
+    );
+    assert_body(&session, "2345");
 
-    let mut session = make_session(
-        request_with_headers("GET", "/large.txt", vec![("Range", "bytes=99999-".into())]),
-        response(
-            "206 Partial Content",
-            vec![
-                ("Content-Length", "2".into()),
-                ("content-range", "bytes 99999-100000/100001".into()),
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta.modified.clone().unwrap()),
-                ("etag", meta.etag.clone()),
-            ],
-            "9\n",
-        ),
-    )
-    .await;
+    let mut session = make_session("GET", "/large.txt").await;
+    session
+        .req_header_mut()
+        .insert_header("Range", "bytes=99999-")?;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 206);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", "2"),
+            ("content-range", "bytes 99999-100000/100001"),
+            ("Content-Type", "text/plain"),
+            ("last-modified", meta.modified.as_ref().unwrap()),
+            ("etag", &meta.etag),
+        ],
+    );
+    assert_body(&session, "9\n");
 
-    let mut session = make_session(
-        request_with_headers("GET", "/large.txt", vec![("Range", "bytes=-5".into())]),
-        response(
-            "206 Partial Content",
-            vec![
-                ("Content-Length", "5".into()),
-                ("content-range", "bytes 99996-100000/100001".into()),
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta.modified.clone().unwrap()),
-                ("etag", meta.etag.clone()),
-            ],
-            "6789\n",
-        ),
-    )
-    .await;
+    let mut session = make_session("GET", "/large.txt").await;
+    session
+        .req_header_mut()
+        .insert_header("Range", "bytes=-5")?;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 206);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", "5"),
+            ("content-range", "bytes 99996-100000/100001"),
+            ("Content-Type", "text/plain"),
+            ("last-modified", meta.modified.as_ref().unwrap()),
+            ("etag", &meta.etag),
+        ],
+    );
+    assert_body(&session, "6789\n");
 
-    let mut session = make_session(
-        request_with_headers("GET", "/large.txt", vec![("Range", "bytes=200000-".into())]),
-        response(
-            "416 Range Not Satisfiable",
-            vec![
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta.modified.clone().unwrap()),
-                ("etag", meta.etag.clone()),
-            ],
-            "",
-        ),
-    )
-    .await;
+    let mut session = make_session("GET", "/large.txt").await;
+    session
+        .req_header_mut()
+        .insert_header("Range", "bytes=200000-")?;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 416);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Type", "text/plain"),
+            ("last-modified", meta.modified.as_ref().unwrap()),
+            ("etag", &meta.etag),
+        ],
+    );
+    assert_body(&session, "");
 
     // With compression enabled this should produce Vary header
-    let mut session = make_session(
-        request_with_headers("GET", "/large.txt", vec![("Range", "bytes=200000-".into())]),
-        response(
-            "416 Range Not Satisfiable",
-            vec![
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta.modified.clone().unwrap()),
-                ("etag", meta.etag.clone()),
-                ("vary", "Accept-Encoding".into()),
-            ],
-            "",
-        ),
-    )
-    .await;
+    let mut session = make_session("GET", "/large.txt").await;
+    session
+        .req_header_mut()
+        .insert_header("Range", "bytes=200000-")?;
     session.downstream_compression.adjust_level(3);
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
     );
+    assert_status(&session, 416);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Type", "text/plain"),
+            ("last-modified", meta.modified.as_ref().unwrap()),
+            ("etag", &meta.etag),
+            ("vary", "Accept-Encoding"),
+        ],
+    );
+    assert_body(&session, "");
 
     Ok(())
 }
@@ -1254,89 +1123,77 @@ async fn dynamic_compression() -> Result<(), Box<Error>> {
     let handler = handler();
 
     // Regular request should result in compressed response
-    let mut session = make_session(
-        request_with_headers(
-            "GET",
-            "/large.txt",
-            vec![("Accept-Encoding", "gzip".into())],
-        ),
-        response(
-            "200 OK",
-            vec![
-                ("Content-Encoding", "gzip".into()),
-                ("accept-ranges", "none".into()),
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta.modified.clone().unwrap()),
-                ("etag", meta.etag.clone()),
-                ("Transfer-Encoding", "chunked".into()),
-                ("vary", "Accept-Encoding".into()),
-            ],
-            "<ignore>",
-        ),
-    )
-    .await;
+    let mut session = make_session("GET", "/large.txt").await;
+    session
+        .req_header_mut()
+        .insert_header("Accept-Encoding", "gzip")?;
     session.downstream_compression.adjust_level(3);
-    handler
-        .request_filter(&mut session, &mut ())
-        .await
-        .expect_err("Writing response body should error out");
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
+    assert_status(&session, 200);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Encoding", "gzip"),
+            ("accept-ranges", "none"),
+            ("Content-Type", "text/plain"),
+            ("last-modified", meta.modified.as_ref().unwrap()),
+            ("etag", &meta.etag),
+            ("Transfer-Encoding", "chunked"),
+            ("vary", "Accept-Encoding"),
+        ],
+    );
 
     // Request without matching encodings should result in uncompressed response
-    let mut session = make_session(
-        request_with_headers(
-            "GET",
-            "/large.txt",
-            vec![("Accept-Encoding", "unsupported".into())],
-        ),
-        response(
-            "200 OK",
-            vec![
-                ("Content-Length", meta.size.to_string()),
-                ("accept-ranges", "bytes".into()),
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta.modified.clone().unwrap()),
-                ("etag", meta.etag.clone()),
-                ("vary", "Accept-Encoding".into()),
-            ],
-            "<ignore>",
-        ),
-    )
-    .await;
+    let mut session = make_session("GET", "/large.txt").await;
+    session
+        .req_header_mut()
+        .insert_header("Accept-Encoding", "unsupported")?;
     session.downstream_compression.adjust_level(3);
-    handler
-        .request_filter(&mut session, &mut ())
-        .await
-        .expect_err("Writing response body should error out");
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
+    assert_status(&session, 200);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", &meta.size.to_string()),
+            ("accept-ranges", "bytes"),
+            ("Content-Type", "text/plain"),
+            ("last-modified", meta.modified.as_ref().unwrap()),
+            ("etag", &meta.etag),
+            ("vary", "Accept-Encoding"),
+        ],
+    );
 
     // Ranged response should be uncompressed
-    let mut session = make_session(
-        request_with_headers(
-            "GET",
-            "/large.txt",
-            vec![
-                ("Accept-Encoding", "gzip".into()),
-                ("Range", "bytes=0-10000".into()),
-            ],
-        ),
-        response(
-            "206 Partial Content",
-            vec![
-                ("Content-Length", "10001".into()),
-                ("content-range", "bytes 0-10000/100001".into()),
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta.modified.clone().unwrap()),
-                ("etag", meta.etag.clone()),
-                ("vary", "Accept-Encoding".into()),
-            ],
-            "<ignore>",
-        ),
-    )
-    .await;
+    let mut session = make_session("GET", "/large.txt").await;
+    session
+        .req_header_mut()
+        .insert_header("Accept-Encoding", "gzip")?;
+    session
+        .req_header_mut()
+        .insert_header("Range", "bytes=0-10000")?;
     session.downstream_compression.adjust_level(3);
-    handler
-        .request_filter(&mut session, &mut ())
-        .await
-        .expect_err("Writing response body should error out");
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
+    assert_status(&session, 206);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", "10001"),
+            ("content-range", "bytes 0-10000/100001"),
+            ("Content-Type", "text/plain"),
+            ("last-modified", meta.modified.as_ref().unwrap()),
+            ("etag", &meta.etag),
+            ("vary", "Accept-Encoding"),
+        ],
+    );
 
     Ok(())
 }
@@ -1351,118 +1208,114 @@ async fn static_compression() -> Result<(), Box<Error>> {
         vec![CompressionAlgorithm::Gzip, CompressionAlgorithm::Brotli];
 
     // Regular request should result in compressed response
-    let mut session = make_session(
-        request_with_headers(
-            "GET",
-            "/large_precompressed.txt",
-            vec![("Accept-Encoding", "br, gzip".into())],
-        ),
-        response(
-            "200 OK",
-            vec![
-                ("Content-Length", meta_compressed.size.to_string()),
-                ("accept-ranges", "bytes".into()),
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta_compressed.modified.clone().unwrap()),
-                ("etag", meta_compressed.etag.clone()),
-                ("Content-Encoding", "gzip".into()),
-                ("vary", "Accept-Encoding".into()),
-            ],
-            "<ignore>",
-        ),
-    )
-    .await;
-    handler
-        .request_filter(&mut session, &mut ())
-        .await
-        .expect_err("Writing response body should error out");
+    let mut session = make_session("GET", "/large_precompressed.txt").await;
+    session
+        .req_header_mut()
+        .insert_header("Accept-Encoding", "br, gzip")
+        .unwrap();
+
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
+
+    assert_status(&session, 200);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", &meta_compressed.size.to_string()),
+            ("accept-ranges", "bytes"),
+            ("Content-Type", "text/plain"),
+            ("last-modified", meta_compressed.modified.as_ref().unwrap()),
+            ("etag", &meta_compressed.etag),
+            ("Content-Encoding", "gzip"),
+            ("vary", "Accept-Encoding"),
+        ],
+    );
 
     // Static compression should take precedence over dynamic
-    let mut session = make_session(
-        request_with_headers(
-            "GET",
-            "/large_precompressed.txt",
-            vec![("Accept-Encoding", "br, gzip".into())],
-        ),
-        response(
-            "200 OK",
-            vec![
-                ("Content-Length", meta_compressed.size.to_string()),
-                ("accept-ranges", "bytes".into()),
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta_compressed.modified.clone().unwrap()),
-                ("etag", meta_compressed.etag.clone()),
-                ("Content-Encoding", "gzip".into()),
-                ("vary", "Accept-Encoding".into()),
-            ],
-            "<ignore>",
-        ),
-    )
-    .await;
-    session.downstream_compression.adjust_level(3);
-    handler
-        .request_filter(&mut session, &mut ())
-        .await
-        .expect_err("Writing response body should error out");
+    let mut session = make_session("GET", "/large_precompressed.txt").await;
+    session
+        .req_header_mut()
+        .insert_header("Accept-Encoding", "br, gzip")
+        .unwrap();
+
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
+
+    assert_status(&session, 200);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", &meta_compressed.size.to_string()),
+            ("accept-ranges", "bytes"),
+            ("Content-Type", "text/plain"),
+            ("last-modified", meta_compressed.modified.as_ref().unwrap()),
+            ("etag", &meta_compressed.etag),
+            ("Content-Encoding", "gzip"),
+            ("vary", "Accept-Encoding"),
+        ],
+    );
 
     // Request without matching encodings should result in uncompressed response
-    let mut session = make_session(
-        request_with_headers(
-            "GET",
-            "/large_precompressed.txt",
-            vec![("Accept-Encoding", "zstd".into())],
-        ),
-        response(
-            "200 OK",
-            vec![
-                ("Content-Length", meta.size.to_string()),
-                ("accept-ranges", "bytes".into()),
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta.modified.clone().unwrap()),
-                ("etag", meta.etag.clone()),
-                ("vary", "Accept-Encoding".into()),
-            ],
-            "<ignore>",
-        ),
-    )
-    .await;
-    handler
-        .request_filter(&mut session, &mut ())
-        .await
-        .expect_err("Writing response body should error out");
+    let mut session = make_session("GET", "/large_precompressed.txt").await;
+    session
+        .req_header_mut()
+        .insert_header("Accept-Encoding", "zstd")
+        .unwrap();
+
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
+
+    assert_status(&session, 200);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", &meta.size.to_string()),
+            ("accept-ranges", "bytes"),
+            ("Content-Type", "text/plain"),
+            ("last-modified", meta.modified.as_ref().unwrap()),
+            ("etag", &meta.etag),
+            ("vary", "Accept-Encoding"),
+        ],
+    );
 
     // Ranged response should be compressed
-    let mut session = make_session(
-        request_with_headers(
-            "GET",
-            "/large_precompressed.txt",
-            vec![
-                ("Accept-Encoding", "gzip".into()),
-                ("Range", "bytes=0-10".into()),
-            ],
-        ),
-        response(
-            "206 Partial Content",
-            vec![
-                ("Content-Length", "11".into()),
-                (
-                    "content-range",
-                    format!("bytes 0-10/{}", meta_compressed.size),
-                ),
-                ("Content-Type", "text/plain".into()),
-                ("last-modified", meta_compressed.modified.clone().unwrap()),
-                ("etag", meta_compressed.etag.clone()),
-                ("Content-Encoding", "gzip".into()),
-                ("vary", "Accept-Encoding".into()),
-            ],
-            "<ignore>",
-        ),
-    )
-    .await;
-    handler
-        .request_filter(&mut session, &mut ())
-        .await
-        .expect_err("Writing response body should error out");
+    let mut session = make_session("GET", "/large_precompressed.txt").await;
+    session
+        .req_header_mut()
+        .insert_header("Accept-Encoding", "gzip")
+        .unwrap();
+    session
+        .req_header_mut()
+        .insert_header("Range", "bytes=0-10")
+        .unwrap();
+
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
+
+    assert_status(&session, 206);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", "11"),
+            (
+                "content-range",
+                &format!("bytes 0-10/{}", meta_compressed.size),
+            ),
+            ("Content-Type", "text/plain"),
+            ("last-modified", meta_compressed.modified.as_ref().unwrap()),
+            ("etag", &meta_compressed.etag),
+            ("Content-Encoding", "gzip"),
+            ("vary", "Accept-Encoding"),
+        ],
+    );
 
     Ok(())
 }
