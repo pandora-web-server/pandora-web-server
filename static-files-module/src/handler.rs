@@ -35,18 +35,6 @@ pub struct StaticFilesHandler {
     conf: StaticFilesConf,
 }
 
-impl StaticFilesHandler {
-    /// Provides read-only access to the handler’s configuration.
-    pub fn conf(&self) -> &StaticFilesConf {
-        &self.conf
-    }
-
-    /// Provides read-write access to the handler’s configuration.
-    pub fn conf_mut(&mut self) -> &mut StaticFilesConf {
-        &mut self.conf
-    }
-}
-
 #[async_trait]
 impl RequestFilter for StaticFilesHandler {
     type Conf = StaticFilesConf;

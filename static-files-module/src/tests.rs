@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::compression_algorithm::CompressionAlgorithm;
 use crate::configuration::StaticFilesConf;
 use crate::handler::StaticFilesHandler;
 use crate::metadata::Metadata;
@@ -21,7 +20,7 @@ use crate::standard_response::response_text;
 use const_format::{concatcp, str_repeat};
 use http::status::StatusCode;
 use module_utils::pingora::{Error, RequestHeader, SessionWrapper, TestSession};
-use module_utils::{RequestFilter, RequestFilterResult};
+use module_utils::{FromYaml, RequestFilter, RequestFilterResult};
 use std::path::PathBuf;
 use test_log::test;
 
@@ -35,13 +34,22 @@ fn root_path(filename: &str) -> PathBuf {
     path
 }
 
-fn handler() -> StaticFilesHandler {
-    StaticFilesConf {
-        root: Some(root_path("")),
-        ..Default::default()
-    }
-    .try_into()
-    .unwrap()
+fn default_conf() -> String {
+    format!(
+        "root: {}",
+        root_path("").into_os_string().into_string().unwrap()
+    )
+}
+
+fn extended_conf(conf_str: impl AsRef<str>) -> String {
+    format!("{}\n{}", default_conf(), conf_str.as_ref())
+}
+
+fn make_handler(conf_str: impl AsRef<str>) -> StaticFilesHandler {
+    StaticFilesConf::from_yaml(conf_str)
+        .unwrap()
+        .try_into()
+        .unwrap()
 }
 
 async fn make_session(method: &str, path: &str) -> TestSession {
@@ -90,8 +98,7 @@ fn assert_body(session: &TestSession, expected: &str) {
 
 #[test(tokio::test)]
 async fn unconfigured() -> Result<(), Box<Error>> {
-    let mut handler = handler();
-    handler.conf_mut().root = None;
+    let handler = make_handler("root:");
 
     let mut session = make_session("GET", "/file.txt").await;
     assert_eq!(
@@ -108,7 +115,7 @@ async fn unconfigured() -> Result<(), Box<Error>> {
 async fn text_file() -> Result<(), Box<Error>> {
     let meta = Metadata::from_path(&root_path("file.txt"), None).unwrap();
 
-    let handler = handler();
+    let handler = make_handler(default_conf());
     let mut session = make_session("GET", "/file.txt").await;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
@@ -153,7 +160,7 @@ async fn text_file() -> Result<(), Box<Error>> {
 async fn dir_index() -> Result<(), Box<Error>> {
     let meta = Metadata::from_path(&root_path("index.html"), None).unwrap();
 
-    let mut handler = handler();
+    let handler = make_handler(default_conf());
     let mut session = make_session("GET", "/").await;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
@@ -173,7 +180,7 @@ async fn dir_index() -> Result<(), Box<Error>> {
     assert_body(&session, "<html>Hi!</html>\n");
 
     // Without matching directory index this should produce Forbidden response.
-    handler.conf_mut().index_file = vec![];
+    let handler = make_handler(extended_conf("index_file: []"));
 
     let text = response_text(StatusCode::FORBIDDEN);
     let mut session = make_session("GET", "/").await;
@@ -196,7 +203,7 @@ async fn dir_index() -> Result<(), Box<Error>> {
 
 #[test(tokio::test)]
 async fn no_trailing_slash() -> Result<(), Box<Error>> {
-    let mut handler = handler();
+    let handler = make_handler(default_conf());
     let text = response_text(StatusCode::PERMANENT_REDIRECT);
 
     let mut session = make_session("GET", "/subdir?xyz").await;
@@ -216,7 +223,7 @@ async fn no_trailing_slash() -> Result<(), Box<Error>> {
     assert_body(&session, &text);
 
     // Add redirect prefix
-    handler.conf_mut().redirect_prefix = Some("/static".to_owned());
+    let handler = make_handler(extended_conf("redirect_prefix: /static"));
 
     let mut session = make_session("GET", "/subdir?xyz").await;
     assert_eq!(
@@ -236,7 +243,7 @@ async fn no_trailing_slash() -> Result<(), Box<Error>> {
 
     // Without canonicalize_uri this should just produce the response
     // (Forbidden because no index file).
-    handler.conf_mut().canonicalize_uri = false;
+    let handler = make_handler(extended_conf("canonicalize_uri: false"));
 
     let text = response_text(StatusCode::FORBIDDEN);
     let mut session = make_session("GET", "/subdir").await;
@@ -259,7 +266,7 @@ async fn no_trailing_slash() -> Result<(), Box<Error>> {
 
 #[test(tokio::test)]
 async fn unnecessary_percent_encoding() -> Result<(), Box<Error>> {
-    let handler = handler();
+    let handler = make_handler(default_conf());
     let text = response_text(StatusCode::PERMANENT_REDIRECT);
 
     let mut session = make_session("GET", "/file%2Etxt").await;
@@ -283,7 +290,7 @@ async fn unnecessary_percent_encoding() -> Result<(), Box<Error>> {
 
 #[test(tokio::test)]
 async fn complex_path() -> Result<(), Box<Error>> {
-    let handler = handler();
+    let handler = make_handler(default_conf());
     let text = response_text(StatusCode::PERMANENT_REDIRECT);
 
     let mut session = make_session("GET", "/.//subdir/../file.txt?file%2Etxt").await;
@@ -309,7 +316,7 @@ async fn complex_path() -> Result<(), Box<Error>> {
 async fn utf8_path() -> Result<(), Box<Error>> {
     let meta = Metadata::from_path(&root_path("subdir/файл söndärzeichen.txt"), None).unwrap();
 
-    let handler = handler();
+    let handler = make_handler(default_conf());
     let mut session = make_session(
         "GET",
         "/subdir/%D1%84%D0%B0%D0%B9%D0%BB%20s%C3%B6nd%C3%A4rzeichen.txt",
@@ -337,7 +344,7 @@ async fn utf8_path() -> Result<(), Box<Error>> {
 
 #[test(tokio::test)]
 async fn no_file() -> Result<(), Box<Error>> {
-    let handler = handler();
+    let handler = make_handler(default_conf());
     let text = response_text(StatusCode::NOT_FOUND);
 
     let mut session = make_session("GET", "/missing.txt").await;
@@ -360,8 +367,7 @@ async fn no_file() -> Result<(), Box<Error>> {
 
 #[test(tokio::test)]
 async fn no_file_with_page_404() -> Result<(), Box<Error>> {
-    let mut handler = handler();
-    handler.conf_mut().page_404 = Some("/file.txt".to_owned());
+    let handler = make_handler(extended_conf("page_404: /file.txt"));
 
     let meta = Metadata::from_path(&root_path("file.txt"), None).unwrap();
 
@@ -388,7 +394,7 @@ async fn no_file_with_page_404() -> Result<(), Box<Error>> {
 
 #[test(tokio::test)]
 async fn no_index() -> Result<(), Box<Error>> {
-    let handler = handler();
+    let handler = make_handler(default_conf());
 
     let text = response_text(StatusCode::FORBIDDEN);
     let mut session = make_session("GET", "/subdir/").await;
@@ -411,7 +417,7 @@ async fn no_index() -> Result<(), Box<Error>> {
 
 #[test(tokio::test)]
 async fn wrong_method() -> Result<(), Box<Error>> {
-    let handler = handler();
+    let handler = make_handler(default_conf());
 
     let text = response_text(StatusCode::METHOD_NOT_ALLOWED);
     let mut session = make_session("POST", "/file.txt").await;
@@ -434,7 +440,7 @@ async fn wrong_method() -> Result<(), Box<Error>> {
 
 #[test(tokio::test)]
 async fn wrong_method_no_file() -> Result<(), Box<Error>> {
-    let handler = handler();
+    let handler = make_handler(default_conf());
     let text = response_text(StatusCode::NOT_FOUND);
 
     let mut session = make_session("POST", "/missing.txt").await;
@@ -459,7 +465,7 @@ async fn wrong_method_no_file() -> Result<(), Box<Error>> {
 async fn head_request() -> Result<(), Box<Error>> {
     let meta = Metadata::from_path(&root_path("file.txt"), None).unwrap();
 
-    let handler = handler();
+    let handler = make_handler(default_conf());
     let mut session = make_session("HEAD", "/file.txt").await;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
@@ -516,7 +522,7 @@ async fn head_request() -> Result<(), Box<Error>> {
 
 #[test(tokio::test)]
 async fn bad_request() -> Result<(), Box<Error>> {
-    let handler = handler();
+    let handler = make_handler(default_conf());
     let text = response_text(StatusCode::BAD_REQUEST);
 
     let mut session = make_session("GET", ".").await;
@@ -556,7 +562,7 @@ async fn bad_request() -> Result<(), Box<Error>> {
 async fn if_none_match() -> Result<(), Box<Error>> {
     let meta = Metadata::from_path(&root_path("file.txt"), None).unwrap();
 
-    let handler = handler();
+    let handler = make_handler(default_conf());
     let mut session = make_session("GET", "/file.txt").await;
     session
         .req_header_mut()
@@ -686,7 +692,7 @@ async fn if_none_match() -> Result<(), Box<Error>> {
 async fn if_match() -> Result<(), Box<Error>> {
     let meta = Metadata::from_path(&root_path("file.txt"), None).unwrap();
 
-    let handler = handler();
+    let handler = make_handler(default_conf());
     let mut session = make_session("GET", "/file.txt").await;
     session
         .req_header_mut()
@@ -820,7 +826,7 @@ async fn if_match() -> Result<(), Box<Error>> {
 async fn if_modified_since() -> Result<(), Box<Error>> {
     let meta = Metadata::from_path(&root_path("file.txt"), None).unwrap();
 
-    let handler = handler();
+    let handler = make_handler(default_conf());
     let mut session = make_session("GET", "/file.txt").await;
     session
         .req_header_mut()
@@ -914,7 +920,7 @@ async fn if_modified_since() -> Result<(), Box<Error>> {
 async fn if_unmodified_since() -> Result<(), Box<Error>> {
     let meta = Metadata::from_path(&root_path("file.txt"), None).unwrap();
 
-    let handler = handler();
+    let handler = make_handler(default_conf());
     let mut session = make_session("GET", "/file.txt").await;
     session
         .req_header_mut()
@@ -1009,7 +1015,7 @@ async fn if_unmodified_since() -> Result<(), Box<Error>> {
 async fn ranged_request() -> Result<(), Box<Error>> {
     let meta = Metadata::from_path(&root_path("large.txt"), None).unwrap();
 
-    let handler = handler();
+    let handler = make_handler(default_conf());
     let mut session = make_session("GET", "/large.txt").await;
     session
         .req_header_mut()
@@ -1120,7 +1126,7 @@ async fn ranged_request() -> Result<(), Box<Error>> {
 #[test(tokio::test)]
 async fn dynamic_compression() -> Result<(), Box<Error>> {
     let meta = Metadata::from_path(&root_path("large.txt"), None).unwrap();
-    let handler = handler();
+    let handler = make_handler(default_conf());
 
     // Regular request should result in compressed response
     let mut session = make_session("GET", "/large.txt").await;
@@ -1203,9 +1209,7 @@ async fn static_compression() -> Result<(), Box<Error>> {
     let meta = Metadata::from_path(&root_path("large_precompressed.txt"), None).unwrap();
     let meta_compressed =
         Metadata::from_path(&root_path("large_precompressed.txt.gz"), None).unwrap();
-    let mut handler = handler();
-    handler.conf_mut().precompressed =
-        vec![CompressionAlgorithm::Gzip, CompressionAlgorithm::Brotli];
+    let handler = make_handler(extended_conf("precompressed: [gz, br]"));
 
     // Regular request should result in compressed response
     let mut session = make_session("GET", "/large_precompressed.txt").await;

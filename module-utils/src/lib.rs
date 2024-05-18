@@ -24,7 +24,7 @@ mod trie;
 use async_trait::async_trait;
 use log::trace;
 use pingora::{wrap_session, Error, ErrorType, ResponseHeader, Session, SessionWrapper};
-use serde::de::DeserializeOwned;
+use serde::{de::DeserializeOwned, Deserialize};
 use std::fmt::Debug;
 use std::fs::File;
 use std::io::BufReader;
@@ -33,7 +33,7 @@ use std::path::Path;
 pub use module_utils_macros::{merge_conf, merge_opt, RequestFilter};
 
 /// Request filter result indicating how the current request should be processed further
-#[derive(Debug, Copy, Clone, PartialEq, Default)]
+#[derive(Debug, Copy, Clone, PartialEq, Default, Deserialize)]
 pub enum RequestFilterResult {
     /// Response has been sent, no further processing should happen. Other Pingora phases should
     /// not be triggered.
@@ -136,9 +136,13 @@ pub trait RequestFilter: Sized {
 /// implementation for any structure implementing [`serde::Deserialize`].
 pub trait FromYaml {
     /// Loads configuration from a YAML file.
-    fn load_from_yaml<P>(path: P) -> Result<Self, Box<Error>>
+    fn load_from_yaml(path: impl AsRef<Path>) -> Result<Self, Box<Error>>
     where
-        P: AsRef<Path>,
+        Self: Sized;
+
+    /// Loads configuration from a YAML file.
+    fn from_yaml(yaml_conf: impl AsRef<str>) -> Result<Self, Box<Error>>
+    where
         Self: Sized;
 }
 
@@ -146,7 +150,7 @@ impl<D> FromYaml for D
 where
     D: DeserializeOwned + Debug + ?Sized,
 {
-    fn load_from_yaml<P: AsRef<Path>>(path: P) -> Result<Self, Box<Error>> {
+    fn load_from_yaml(path: impl AsRef<Path>) -> Result<Self, Box<Error>> {
         let file = File::open(path.as_ref()).map_err(|err| {
             Error::because(
                 ErrorType::FileOpenError,
@@ -164,6 +168,15 @@ where
             )
         })?;
         trace!("Loaded configuration file: {conf:#?}");
+
+        Ok(conf)
+    }
+
+    fn from_yaml(yaml_conf: impl AsRef<str>) -> Result<Self, Box<Error>> {
+        let conf = serde_yaml::from_str(yaml_conf.as_ref()).map_err(|err| {
+            Error::because(ErrorType::ReadError, "failed reading configuration", err)
+        })?;
+        trace!("Loaded configuration: {conf:#?}");
 
         Ok(conf)
     }

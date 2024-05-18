@@ -158,11 +158,17 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::configuration::{SubDirCombined, SubDirConf, VirtualHostCombined, VirtualHostConf};
 
     use async_trait::async_trait;
     use module_utils::pingora::{RequestHeader, TestSession};
+    use module_utils::FromYaml;
+    use serde::Deserialize;
     use test_log::test;
+
+    #[derive(Debug, Default, Deserialize)]
+    struct Conf {
+        result: RequestFilterResult,
+    }
 
     #[derive(Debug)]
     struct Handler {
@@ -171,7 +177,7 @@ mod tests {
 
     #[async_trait]
     impl RequestFilter for Handler {
-        type Conf = RequestFilterResult;
+        type Conf = Conf;
         type CTX = ();
         fn new_ctx() -> Self::CTX {}
         async fn request_filter(
@@ -183,62 +189,38 @@ mod tests {
         }
     }
 
-    impl TryFrom<RequestFilterResult> for Handler {
+    impl TryFrom<Conf> for Handler {
         type Error = Box<Error>;
 
-        fn try_from(result: RequestFilterResult) -> Result<Self, Self::Error> {
-            Ok(Self { result })
+        fn try_from(conf: Conf) -> Result<Self, Self::Error> {
+            Ok(Self {
+                result: conf.result,
+            })
         }
     }
 
     fn handler(add_default: bool) -> VirtualHostsHandler<Handler> {
-        let mut vhosts = HashMap::new();
-
-        let mut subdirs = HashMap::new();
-        subdirs.insert(
-            "/subdir/".to_owned(),
-            SubDirCombined::<RequestFilterResult> {
-                subdir: SubDirConf { strip_prefix: true },
-                config: RequestFilterResult::Unhandled,
-            },
-        );
-        subdirs.insert(
-            "/subdir/subsub".to_owned(),
-            SubDirCombined::<RequestFilterResult> {
-                subdir: SubDirConf {
-                    strip_prefix: false,
-                },
-                config: RequestFilterResult::Handled,
-            },
-        );
-
-        vhosts.insert(
-            "localhost:8080".to_owned(),
-            VirtualHostCombined::<RequestFilterResult> {
-                host: VirtualHostConf {
-                    aliases: vec!["127.0.0.1:8080".to_owned(), "[::1]:8080".to_owned()],
-                    default: add_default,
-                    subdirs,
-                },
-                config: RequestFilterResult::ResponseSent,
-            },
-        );
-
-        vhosts.insert(
-            "example.com".to_owned(),
-            VirtualHostCombined::<RequestFilterResult> {
-                host: VirtualHostConf {
-                    aliases: vec!["example.com:8080".to_owned()],
-                    default: false,
-                    subdirs: HashMap::new(),
-                },
-                config: RequestFilterResult::Handled,
-            },
-        );
-
-        VirtualHostsConf::<RequestFilterResult> { vhosts }
-            .try_into()
-            .unwrap()
+        VirtualHostsConf::<Conf>::from_yaml(format!(
+            r#"
+            vhosts:
+                localhost:8080:
+                    aliases: ["127.0.0.1:8080", "[::1]:8080"]
+                    default: {add_default}
+                    result: ResponseSent
+                    subdirs:
+                        /subdir/:
+                            strip_prefix: true
+                            result: Unhandled
+                        /subdir/subsub:
+                            result: Handled
+                example.com:
+                    aliases: ["example.com:8080"]
+                    result: Handled
+        "#
+        ))
+        .unwrap()
+        .try_into()
+        .unwrap()
     }
 
     async fn make_session(uri: &str, host: Option<&str>) -> TestSession {
