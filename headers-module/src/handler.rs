@@ -135,14 +135,13 @@ impl RequestFilter for HeadersHandler {
 
 #[cfg(test)]
 mod tests {
-    use std::ops::{Deref, DerefMut};
-
     use super::*;
 
     use http::header;
     use module_utils::pingora::{RequestHeader, TestSession};
     use module_utils::FromYaml;
     use serde::Deserialize;
+    use std::ops::{Deref, DerefMut};
     use test_log::test;
 
     #[derive(Debug, Deserialize, Default)]

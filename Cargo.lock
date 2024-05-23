@@ -2361,6 +2361,7 @@ name = "upstream-module"
 version = "0.2.0"
 dependencies = [
  "async-trait",
+ "env_logger",
  "http 1.1.0",
  "log",
  "module-utils",
@@ -2368,6 +2369,8 @@ dependencies = [
  "pingora-proxy",
  "serde",
  "structopt",
+ "test-log",
+ "tokio",
 ]
 
 [[package]]

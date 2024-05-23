@@ -24,8 +24,11 @@ serde.workspace = true
 structopt.workspace = true
 
 [dev-dependencies]
+env_logger.workspace = true
 pingora-core.workspace = true
 pingora-proxy.workspace = true
+test-log.workspace = true
+tokio.workspace = true
 
 [lints]
 workspace = true

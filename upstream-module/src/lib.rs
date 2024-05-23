@@ -283,3 +283,87 @@ impl RequestFilter for UpstreamHandler {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use http::HeaderValue;
+    use module_utils::pingora::{RequestHeader, TestSession};
+    use module_utils::FromYaml;
+    use pingora_core::upstreams::peer::Scheme;
+    use test_log::test;
+
+    fn make_handler(configured: bool) -> UpstreamHandler {
+        let conf = if configured {
+            UpstreamConf::from_yaml(
+                r#"
+                upstream: https://example.com
+            "#,
+            )
+            .unwrap()
+        } else {
+            UpstreamConf::default()
+        };
+        conf.try_into().unwrap()
+    }
+
+    async fn make_session() -> TestSession {
+        let header = RequestHeader::build("GET", b"/", None).unwrap();
+        TestSession::from(header).await
+    }
+
+    #[test(tokio::test)]
+    async fn unconfigured() -> Result<(), Box<Error>> {
+        let handler = make_handler(false);
+        let mut session = make_session().await;
+        let mut ctx = UpstreamHandler::new_ctx();
+        assert!(!handler.handle(&mut session, &mut ctx).await?);
+
+        assert_eq!(
+            UpstreamHandler::upstream_peer(&mut session, &mut ctx)
+                .await
+                .unwrap_err()
+                .etype,
+            ErrorType::HTTPStatus(404)
+        );
+
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn handled() -> Result<(), Box<Error>> {
+        let handler = make_handler(true);
+        let mut session = make_session().await;
+        let mut ctx = UpstreamHandler::new_ctx();
+        assert!(!handler.handle(&mut session, &mut ctx).await?);
+
+        let peer = UpstreamHandler::upstream_peer(&mut session, &mut ctx)
+            .await
+            .unwrap();
+        assert_eq!(peer.scheme, Scheme::HTTPS);
+        assert_eq!(peer.sni, "example.com");
+        assert_eq!(
+            session.req_header().headers.get("Host"),
+            Some(&HeaderValue::from_str("example.com").unwrap())
+        );
+
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn not_called() -> Result<(), Box<Error>> {
+        let mut session = make_session().await;
+        let mut ctx = UpstreamHandler::new_ctx();
+
+        assert_eq!(
+            UpstreamHandler::upstream_peer(&mut session, &mut ctx)
+                .await
+                .unwrap_err()
+                .etype,
+            ErrorType::HTTPStatus(404)
+        );
+
+        Ok(())
+    }
+}
