@@ -195,18 +195,21 @@ mod tests {
             r#"
                 send_response: {send_response}
                 custom_headers:
-                - headers:
-                    X-Me: localhost
-                    Cache-Control: max-age=604800
-                include: [localhost, localhost:8080]
-                exclude:
-                - localhost/subdir/*
-                - headers:
-                    X-Me: example.com
-                include:
-                - example.com
-                - headers:
-                    Server: My very own web server
+                -
+                    headers:
+                        X-Me: localhost
+                        Cache-Control: max-age=604800
+                    include: [localhost, localhost:8080]
+                    exclude:
+                    - localhost/subdir/*
+                -
+                    headers:
+                        X-Me: example.com
+                    include:
+                    - example.com
+                -
+                    headers:
+                        Server: My very own web server
             "#,
         ))
         .unwrap()
