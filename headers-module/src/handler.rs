@@ -193,21 +193,21 @@ mod tests {
     fn make_handler(send_response: bool) -> Handler {
         <Handler as RequestFilter>::Conf::from_yaml(format!(
             r#"
-            send_response: {send_response}
-            custom_headers:
-            - headers:
-                X-Me: localhost
-                Cache-Control: max-age=604800
-              include: [localhost, localhost:8080]
-              exclude:
-              - localhost/subdir/*
-            - headers:
-                X-Me: example.com
-              include:
-              - example.com
-            - headers:
-                Server: My very own web server
-        "#,
+                send_response: {send_response}
+                custom_headers:
+                - headers:
+                    X-Me: localhost
+                    Cache-Control: max-age=604800
+                include: [localhost, localhost:8080]
+                exclude:
+                - localhost/subdir/*
+                - headers:
+                    X-Me: example.com
+                include:
+                - example.com
+                - headers:
+                    Server: My very own web server
+            "#,
         ))
         .unwrap()
         .try_into()

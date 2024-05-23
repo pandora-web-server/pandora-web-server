@@ -202,21 +202,21 @@ mod tests {
     fn handler(add_default: bool) -> VirtualHostsHandler<Handler> {
         VirtualHostsConf::<Conf>::from_yaml(format!(
             r#"
-            vhosts:
-                localhost:8080:
-                    aliases: ["127.0.0.1:8080", "[::1]:8080"]
-                    default: {add_default}
-                    result: ResponseSent
-                    subdirs:
-                        /subdir/:
-                            strip_prefix: true
-                            result: Unhandled
-                        /subdir/subsub:
-                            result: Handled
-                example.com:
-                    aliases: ["example.com:8080"]
-                    result: Handled
-        "#
+                vhosts:
+                    localhost:8080:
+                        aliases: ["127.0.0.1:8080", "[::1]:8080"]
+                        default: {add_default}
+                        result: ResponseSent
+                        subdirs:
+                            /subdir/:
+                                strip_prefix: true
+                                result: Unhandled
+                            /subdir/subsub:
+                                result: Handled
+                    example.com:
+                        aliases: ["example.com:8080"]
+                        result: Handled
+            "#
         ))
         .unwrap()
         .try_into()

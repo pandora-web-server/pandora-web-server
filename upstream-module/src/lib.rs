@@ -298,8 +298,8 @@ mod tests {
         let conf = if configured {
             UpstreamConf::from_yaml(
                 r#"
-                upstream: https://example.com
-            "#,
+                    upstream: https://example.com
+                "#,
             )
             .unwrap()
         } else {
