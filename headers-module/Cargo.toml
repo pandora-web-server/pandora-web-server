@@ -24,11 +24,14 @@ serde.workspace = true
 
 [dev-dependencies]
 compression-module.workspace = true
+env_logger.workspace = true
 pingora-core.workspace = true
 pingora-http.workspace = true
 pingora-proxy.workspace = true
-upstream-module.workspace = true
 structopt.workspace = true
+test-log.workspace = true
+tokio.workspace = true
+upstream-module.workspace = true
 
 [lints]
 workspace = true

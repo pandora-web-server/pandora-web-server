@@ -24,8 +24,8 @@ pub use pingora_core::{Error, ErrorType};
 pub use pingora_http::{IntoCaseHeaderName, RequestHeader, ResponseHeader};
 pub use pingora_proxy::Session;
 use std::borrow::Cow;
+use std::io::{Cursor, Seek, SeekFrom, Write};
 use std::ops::{Deref, DerefMut};
-use tokio_test::io::Builder;
 
 use crate::RequestFilter;
 
@@ -180,12 +180,13 @@ pub struct TestSession {
 impl TestSession {
     /// Creates a new test session based on a mock of the network communication.
     pub async fn from(header: RequestHeader) -> Self {
-        let mut builder = Builder::new();
-        builder.read(b"GET / HTTP/1.1\r\n");
-        builder.read(b"Connection: close\r\n");
-        builder.read(b"\r\n");
+        let mut cursor = Cursor::new(Vec::<u8>::new());
+        let _ = cursor.write(b"GET / HTTP/1.1\r\n");
+        let _ = cursor.write(b"Connection: close\r\n");
+        let _ = cursor.write(b"\r\n");
+        let _ = cursor.seek(SeekFrom::Start(0));
 
-        let mut inner = Session::new_h1(Box::new(builder.build()));
+        let mut inner = Session::new_h1(Box::new(cursor));
         assert!(inner.read_request().await.unwrap());
         *inner.req_header_mut() = header;
 

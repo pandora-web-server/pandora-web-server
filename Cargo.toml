@@ -41,7 +41,6 @@ structopt = "0.3"
 serde_yaml = "0.8"
 test-log = "=0.2.13"
 tokio = "1"
-tokio-test = "0.4"
 upstream-module = { path = "upstream-module", version = "0.2.0" }
 virtual-hosts-module = { path = "virtual-hosts-module", version = "0.2.0" }
 

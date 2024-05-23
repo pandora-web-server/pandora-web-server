@@ -27,7 +27,7 @@ pub(crate) fn derive_request_filter(input: TokenStream) -> Result<TokenStream, E
                 let struct_name = &input.ident;
 
                 // Produce merged handler configuration
-                conf.ident = format_ident!("{struct_name}__Conf");
+                conf.ident = format_ident!("{struct_name}Conf");
                 let conf_name = &conf.ident;
                 if let Data::Struct(struct_) = &mut conf.data {
                     if let Fields::Named(fields) = &mut struct_.fields {
@@ -40,7 +40,7 @@ pub(crate) fn derive_request_filter(input: TokenStream) -> Result<TokenStream, E
                 }
 
                 // Produce merged context
-                ctx.ident = format_ident!("{struct_name}__CTX");
+                ctx.ident = format_ident!("{struct_name}CTX");
                 let ctx_name = &ctx.ident;
                 if let Data::Struct(struct_) = &mut ctx.data {
                     if let Fields::Named(fields) = &mut struct_.fields {

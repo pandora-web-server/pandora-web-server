@@ -26,7 +26,6 @@ pingora-http.workspace = true
 pingora-proxy.workspace = true
 serde.workspace = true
 serde_yaml.workspace = true
-tokio-test.workspace = true
 
 [lints]
 workspace = true
