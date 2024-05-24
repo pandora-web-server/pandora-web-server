@@ -188,3 +188,103 @@ impl RequestFilter for CompressionHandler {
         Ok(RequestFilterResult::Unhandled)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use module_utils::pingora::{RequestHeader, TestSession};
+    use module_utils::FromYaml;
+    use test_log::test;
+
+    #[derive(Debug, Deserialize, Default)]
+    struct TestConf {}
+
+    #[derive(Debug)]
+    struct TestHandler {}
+
+    impl TryFrom<TestConf> for TestHandler {
+        type Error = Box<Error>;
+
+        fn try_from(_conf: TestConf) -> Result<Self, Self::Error> {
+            Ok(TestHandler {})
+        }
+    }
+
+    #[async_trait]
+    impl RequestFilter for TestHandler {
+        type Conf = TestConf;
+        type CTX = ();
+        fn new_ctx() -> Self::CTX {}
+
+        async fn request_filter(
+            &self,
+            session: &mut impl SessionWrapper,
+            _ctx: &mut Self::CTX,
+        ) -> Result<RequestFilterResult, Box<Error>> {
+            if session.downstream_compression.is_enabled()
+                && session.upstream_compression.is_enabled()
+            {
+                Ok(RequestFilterResult::ResponseSent)
+            } else if session.downstream_compression.is_enabled()
+                || session.upstream_compression.is_enabled()
+            {
+                Ok(RequestFilterResult::Handled)
+            } else {
+                Ok(RequestFilterResult::Unhandled)
+            }
+        }
+    }
+
+    #[derive(Debug, RequestFilter)]
+    struct Handler {
+        compression: CompressionHandler,
+        test: TestHandler,
+    }
+
+    fn make_handler(configured: bool) -> Handler {
+        let conf = if configured {
+            <Handler as RequestFilter>::Conf::from_yaml(
+                r#"
+                    compression_level: 6
+                    decompress_upstream: true
+                "#,
+            )
+            .unwrap()
+        } else {
+            <Handler as RequestFilter>::Conf::default()
+        };
+        conf.try_into().unwrap()
+    }
+
+    async fn make_session() -> TestSession {
+        let header = RequestHeader::build("GET", b"/", None).unwrap();
+        TestSession::from(header).await
+    }
+
+    #[test(tokio::test)]
+    async fn unconfigured() -> Result<(), Box<Error>> {
+        let handler = make_handler(false);
+        let mut session = make_session().await;
+        assert_eq!(
+            handler
+                .request_filter(&mut session, &mut Handler::new_ctx())
+                .await?,
+            RequestFilterResult::Unhandled
+        );
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn configured() -> Result<(), Box<Error>> {
+        let handler = make_handler(true);
+        let mut session = make_session().await;
+        assert_eq!(
+            handler
+                .request_filter(&mut session, &mut Handler::new_ctx())
+                .await?,
+            RequestFilterResult::ResponseSent
+        );
+        Ok(())
+    }
+}

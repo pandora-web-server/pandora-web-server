@@ -276,12 +276,15 @@ name = "compression-module"
 version = "0.2.0"
 dependencies = [
  "async-trait",
+ "env_logger",
  "log",
  "module-utils",
  "pingora-core",
  "pingora-proxy",
  "serde",
  "structopt",
+ "test-log",
+ "tokio",
 ]
 
 [[package]]
