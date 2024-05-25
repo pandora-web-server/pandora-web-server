@@ -64,6 +64,7 @@ use module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
 use pingora_core::server::configuration::{Opt as ServerOpt, ServerConf};
 use pingora_core::server::Server;
 use pingora_proxy::{http_proxy_service, ProxyHttp};
+use rewrite_module::RewriteHandler;
 use serde::Deserialize;
 use static_files_module::StaticFilesHandler;
 use structopt::StructOpt;
@@ -91,6 +92,7 @@ struct Handler {
 #[derive(Debug, RequestFilter)]
 struct HostHandler {
     compression: CompressionHandler,
+    rewrite: RewriteHandler,
     upstream: UpstreamHandler,
     static_files: StaticFilesHandler,
 }

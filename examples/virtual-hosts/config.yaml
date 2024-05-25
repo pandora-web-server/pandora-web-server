@@ -17,6 +17,18 @@ vhosts:
     precompressed:
     - gz
     - br
+    rewrite_rules:
+    - from: /old.txt
+      query_regex: "!noredirect"
+      to: /file.txt
+      type: permanent
+    - from: /view.php
+      query_regex: "^file=large\\.txt$"
+      to: /large.txt
+    - from: /images/*
+      from_regex: "\\.jpg$"
+      to: https://example.com${tail}
+      type: redirect
     subdirs:
       /uncompressed:
         strip_prefix: true

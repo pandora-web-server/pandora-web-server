@@ -45,6 +45,7 @@ use pingora_core::server::Server;
 use pingora_core::upstreams::peer::HttpPeer;
 use pingora_core::{Error, ErrorType};
 use pingora_proxy::{http_proxy_service, ProxyHttp, Session};
+use rewrite_module::RewriteHandler;
 use serde::Deserialize;
 use static_files_module::{StaticFilesHandler, StaticFilesOpt};
 use structopt::StructOpt;
@@ -65,6 +66,7 @@ impl StaticRootApp {
 #[derive(Debug, RequestFilter)]
 struct Handler {
     compression: CompressionHandler,
+    rewrite: RewriteHandler,
     headers: HeadersHandler,
     static_files: StaticFilesHandler,
 }

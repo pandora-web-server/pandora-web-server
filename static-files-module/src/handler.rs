@@ -18,6 +18,7 @@ use async_trait::async_trait;
 use http::{method::Method, status::StatusCode};
 use log::{debug, info, warn};
 use module_utils::pingora::{Error, ErrorType, SessionWrapper};
+use module_utils::standard_response::{error_response, redirect_response};
 use module_utils::{RequestFilter, RequestFilterResult};
 use std::io::ErrorKind;
 
@@ -27,7 +28,6 @@ use crate::file_writer::file_response;
 use crate::metadata::Metadata;
 use crate::path::{path_to_uri, resolve_uri};
 use crate::range::{extract_range, Range};
-use crate::standard_response::{error_response, redirect_response};
 
 /// Handler for Pingora’s `request_filter` phase
 #[derive(Debug)]

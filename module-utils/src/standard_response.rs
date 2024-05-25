@@ -15,10 +15,11 @@
 //! Standard responses for various conditions
 
 use http::{header, method::Method, status::StatusCode};
-use module_utils::pingora::{Error, ResponseHeader, SessionWrapper};
+
+use crate::pingora::{Error, ResponseHeader, SessionWrapper};
 
 /// Produces the text of a standard response page for the given status code.
-pub(crate) fn response_text(status: StatusCode) -> String {
+pub fn response_text(status: StatusCode) -> String {
     let status_str = status.as_str();
     let reason = status.canonical_reason().unwrap_or("");
     format!(
@@ -56,7 +57,7 @@ async fn response(
 }
 
 /// Responds with a standard error page for the given status code.
-pub(crate) async fn error_response(
+pub async fn error_response(
     session: &mut impl SessionWrapper,
     status: StatusCode,
 ) -> Result<(), Box<Error>> {
@@ -64,7 +65,7 @@ pub(crate) async fn error_response(
 }
 
 /// Responds with a redirect to the given location.
-pub(crate) async fn redirect_response(
+pub async fn redirect_response(
     session: &mut impl SessionWrapper,
     status: StatusCode,
     location: &str,

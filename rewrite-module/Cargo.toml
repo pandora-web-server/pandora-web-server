@@ -1,0 +1,37 @@
+[package]
+name = "rewrite-module"
+version = "0.2.0"
+authors = ["Wladimir Palant"]
+repository = "https://github.com/palant/pingora-utils"
+categories = ["network-programming", "web-programming::http-server"]
+keywords = ["url-rewrite", "url", "web-server", "http", "pingora"]
+license = "Apache-2.0"
+edition = "2021"
+description = """
+A module pre-processing request URLs to rewrite or redirect them.
+"""
+
+[lib]
+name = "rewrite_module"
+path = "src/lib.rs"
+
+[dependencies]
+async-trait.workspace = true
+http.workspace = true
+log.workspace = true
+module-utils.workspace = true
+regex = "1.10.4"
+serde.workspace = true
+
+[dev-dependencies]
+env_logger.workspace = true
+pingora-core.workspace = true
+pingora-http.workspace = true
+pingora-proxy.workspace = true
+static-files-module.workspace = true
+structopt.workspace = true
+test-log.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true

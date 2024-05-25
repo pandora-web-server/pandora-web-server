@@ -19,6 +19,7 @@
 
 pub mod pingora;
 pub mod router;
+pub mod standard_response;
 mod trie;
 
 use async_trait::async_trait;

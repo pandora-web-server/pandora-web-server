@@ -78,10 +78,11 @@ impl<Value: Debug> Router<Value> {
     ) -> Option<(&Value, Option<impl AsRef<[u8]> + 'a>)> {
         let path = path.as_ref();
         let (value, matched_segments) = self.trie.lookup(make_key(host, path))?;
-        let tail = if matched_segments > 1 {
+        let host_segments = if host.as_ref().is_empty() { 0 } else { 1 };
+        let tail = if matched_segments > host_segments {
             Some(PathTail {
                 path,
-                skip_segments: matched_segments - 1,
+                skip_segments: matched_segments - host_segments,
             })
         } else {
             None
@@ -94,12 +95,18 @@ impl<Value: Debug> Router<Value> {
 fn make_key<'a>(
     host: &'a (impl AsRef<[u8]> + ?Sized),
     path: &'a (impl AsRef<[u8]> + ?Sized),
-) -> impl Iterator<Item = &'a [u8]> {
-    std::iter::once(host.as_ref()).chain(
-        path.as_ref()
-            .split(|c| *c == SEPARATOR)
-            .filter(|s| !s.is_empty()),
-    )
+) -> Box<dyn Iterator<Item = &'a [u8]> + 'a> {
+    let path_iter = path
+        .as_ref()
+        .split(|c| *c == SEPARATOR)
+        .filter(|s| !s.is_empty());
+
+    let host = host.as_ref();
+    if host.is_empty() {
+        Box::new(path_iter)
+    } else {
+        Box::new(std::iter::once(host).chain(path_iter))
+    }
 }
 
 struct PathTail<'a> {
@@ -142,6 +149,10 @@ pub struct RouterBuilder<Value: Debug> {
 
 impl<Value: Debug> RouterBuilder<Value> {
     /// Adds a host/path combination with the respective value to the routing table.
+    ///
+    /// While it is possible to use an empty host name, it is advisable to keep entries with an
+    /// empty host name and those with non-empty host names in separate routers. Otherwise lookup
+    /// might confuse host names and first segments of the path name.
     pub fn push(&mut self, host: impl AsRef<[u8]>, path: impl AsRef<[u8]>, value: Value) {
         let key = make_key(&host, &path).fold(Vec::new(), |mut result, segment| {
             if !result.is_empty() {
@@ -190,6 +201,7 @@ mod tests {
         builder.push("example.com", "", 4);
         builder.push("example.com", "/abc/def/", 5);
         builder.push("example.com", "/x", 6);
+        builder.push("", "/abc", 7);
         let router = builder.build();
 
         assert_eq!(lookup(&router, "localhost", "/"), Some((1, "/".into())));
@@ -232,6 +244,9 @@ mod tests {
         );
         assert_eq!(lookup(&router, "example.net", "/"), None);
         assert_eq!(lookup(&router, "example.net", "/abc"), None);
+        assert_eq!(lookup(&router, "", "/"), None);
+        assert_eq!(lookup(&router, "", "/abc"), Some((7, "/".into())));
+        assert_eq!(lookup(&router, "", "/abc/def"), Some((7, "/def".into())));
 
         // A special case to keep in mind: slashes in host name will cause incorrect segmentation
         // of the path, essentially causing everything after the slash to be ignored. As such, this

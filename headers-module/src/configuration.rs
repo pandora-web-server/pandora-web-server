@@ -41,7 +41,7 @@ pub struct MatchRule {
     /// deserialization.
     pub path: String,
 
-    /// If `true``, the path will match the exact directory and any files/directories within.
+    /// If `true`, the path will match the exact directory and any files/directories within.
     /// Otherwise an exact match is required.
     pub prefix: bool,
 }

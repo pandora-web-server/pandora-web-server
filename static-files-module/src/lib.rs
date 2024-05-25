@@ -207,7 +207,6 @@ mod handler;
 pub mod metadata;
 pub mod path;
 pub mod range;
-mod standard_response;
 #[cfg(test)]
 mod tests;
 

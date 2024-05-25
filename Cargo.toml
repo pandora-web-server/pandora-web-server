@@ -5,6 +5,7 @@ members = [
   "module-utils-macros",
   "compression-module",
   "headers-module",
+  "rewrite-module",
   "static-files-module",
   "upstream-module",
   "virtual-hosts-module",
@@ -15,6 +16,7 @@ default-members = [
   "module-utils-macros",
   "compression-module",
   "headers-module",
+  "rewrite-module",
   "static-files-module",
   "upstream-module",
   "virtual-hosts-module",
@@ -31,6 +33,7 @@ httpdate = "1"
 log = "0.4"
 module-utils = { path = "module-utils", version = "0.2.0" }
 module-utils-macros = { path = "module-utils-macros", version = "0.2.0" }
+rewrite-module = { path = "rewrite-module", version = "0.2.0" }
 percent-encoding = "2.1"
 pingora-core = "0.2.0"
 pingora-http = "0.2.0"
