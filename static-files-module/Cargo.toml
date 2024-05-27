@@ -34,7 +34,6 @@ const_format = "0.2.32"
 env_logger.workspace = true
 pingora-core.workspace = true
 pingora-proxy.workspace = true
-serde_yaml.workspace = true
 test-log.workspace = true
 tokio.workspace = true
 

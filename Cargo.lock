@@ -1959,7 +1959,6 @@ dependencies = [
  "pingora-core",
  "pingora-proxy",
  "serde",
- "serde_yaml",
  "structopt",
  "test-log",
  "tokio",

@@ -14,7 +14,7 @@
 
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
-use quote::{format_ident, quote, ToTokens};
+use quote::{quote, ToTokens};
 use syn::parse::{Parse, ParseStream, Parser};
 use syn::{Attribute, Data, DeriveInput, Error, Fields, FieldsNamed, GenericParam, Meta, Token};
 
@@ -45,34 +45,6 @@ impl Parse for MergeConfParams {
 }
 
 fn retrieve_field_names(fields: &FieldsNamed) -> TokenStream2 {
-    let trivial_method = [
-        "any",
-        "bool",
-        "i8",
-        "i16",
-        "i32",
-        "i64",
-        "u8",
-        "u16",
-        "u32",
-        "u64",
-        "f32",
-        "f64",
-        "char",
-        "str",
-        "string",
-        "bytes",
-        "byte_buf",
-        "option",
-        "unit",
-        "seq",
-        "map",
-        "identifier",
-        "ignored_any",
-    ]
-    .map(|method| format_ident!("deserialize_{}", method))
-    .to_vec();
-
     let field_type = fields
         .named
         .iter()
@@ -125,64 +97,19 @@ fn retrieve_field_names(fields: &FieldsNamed) -> TokenStream2 {
             {
                 type Error = FieldNamesList;
 
-                #(
-                    #[inline(always)]
-                    fn #trivial_method<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
-                    where
-                        V: ::module_utils::serde::de::Visitor<'de>
-                    {
-                        Err(Self::Error::new())
-                    }
-                )*
-
                 #[inline(always)]
-                fn deserialize_unit_struct<V>(
-                    self,
-                    _name: &'static ::std::primitive::str,
-                    _visitor: V
-                ) -> Result<V::Value, Self::Error>
+                fn deserialize_any<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
                 where
                     V: ::module_utils::serde::de::Visitor<'de>
                 {
                     Err(Self::Error::new())
                 }
 
-                #[inline(always)]
-                fn deserialize_newtype_struct<V>(
-                    self,
-                    _name: &'static ::std::primitive::str,
-                    _visitor: V
-                ) -> Result<V::Value, Self::Error>
-                where
-                    V: ::module_utils::serde::de::Visitor<'de>
-                {
-                    Err(Self::Error::new())
-                }
-
-                #[inline(always)]
-                fn deserialize_tuple<V>(
-                    self,
-                    _len: ::std::primitive::usize,
-                    _visitor: V
-                ) -> Result<V::Value, Self::Error>
-                where
-                    V: ::module_utils::serde::de::Visitor<'de>
-                {
-                    Err(Self::Error::new())
-                }
-
-                #[inline(always)]
-                fn deserialize_tuple_struct<V>(
-                    self,
-                    _name: &'static ::std::primitive::str,
-                    _len: ::std::primitive::usize,
-                    _visitor: V
-                ) -> Result<V::Value, Self::Error>
-                where
-                    V: ::module_utils::serde::de::Visitor<'de>
-                {
-                    Err(Self::Error::new())
-                }
+                ::module_utils::serde::forward_to_deserialize_any! [
+                    bool i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 char str string bytes byte_buf
+                    option unit unit_struct newtype_struct seq tuple tuple_struct map enum
+                    identifier ignored_any
+                ];
 
                 #[inline(always)]
                 fn deserialize_struct<V>(
@@ -197,19 +124,6 @@ fn retrieve_field_names(fields: &FieldsNamed) -> TokenStream2 {
                     Err(FieldNamesList {
                         names: fields.iter().map(|s| (*s).to_owned()).collect()
                     })
-                }
-
-                #[inline(always)]
-                fn deserialize_enum<V>(
-                    self,
-                    _name: &'static ::std::primitive::str,
-                    _variants: &'static [&'static ::std::primitive::str],
-                    _visitor: V
-                ) -> Result<V::Value, Self::Error>
-                where
-                    V: ::module_utils::serde::de::Visitor<'de>
-                {
-                    Err(Self::Error::new())
                 }
             }
 
@@ -260,8 +174,7 @@ fn generate_map_visitor(params: &MergeConfParams) -> TokenStream2 {
                                     self.names.join("`, `"),
                                 )));
                             }
-                            let value: ::module_utils::serde_yaml::Value = map.next_value()?;
-                            result.push((key, value));
+                            result.push((key, map.next_value()?));
                         }
                         Ok(result)
                     }

@@ -41,7 +41,6 @@ pingora-proxy = "0.2.0"
 serde = { version = "1.0", features = ["derive"] }
 static-files-module = { path = "static-files-module", version = "0.2.0" }
 structopt = "0.3"
-serde_yaml = "0.8"
 test-log = "=0.2.13"
 tokio = "1"
 upstream-module = { path = "upstream-module", version = "0.2.0" }

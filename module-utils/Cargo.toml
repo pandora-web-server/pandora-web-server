@@ -25,7 +25,7 @@ pingora-core.workspace = true
 pingora-http.workspace = true
 pingora-proxy.workspace = true
 serde.workspace = true
-serde_yaml.workspace = true
+serde_yaml = "0.8"
 
 [lints]
 workspace = true
