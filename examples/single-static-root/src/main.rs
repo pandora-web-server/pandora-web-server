@@ -107,7 +107,7 @@ impl Default for StaticRootAppConf {
 }
 
 /// The combined configuration of Pingora server and [`StaticFilesHandler`].
-#[merge_conf]
+#[merge_conf(deny_unknown_fields)]
 struct Conf {
     app: StaticRootAppConf,
     server: ServerConf,

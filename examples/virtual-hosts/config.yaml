@@ -10,7 +10,7 @@ vhosts:
       - "[::1]:8080"
     default: true
     root: ../../static-files-module/testdata/root
-    canonicalize_url: true
+    canonicalize_uri: true
     index_file:
     - index.html
     compression_level: 3
@@ -38,7 +38,7 @@ vhosts:
         strip_prefix: true
         index_file:
         - file.txt
-        canonicalize_url: false
+        canonicalize_uri: false
         compression_level: 3
         precompressed:
         - gz

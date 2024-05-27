@@ -69,6 +69,7 @@ pub fn merge_opt(_args: TokenStream, input: TokenStream) -> TokenStream {
 /// use module_utils::{merge_conf, FromYaml};
 /// use static_files_module::StaticFilesConf;
 /// use serde::Deserialize;
+/// use std::path::PathBuf;
 ///
 /// #[derive(Debug, Default, Deserialize)]
 /// struct MyAppConf {
@@ -83,14 +84,48 @@ pub fn merge_opt(_args: TokenStream, input: TokenStream) -> TokenStream {
 ///     static_files: StaticFilesConf,
 /// }
 ///
-/// let conf = Conf::load_from_yaml("test.yaml").ok().unwrap_or_else(Conf::default);
-/// println!("Application settings: {:?}", conf.app);
-/// println!("Pingora server settings: {:?}", conf.server);
-/// println!("Static files settings: {:?}", conf.static_files);
+/// let conf = Conf::from_yaml(r#"
+///     listen: 127.0.0.1:8080
+///     error_log: error.log
+///     root: .
+///     unknown_field: ignored
+/// "#).unwrap();
+/// assert_eq!(conf.app.listen, String::from("127.0.0.1:8080"));
+/// assert_eq!(conf.server.error_log, Some(String::from("error.log")));
+/// assert_eq!(conf.static_files.root, Some(PathBuf::from(".")));
+/// ```
+///
+/// By default, unknown configuration values will be ignored. You can change that behavior by
+/// specifying the `deny_unknown_fields` parameter.
+///
+/// Note that you should only do this for the top-level configuration, not for configurations that
+/// will be merged further. Otherwise you will get errors about fields which this configuration
+/// structure doesn’t know but which are handled one level up.
+///
+/// *Limitations*: `deny_unknown_fields` will only work correctly if the types merged are either
+/// also merged configurations or structs with the default `Deserialize` implementation (calling
+/// `Deserializer::deserialize_struct` with a correct list of fields).
+///
+/// ```rust
+/// use compression_module::CompressionConf;
+/// use module_utils::{merge_conf, FromYaml};
+/// use static_files_module::StaticFilesConf;
+///
+/// #[merge_conf(deny_unknown_fields)]
+/// struct Conf {
+///     compression: CompressionConf,
+///     static_files: StaticFilesConf,
+/// }
+///
+/// assert!(Conf::from_yaml(r#"
+///     root: .
+///     compression_level: 3
+///     unknown_field: flagged
+/// "#).is_err());
 /// ```
 #[proc_macro_attribute]
-pub fn merge_conf(_args: TokenStream, input: TokenStream) -> TokenStream {
-    merge_conf::merge_conf(input).unwrap_or_else(|err| err.into_compile_error().into())
+pub fn merge_conf(attr: TokenStream, input: TokenStream) -> TokenStream {
+    merge_conf::merge_conf(attr, input).unwrap_or_else(|err| err.into_compile_error().into())
 }
 
 /// This macro will automatically implement `RequestFilter` by chaining the handlers identified
@@ -104,7 +139,7 @@ pub fn merge_conf(_args: TokenStream, input: TokenStream) -> TokenStream {
 /// the configuration/context of the respective handler in a field with the same name as the
 /// handler in this struct.
 ///
-/// ```rust,no_run
+/// ```rust
 /// use module_utils::{FromYaml, RequestFilter};
 /// use compression_module::CompressionHandler;
 /// use static_files_module::StaticFilesHandler;
@@ -117,10 +152,39 @@ pub fn merge_conf(_args: TokenStream, input: TokenStream) -> TokenStream {
 ///
 /// type Conf = <Handler as RequestFilter>::Conf;
 ///
-/// let conf = Conf::load_from_yaml("test.yaml").ok().unwrap_or_else(Conf::default);
+/// let conf = Conf::from_yaml(r#"
+///     root: .
+///     compression_level: 3
+///     unknown_field: ignored
+/// "#).unwrap();
 /// let handler: Handler = conf.try_into().unwrap();
 /// ```
-#[proc_macro_derive(RequestFilter)]
+///
+/// By default, the generated handler configuration will ignore unknown fields in the configuration
+/// file. If this is a top-level configuration which won’t be merged further, this behavior can be
+/// changed by specifying the `#[merge_conf(deny_unknown_fields)]` attribute:
+///
+/// ```rust
+/// use module_utils::{FromYaml, RequestFilter};
+/// use compression_module::CompressionHandler;
+/// use static_files_module::StaticFilesHandler;
+///
+/// #[derive(Debug, RequestFilter)]
+/// #[merge_conf(deny_unknown_fields)]
+/// struct Handler {
+///     compression: CompressionHandler,
+///     static_files: StaticFilesHandler,
+/// }
+///
+/// type Conf = <Handler as RequestFilter>::Conf;
+///
+/// assert!(Conf::from_yaml(r#"
+///     root: .
+///     compression_level: 3
+///     unknown_field: flagged
+/// "#).is_err());
+/// ```
+#[proc_macro_derive(RequestFilter, attributes(merge_conf))]
 pub fn derive_request_filter(input: TokenStream) -> TokenStream {
     derive_request_filter::derive_request_filter(input)
         .unwrap_or_else(|err| err.into_compile_error().into())

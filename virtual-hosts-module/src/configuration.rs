@@ -26,8 +26,9 @@ pub struct SubDirConf {
 
 /// Combined configuration structure for virtual hosts
 ///
-/// This merges the settings from both member fields via `serde(flatten)`.
-#[merge_conf]
+/// This merges the settings from both member fields. Deserializing fields that are not contained
+/// in either of the two structures will result in an error.
+#[merge_conf(deny_unknown_fields)]
 pub struct SubDirCombined<C: Default> {
     /// Subdirectory specific settings
     pub subdir: SubDirConf,

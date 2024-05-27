@@ -33,6 +33,12 @@ use std::path::Path;
 
 pub use module_utils_macros::{merge_conf, merge_opt, RequestFilter};
 
+// Required for macros
+#[doc(hidden)]
+pub use serde;
+#[doc(hidden)]
+pub use serde_yaml;
+
 /// Request filter result indicating how the current request should be processed further
 #[derive(Debug, Copy, Clone, PartialEq, Default, Deserialize)]
 pub enum RequestFilterResult {

@@ -131,7 +131,7 @@ impl Default for VirtualHostsAppConf {
 }
 
 /// The combined configuration of Pingora server and [`VirtualHostsHandler`].
-#[merge_conf]
+#[merge_conf(deny_unknown_fields)]
 struct Conf {
     app: VirtualHostsAppConf,
     server: ServerConf,
