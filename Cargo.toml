@@ -24,6 +24,9 @@ default-members = [
   "virtual-hosts-module",
 ]
 
+[workspace.package]
+rust-version = "1.74"
+
 [workspace.dependencies]
 async-trait = "0.1.42"
 bytes = "1.0"

@@ -7,6 +7,7 @@ categories = ["network-programming", "web-programming::http-server"]
 keywords = ["url-rewrite", "url", "web-server", "http", "pingora"]
 license = "Apache-2.0"
 edition = "2021"
+rust-version.workspace = true
 description = """
 A module pre-processing request URLs to rewrite or redirect them.
 """

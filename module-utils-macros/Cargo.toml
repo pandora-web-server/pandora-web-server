@@ -7,6 +7,7 @@ categories = ["network-programming", "web-programming::http-server"]
 keywords = ["utilities", "web-server", "http", "pingora"]
 license = "Apache-2.0"
 edition = "2021"
+rust-version.workspace = true
 description = """
 Macro definitions for module-utils crate.
 """

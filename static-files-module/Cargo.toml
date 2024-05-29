@@ -8,6 +8,7 @@ keywords = ["static", "static-files", "web-server", "http", "pingora"]
 exclude = ["testdata/"]
 license = "Apache-2.0"
 edition = "2021"
+rust-version.workspace = true
 description = """
 A module for serving static files with Pingora.
 """
