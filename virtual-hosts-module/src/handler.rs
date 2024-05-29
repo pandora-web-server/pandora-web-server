@@ -20,6 +20,7 @@ use module_utils::router::Router;
 use module_utils::{RequestFilter, RequestFilterResult};
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::ops::{Deref, DerefMut};
 
 use crate::configuration::VirtualHostsConf;
 
@@ -38,6 +39,27 @@ fn set_uri_path(uri: &Uri, path: &[u8]) -> Uri {
     parts.try_into().unwrap_or_else(|_| uri.clone())
 }
 
+/// Context for the virtual hosts handler
+#[derive(Debug)]
+pub struct VirtualHostsCtx<Ctx> {
+    index: Option<usize>,
+    handler: Ctx,
+}
+
+impl<Ctx> Deref for VirtualHostsCtx<Ctx> {
+    type Target = Ctx;
+
+    fn deref(&self) -> &Self::Target {
+        &self.handler
+    }
+}
+
+impl<Ctx> DerefMut for VirtualHostsCtx<Ctx> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.handler
+    }
+}
+
 /// Handler for Pingora’s `request_filter` phase
 #[derive(Debug)]
 pub struct VirtualHostsHandler<H: Debug> {
@@ -51,15 +73,29 @@ impl<H: Debug> VirtualHostsHandler<H> {
         &self,
         host: impl AsRef<[u8]>,
         path: impl AsRef<[u8]>,
-    ) -> Option<(&H, Option<Vec<u8>>)> {
-        self.handlers
-            .lookup(&host, &path)
-            .map(|((strip_prefix, handler), tail)| {
-                (
-                    handler,
-                    tail.filter(|_| *strip_prefix).map(|t| t.as_ref().to_vec()),
-                )
-            })
+    ) -> Option<(&H, usize, Option<Vec<u8>>)> {
+        self.handlers.lookup(&host, &path).map(|(result, tail)| {
+            let (strip_prefix, handler) = result.as_value();
+            let index = result.index();
+            (
+                handler,
+                index,
+                tail.filter(|_| *strip_prefix).map(|t| t.as_ref().to_vec()),
+            )
+        })
+    }
+
+    /// Retrieves the handler which was previously called for this virtual host.
+    ///
+    /// This will return `None` if the `request_filter` handler wasn’t called for this context yet
+    /// or it didn’t find a matching handler.
+    pub fn as_inner(&self, ctx: &<Self as RequestFilter>::CTX) -> Option<&H>
+    where
+        H: RequestFilter + Sync,
+        H::Conf: Default,
+        H::CTX: Send,
+    {
+        self.handlers.retrieve(ctx.index?).map(|(_, h)| h)
     }
 }
 
@@ -72,10 +108,13 @@ where
 {
     type Conf = VirtualHostsConf<H::Conf>;
 
-    type CTX = H::CTX;
+    type CTX = VirtualHostsCtx<H::CTX>;
 
     fn new_ctx() -> Self::CTX {
-        H::new_ctx()
+        Self::CTX {
+            index: None,
+            handler: H::new_ctx(),
+        }
     }
 
     async fn request_filter(
@@ -101,8 +140,13 @@ where
                     .and_then(|default| self.best_match(default, path))
             });
 
-        if let Some((handler, new_path)) = handler {
+        if let Some((handler, index, new_path)) = handler {
+            ctx.index = Some(index);
             if let Some(new_path) = new_path {
+                // Capture original URI, logging might need it
+                let orig_uri = session.req_header().uri.clone();
+                session.extensions_mut().insert(orig_uri);
+
                 let header = session.req_header_mut();
                 header.set_uri(set_uri_path(&header.uri, &new_path));
             }
@@ -199,9 +243,15 @@ mod tests {
         }
     }
 
-    fn handler(add_default: bool) -> VirtualHostsHandler<Handler> {
-        VirtualHostsConf::<Conf>::from_yaml(format!(
-            r#"
+    fn handler(
+        add_default: bool,
+    ) -> (
+        VirtualHostsHandler<Handler>,
+        <VirtualHostsHandler<Handler> as RequestFilter>::CTX,
+    ) {
+        (
+            VirtualHostsConf::<Conf>::from_yaml(format!(
+                r#"
                 vhosts:
                     localhost:8080:
                         aliases: ["127.0.0.1:8080", "[::1]:8080"]
@@ -217,10 +267,12 @@ mod tests {
                         aliases: ["example.com:8080"]
                         result: Handled
             "#
-        ))
-        .unwrap()
-        .try_into()
-        .unwrap()
+            ))
+            .unwrap()
+            .try_into()
+            .unwrap(),
+            VirtualHostsHandler::<Handler>::new_ctx(),
+        )
     }
 
     async fn make_session(uri: &str, host: Option<&str>) -> TestSession {
@@ -242,10 +294,10 @@ mod tests {
 
     #[test(tokio::test)]
     async fn host_match() -> Result<(), Box<Error>> {
-        let handler = handler(true);
+        let (handler, mut ctx) = handler(true);
         let mut session = make_session("/", Some("example.com")).await;
         assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
+            handler.request_filter(&mut session, &mut ctx).await?,
             RequestFilterResult::Handled
         );
         Ok(())
@@ -253,10 +305,10 @@ mod tests {
 
     #[test(tokio::test)]
     async fn host_alias_match() -> Result<(), Box<Error>> {
-        let handler = handler(false);
+        let (handler, mut ctx) = handler(false);
         let mut session = make_session("/", Some("[::1]:8080")).await;
         assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
+            handler.request_filter(&mut session, &mut ctx).await?,
             RequestFilterResult::ResponseSent
         );
         Ok(())
@@ -264,10 +316,10 @@ mod tests {
 
     #[test(tokio::test)]
     async fn uri_match() -> Result<(), Box<Error>> {
-        let handler = handler(false);
+        let (handler, mut ctx) = handler(false);
         let mut session = make_session("https://example.com/", None).await;
         assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
+            handler.request_filter(&mut session, &mut ctx).await?,
             RequestFilterResult::Handled
         );
         Ok(())
@@ -275,10 +327,10 @@ mod tests {
 
     #[test(tokio::test)]
     async fn uri_alias_match() -> Result<(), Box<Error>> {
-        let handler = handler(false);
+        let (handler, mut ctx) = handler(false);
         let mut session = make_session("http://[::1]:8080/", None).await;
         assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
+            handler.request_filter(&mut session, &mut ctx).await?,
             RequestFilterResult::ResponseSent
         );
         Ok(())
@@ -286,10 +338,10 @@ mod tests {
 
     #[test(tokio::test)]
     async fn host_precedence() -> Result<(), Box<Error>> {
-        let handler = handler(false);
+        let (handler, mut ctx) = handler(false);
         let mut session = make_session("https://localhost:8080/", Some("example.com")).await;
         assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
+            handler.request_filter(&mut session, &mut ctx).await?,
             RequestFilterResult::Handled
         );
         Ok(())
@@ -297,10 +349,10 @@ mod tests {
 
     #[test(tokio::test)]
     async fn default_fallback() -> Result<(), Box<Error>> {
-        let handler = handler(true);
+        let (handler, mut ctx) = handler(true);
         let mut session = make_session("/", Some("example.net")).await;
         assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
+            handler.request_filter(&mut session, &mut ctx).await?,
             RequestFilterResult::ResponseSent
         );
         Ok(())
@@ -308,10 +360,10 @@ mod tests {
 
     #[test(tokio::test)]
     async fn no_default_fallback() -> Result<(), Box<Error>> {
-        let handler = handler(false);
+        let (handler, mut ctx) = handler(false);
         let mut session = make_session("/", Some("example.net")).await;
         assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
+            handler.request_filter(&mut session, &mut ctx).await?,
             RequestFilterResult::Unhandled
         );
         Ok(())
@@ -319,73 +371,85 @@ mod tests {
 
     #[test(tokio::test)]
     async fn subdir_match() -> Result<(), Box<Error>> {
-        let handler = handler(true);
+        let (handler, mut ctx) = handler(true);
         let mut session = make_session("/subdir/", Some("localhost:8080")).await;
         assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
+            handler.request_filter(&mut session, &mut ctx).await?,
             RequestFilterResult::Unhandled
         );
         assert_eq!(session.req_header().uri, "/");
+        assert_eq!(session.extensions().get::<Uri>().unwrap(), "/subdir/");
         Ok(())
     }
 
     #[test(tokio::test)]
     async fn subdir_match_without_slash() -> Result<(), Box<Error>> {
-        let handler = handler(true);
+        let (handler, mut ctx) = handler(true);
         let mut session = make_session("/subdir", Some("localhost:8080")).await;
         assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
+            handler.request_filter(&mut session, &mut ctx).await?,
             RequestFilterResult::Unhandled
         );
         assert_eq!(session.req_header().uri, "/");
+        assert_eq!(session.extensions().get::<Uri>().unwrap(), "/subdir");
         Ok(())
     }
 
     #[test(tokio::test)]
     async fn subdir_match_with_suffix() -> Result<(), Box<Error>> {
-        let handler = handler(true);
+        let (handler, mut ctx) = handler(true);
         let mut session = make_session("/subdir/xyz?abc", Some("localhost:8080")).await;
         assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
+            handler.request_filter(&mut session, &mut ctx).await?,
             RequestFilterResult::Unhandled
         );
         assert_eq!(session.req_header().uri, "/xyz?abc");
+        assert_eq!(
+            session.extensions().get::<Uri>().unwrap(),
+            "/subdir/xyz?abc"
+        );
         Ok(())
     }
 
     #[test(tokio::test)]
     async fn subdir_match_extra_slashes() -> Result<(), Box<Error>> {
-        let handler = handler(true);
+        let (handler, mut ctx) = handler(true);
         let mut session = make_session("//subdir///xyz//", Some("localhost:8080")).await;
         assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
+            handler.request_filter(&mut session, &mut ctx).await?,
             RequestFilterResult::Unhandled
         );
         assert_eq!(session.req_header().uri, "///xyz//");
+        assert_eq!(
+            session.extensions().get::<Uri>().unwrap(),
+            "//subdir///xyz//"
+        );
         Ok(())
     }
 
     #[test(tokio::test)]
     async fn subdir_no_match() -> Result<(), Box<Error>> {
-        let handler = handler(true);
+        let (handler, mut ctx) = handler(true);
         let mut session = make_session("/subdir_xyz", Some("localhost:8080")).await;
         assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
+            handler.request_filter(&mut session, &mut ctx).await?,
             RequestFilterResult::ResponseSent
         );
         assert_eq!(session.req_header().uri, "/subdir_xyz");
+        assert!(session.extensions().get::<Uri>().is_none());
         Ok(())
     }
 
     #[test(tokio::test)]
     async fn subdir_longer_match() -> Result<(), Box<Error>> {
-        let handler = handler(true);
+        let (handler, mut ctx) = handler(true);
         let mut session = make_session("/subdir/subsub/xyz", Some("localhost:8080")).await;
         assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
+            handler.request_filter(&mut session, &mut ctx).await?,
             RequestFilterResult::Handled
         );
         assert_eq!(session.req_header().uri, "/subdir/subsub/xyz");
+        assert!(session.extensions().get::<Uri>().is_none());
         Ok(())
     }
 }

@@ -118,7 +118,7 @@ impl RequestFilter for RewriteHandler {
 
             let ((list_exact, list_prefix), tail) =
                 if let Some(match_) = self.router.lookup("", path) {
-                    match_
+                    (match_.0.as_value(), match_.1)
                 } else {
                     trace!("No match for the path");
                     return Ok(RequestFilterResult::Unhandled);

@@ -86,9 +86,9 @@ impl RequestFilter for HeadersHandler {
             if let Some((conf, tail)) = match_ {
                 let tail = tail.as_ref().map(|t| t.as_ref()).unwrap_or(path.as_bytes());
                 if tail == b"/" {
-                    &conf.exact
+                    &conf.as_value().exact
                 } else {
-                    &conf.prefix
+                    &conf.as_value().prefix
                 }
             } else {
                 return Ok(RequestFilterResult::Unhandled);

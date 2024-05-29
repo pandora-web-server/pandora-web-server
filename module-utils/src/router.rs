@@ -27,6 +27,7 @@
 use log::warn;
 use std::fmt::Debug;
 
+pub use crate::trie::LookupResult;
 use crate::trie::{Trie, TrieBuilder, SEPARATOR};
 
 /// The router implementation.
@@ -44,8 +45,8 @@ use crate::trie::{Trie, TrieBuilder, SEPARATOR};
 /// builder.push("example.com", "/dir/", "Website subdirectory");
 ///
 /// let router = builder.build();
-/// assert!(matches!(router.lookup("localhost", "/"), Some((&"Localhost root", _))));
-/// assert!(matches!(router.lookup("example.com", "/dir/file"), Some((&"Website subdirectory", _))));
+/// assert!(router.lookup("localhost", "/").is_some_and(|(value, _)| *value == "Localhost root"));
+/// assert!(router.lookup("example.com", "/dir/file").is_some_and(|(value, _)| *value == "Website subdirectory"));
 /// ```
 #[derive(Debug)]
 pub struct Router<Value: Debug> {
@@ -75,7 +76,7 @@ impl<Value: Debug> Router<Value> {
         &self,
         host: &(impl AsRef<[u8]> + ?Sized),
         path: &'a (impl AsRef<[u8]> + ?Sized),
-    ) -> Option<(&Value, Option<impl AsRef<[u8]> + 'a>)> {
+    ) -> Option<(LookupResult<'_, Value>, Option<impl AsRef<[u8]> + 'a>)> {
         let path = path.as_ref();
         let (value, matched_segments) = self.trie.lookup(make_key(host, path))?;
         let host_segments = if host.as_ref().is_empty() { 0 } else { 1 };
@@ -89,6 +90,11 @@ impl<Value: Debug> Router<Value> {
         };
 
         Some((value, tail))
+    }
+
+    /// Retrieves the value from a previous lookup by its index
+    pub fn retrieve(&self, index: usize) -> Option<&Value> {
+        self.trie.retrieve(index)
     }
 }
 
