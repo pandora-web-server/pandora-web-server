@@ -36,6 +36,7 @@
 //! ```
 
 use async_trait::async_trait;
+use common_log_module::{CommonLogHandler, CommonLogOpt};
 use compression_module::{CompressionHandler, CompressionOpt};
 use headers_module::HeadersHandler;
 use log::error;
@@ -65,6 +66,7 @@ impl StaticRootApp {
 /// Handler combining Compression and Static Files modules
 #[derive(Debug, RequestFilter)]
 struct Handler {
+    log: CommonLogHandler,
     compression: CompressionHandler,
     rewrite: RewriteHandler,
     headers: HeadersHandler,
@@ -87,6 +89,7 @@ struct StaticRootAppOpt {
 struct Opt {
     app: StaticRootAppOpt,
     server: ServerOpt,
+    log: CommonLogOpt,
     compression: CompressionOpt,
     static_files: StaticFilesOpt,
 }
@@ -137,6 +140,10 @@ impl ProxyHttp for StaticRootApp {
     ) -> Result<Box<HttpPeer>, Box<Error>> {
         Err(Error::new(ErrorType::HTTPStatus(404)))
     }
+
+    async fn logging(&self, session: &mut Session, _e: Option<&Error>, ctx: &mut Self::CTX) {
+        self.handler.log.logging(session, &mut ctx.log).await;
+    }
 }
 
 fn main() {
@@ -159,6 +166,7 @@ fn main() {
     let mut server = Server::new_with_opt_and_conf(opt.server, conf.server);
     server.bootstrap();
 
+    conf.handler.log.merge_with_opt(opt.log);
     conf.handler.compression.merge_with_opt(opt.compression);
     conf.handler.static_files.merge_with_opt(opt.static_files);
 

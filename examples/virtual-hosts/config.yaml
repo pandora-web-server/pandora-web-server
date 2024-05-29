@@ -9,6 +9,8 @@ vhosts:
       - 127.0.0.1:8080
       - "[::1]:8080"
     default: true
+    log_file: localhost.access.log
+    log_format: [remote_addr, -, -, time_local, request, status, bytes_sent, http_referer, http_user_agent, processing_time]
     root: ../../static-files-module/testdata/root
     canonicalize_uri: true
     index_file:
@@ -32,10 +34,13 @@ vhosts:
     subdirs:
       /uncompressed:
         strip_prefix: true
+        log_file: localhost.access.log
         root: ../../static-files-module/testdata/root
         redirect_prefix: /uncompressed
       /reindexed:
         strip_prefix: true
+        log_file: localhost.access.log
+        root: ../../static-files-module/testdata/root
         index_file:
         - file.txt
         canonicalize_uri: false
@@ -47,6 +52,7 @@ vhosts:
     aliases:
       - 127.0.0.1:8081
       - "[::1]:8081"
+    log_file: upstream.access.log
     upstream: https://example.com/
 custom_headers:
 - headers:

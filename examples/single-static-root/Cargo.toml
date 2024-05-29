@@ -6,6 +6,7 @@ publish = false
 
 [dependencies]
 async-trait.workspace = true
+common-log-module.workspace = true
 compression-module.workspace = true
 env_logger.workspace = true
 headers-module.workspace = true

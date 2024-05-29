@@ -4,6 +4,7 @@ listen:
 compression_level: 3
 root: ../../static-files-module/testdata/root
 canonicalize_uri: true
+log_file: "access.log"
 index_file:
 - index.html
 precompressed:

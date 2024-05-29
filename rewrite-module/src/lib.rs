@@ -103,7 +103,6 @@
 //! use module_utils::RequestFilter;
 //! use pingora_core::Error;
 //! use pingora_core::upstreams::peer::HttpPeer;
-//! use pingora_http::ResponseHeader;
 //! use pingora_proxy::{ProxyHttp, Session};
 //!
 //! # use rewrite_module::RewriteHandler;

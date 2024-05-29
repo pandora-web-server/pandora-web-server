@@ -56,6 +56,7 @@
 //! ```
 
 use async_trait::async_trait;
+use common_log_module::CommonLogHandler;
 use compression_module::CompressionHandler;
 use headers_module::HeadersHandler;
 use log::error;
@@ -91,6 +92,7 @@ struct Handler {
 
 #[derive(Debug, RequestFilter)]
 struct HostHandler {
+    log: CommonLogHandler,
     compression: CompressionHandler,
     rewrite: RewriteHandler,
     upstream: UpstreamHandler,
@@ -170,6 +172,15 @@ impl ProxyHttp for VirtualHostsApp {
     ) {
         self.handler
             .handle_response(session, upstream_response, ctx)
+    }
+
+    async fn logging(&self, session: &mut Session, _e: Option<&Error>, ctx: &mut Self::CTX) {
+        if let Some(handler) = self.handler.virtual_hosts.as_inner(&ctx.virtual_hosts) {
+            handler
+                .log
+                .logging(session, &mut ctx.virtual_hosts.log)
+                .await;
+        }
     }
 }
 

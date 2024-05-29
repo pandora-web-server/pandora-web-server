@@ -19,6 +19,7 @@ use async_trait::async_trait;
 use bytes::{Bytes, BytesMut};
 use http::{header, Extensions};
 pub use pingora_core::protocols::http::HttpTask;
+pub use pingora_core::protocols::l4::socket::SocketAddr;
 pub use pingora_core::upstreams::peer::HttpPeer;
 pub use pingora_core::{Error, ErrorType};
 pub use pingora_http::{IntoCaseHeaderName, RequestHeader, ResponseHeader};
