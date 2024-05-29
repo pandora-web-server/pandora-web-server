@@ -162,7 +162,7 @@ impl RequestFilter for RewriteHandler {
                             session
                                 .req_header()
                                 .headers
-                                .get(name)
+                                .get(name.replace('_', "-"))
                                 .map(HeaderValue::as_bytes)
                                 .unwrap_or(b""),
                         )
@@ -372,7 +372,7 @@ mod tests {
                 rewrite_rules:
                 -
                     from: /path/*
-                    to: /another${tail}?${query}&host=${http_host}
+                    to: /another${tail}?${query}&host=${http_host}&test=${http_test_header}
             "#,
         );
 
@@ -385,7 +385,7 @@ mod tests {
         );
         assert_eq!(
             session.req_header().uri.to_string(),
-            "/another/file.txt?&host="
+            "/another/file.txt?&host=&test="
         );
 
         let mut session = make_session("/path/file.txt?a=b").await;
@@ -397,13 +397,16 @@ mod tests {
         );
         assert_eq!(
             session.req_header().uri.to_string(),
-            "/another/file.txt?a=b&host="
+            "/another/file.txt?a=b&host=&test="
         );
 
         let mut session = make_session("/path/file.txt?a=b").await;
         session
             .req_header_mut()
             .insert_header("Host", "localhost")?;
+        session
+            .req_header_mut()
+            .insert_header("Test-Header", "successful")?;
         assert_eq!(
             handler
                 .request_filter(&mut session, &mut RewriteHandler::new_ctx())
@@ -412,7 +415,7 @@ mod tests {
         );
         assert_eq!(
             session.req_header().uri.to_string(),
-            "/another/file.txt?a=b&host=localhost"
+            "/another/file.txt?a=b&host=localhost&test=successful"
         );
 
         Ok(())
