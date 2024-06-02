@@ -25,24 +25,17 @@ fn generate_deserialize_map_impl(input: &DeriveInput, fields: &FieldsNamed) -> T
     let vis = &input.vis;
     let struct_name = type_name_short(input);
     let (de, generics, generics_short) = generics_with_de(input);
-    let where_clause = where_clause(
-        input,
-        fields,
-        syn::parse2(quote! {::module_utils::DeserializeMap<#de>}).unwrap(),
-    );
+    let where_clause = where_clause(input, fields, quote! {::module_utils::DeserializeMap<#de>});
 
     let field_name = fields
         .named
         .iter()
         .map(|field| field.ident.as_ref())
         .collect::<Vec<_>>();
-    let field_type = fields
+    let field_visitor = fields
         .named
         .iter()
         .map(|field| &field.ty)
-        .collect::<Vec<_>>();
-    let field_visitor = field_type
-        .iter()
         .map(|ty| quote! {<#ty as ::module_utils::DeserializeMap<#de>>::Visitor})
         .collect::<Vec<_>>();
     quote! {
@@ -117,11 +110,10 @@ fn generate_deserialize_map_impl(input: &DeriveInput, fields: &FieldsNamed) -> T
             {
                 type Visitor = __Visitor<#generics_short>;
 
-                fn visitor() -> Self::Visitor {
+                fn visitor(self) -> Self::Visitor {
                     Self::Visitor {
                         #(
-                            #field_name:
-                                <#field_type as ::module_utils::DeserializeMap>::visitor(),
+                            #field_name: self.#field_name.visitor(),
                         )*
                     }
                 }

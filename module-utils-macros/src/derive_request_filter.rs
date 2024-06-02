@@ -24,11 +24,7 @@ fn generate_request_filter_impl(
 ) -> Result<TokenStream, Error> {
     let struct_name = type_name_short(input);
     let (generics, generics_short) = generics(input);
-    let where_clause = where_clause(
-        input,
-        fields,
-        syn::parse2(quote! {::std::marker::Sync}).unwrap(),
-    );
+    let where_clause = where_clause(input, fields, quote! {::std::marker::Sync});
 
     // Produce merged handler configuration
     let mut conf = input.clone();

@@ -26,7 +26,7 @@ mod trie;
 use async_trait::async_trait;
 use log::trace;
 use pingora::{wrap_session, Error, ErrorType, ResponseHeader, Session, SessionWrapper};
-use serde::Deserialize;
+use serde::{de::DeserializeSeed, Deserialize};
 use std::fmt::Debug;
 use std::fs::File;
 use std::io::BufReader;
@@ -149,18 +149,32 @@ pub trait FromYaml {
     where
         Self: Sized;
 
-    /// Loads configuration from a YAML file.
+    /// Loads configuration from a YAML file, using existing data for missing fields.
+    fn merge_load_from_yaml(self, path: impl AsRef<Path>) -> Result<Self, Box<Error>>
+    where
+        Self: Sized;
+
+    /// Loads configuration from a YAML string.
     fn from_yaml(yaml_conf: impl AsRef<str>) -> Result<Self, Box<Error>>
+    where
+        Self: Sized;
+
+    /// Loads configuration from a YAML string, using existing data for missing fields.
+    fn merge_from_yaml(self, yaml_conf: impl AsRef<str>) -> Result<Self, Box<Error>>
     where
         Self: Sized;
 }
 
 impl<D> FromYaml for D
 where
-    D: Debug + ?Sized,
-    for<'de> D: Deserialize<'de>,
+    D: Debug + Default,
+    for<'de> D: DeserializeSeed<'de, Value = D>,
 {
     fn load_from_yaml(path: impl AsRef<Path>) -> Result<Self, Box<Error>> {
+        Self::default().merge_load_from_yaml(path)
+    }
+
+    fn merge_load_from_yaml(self, path: impl AsRef<Path>) -> Result<Self, Box<Error>> {
         let file = File::open(path.as_ref()).map_err(|err| {
             Error::because(
                 ErrorType::FileOpenError,
@@ -170,22 +184,30 @@ where
         })?;
         let reader = BufReader::new(file);
 
-        let conf = serde_yaml::from_reader(reader).map_err(|err| {
-            Error::because(
-                ErrorType::FileReadError,
-                "failed reading configuration file",
-                err,
-            )
-        })?;
+        let conf = self
+            .deserialize(serde_yaml::Deserializer::from_reader(reader))
+            .map_err(|err| {
+                Error::because(
+                    ErrorType::FileReadError,
+                    "failed reading configuration file",
+                    err,
+                )
+            })?;
         trace!("Loaded configuration file: {conf:#?}");
 
         Ok(conf)
     }
 
     fn from_yaml(yaml_conf: impl AsRef<str>) -> Result<Self, Box<Error>> {
-        let conf = serde_yaml::from_str(yaml_conf.as_ref()).map_err(|err| {
-            Error::because(ErrorType::ReadError, "failed reading configuration", err)
-        })?;
+        Self::default().merge_from_yaml(yaml_conf)
+    }
+
+    fn merge_from_yaml(self, yaml_conf: impl AsRef<str>) -> Result<Self, Box<Error>> {
+        let conf = self
+            .deserialize(serde_yaml::Deserializer::from_str(yaml_conf.as_ref()))
+            .map_err(|err| {
+                Error::because(ErrorType::ReadError, "failed reading configuration", err)
+            })?;
         trace!("Loaded configuration: {conf:#?}");
 
         Ok(conf)

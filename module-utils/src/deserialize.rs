@@ -27,7 +27,7 @@ pub trait DeserializeMap<'de>: Deserialize<'de> {
     type Visitor: MapVisitor<'de, Value = Self>;
 
     /// Creates a [`MapVisitor`] instance that can be used to deserialize the current type.
-    fn visitor() -> Self::Visitor;
+    fn visitor(self) -> Self::Visitor;
 }
 
 /// A special visitor type used by [`DeserializeMap`]
@@ -100,9 +100,9 @@ macro_rules! impl_deserialize_map {
         impl DeserializeMap<'_> for $name {
             type Visitor = Visitor;
 
-            fn visitor() -> Self::Visitor {
+            fn visitor(self) -> Self::Visitor {
                 Visitor {
-                    inner: <$name>::default(),
+                    inner: self,
                 }
             }
         }

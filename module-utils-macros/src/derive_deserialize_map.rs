@@ -140,7 +140,7 @@ fn generate_deserialize_map_impl(
     let where_clause = where_clause(
         input,
         fields,
-        syn::parse2(quote! {::module_utils::serde::Deserialize<#de>}).unwrap(),
+        quote! {::module_utils::serde::Deserialize<#de>},
     );
 
     let mut field_attrs = fields
@@ -215,9 +215,9 @@ fn generate_deserialize_map_impl(
             {
                 type Visitor = __Visitor<#generics_short>;
 
-                fn visitor() -> Self::Visitor {
+                fn visitor(self) -> Self::Visitor {
                     Self::Visitor {
-                        inner: <#struct_name as ::std::default::Default>::default(),
+                        inner: self,
                         marker: ::std::marker::PhantomData,
                     }
                 }
@@ -246,6 +246,18 @@ pub(crate) fn generate_deserialize_impl(input: &DeriveInput) -> TokenStream2 {
     quote! {
         impl<#generics> ::module_utils::serde::Deserialize<#de> for #struct_name #where_clause {
             fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
+            where
+                D: ::module_utils::serde::Deserializer<#de>
+            {
+                use ::module_utils::serde::de::DeserializeSeed;
+                <Self as ::std::default::Default>::default().deserialize(deserializer)
+            }
+        }
+
+        impl<#generics> ::module_utils::serde::de::DeserializeSeed<#de> for #struct_name #where_clause {
+            type Value = Self;
+
+            fn deserialize<D>(self, deserializer: D) -> ::std::result::Result<Self::Value, D::Error>
             where
                 D: ::module_utils::serde::Deserializer<#de>
             {
@@ -302,7 +314,7 @@ pub(crate) fn generate_deserialize_impl(input: &DeriveInput) -> TokenStream2 {
                 }
 
                 let visitor = __Visitor {
-                    inner: <Self as DeserializeMap<#de>>::visitor(),
+                    inner: self.visitor(),
                 };
                 deserializer.deserialize_map(visitor)
             }

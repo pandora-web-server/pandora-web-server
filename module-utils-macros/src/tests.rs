@@ -14,7 +14,7 @@
 
 use async_trait::async_trait;
 use module_utils::pingora::{Error, RequestHeader, SessionWrapper, TestSession};
-use module_utils::{DeserializeMap, FromYaml, RequestFilter, RequestFilterResult};
+use module_utils::{merge_conf, DeserializeMap, FromYaml, RequestFilter, RequestFilterResult};
 use test_log::test;
 
 #[derive(Debug, Default, DeserializeMap)]
@@ -261,4 +261,70 @@ fn field_attributes() {
     assert_eq!(conf.value3.value, String::new());
     assert_eq!(conf.value4.value, String::new());
     assert!(conf.value5.is_none());
+}
+
+#[test]
+fn from_yaml_seed() {
+    #[derive(Debug, Default, DeserializeMap)]
+    struct Conf1 {
+        value1: String,
+        value2: u32,
+    }
+
+    let conf = Conf1::from_yaml(
+        r#"
+            value1: hi
+            value2: 12
+        "#,
+    )
+    .unwrap();
+    assert_eq!(conf.value1, "hi".to_owned());
+    assert_eq!(conf.value2, 12);
+
+    let conf = conf.merge_from_yaml("value2: 34").unwrap();
+    assert_eq!(conf.value1, "hi".to_owned());
+    assert_eq!(conf.value2, 34);
+
+    let conf = conf.merge_from_yaml("value1: not hi").unwrap();
+    assert_eq!(conf.value1, "not hi".to_owned());
+    assert_eq!(conf.value2, 34);
+
+    #[derive(Debug, Default, DeserializeMap)]
+    struct Conf2 {
+        value3: bool,
+    }
+
+    #[merge_conf]
+    struct Conf {
+        conf1: Conf1,
+        conf2: Conf2,
+    }
+
+    let conf = Conf::from_yaml(
+        r#"
+            value1: hi
+            value2: 12
+        "#,
+    )
+    .unwrap();
+    assert_eq!(conf.conf1.value1, "hi".to_owned());
+    assert_eq!(conf.conf1.value2, 12);
+    assert_eq!(conf.conf2.value3, false);
+
+    let conf = conf.merge_from_yaml("value3: true").unwrap();
+    assert_eq!(conf.conf1.value1, "hi".to_owned());
+    assert_eq!(conf.conf1.value2, 12);
+    assert_eq!(conf.conf2.value3, true);
+
+    let conf = conf
+        .merge_from_yaml(
+            r#"
+            value2: 34
+            value3: false
+        "#,
+        )
+        .unwrap();
+    assert_eq!(conf.conf1.value1, "hi".to_owned());
+    assert_eq!(conf.conf1.value2, 34);
+    assert_eq!(conf.conf2.value3, false);
 }

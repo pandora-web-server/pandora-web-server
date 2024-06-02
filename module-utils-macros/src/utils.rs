@@ -14,8 +14,9 @@
 
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
+use syn::parse::Parser;
 use syn::punctuated::Punctuated;
-use syn::token::Comma;
+use syn::token::{Comma, Plus};
 use syn::visit::Visit;
 use syn::{
     Data, DataStruct, DeriveInput, Fields, FieldsNamed, GenericParam, Ident, Lifetime,
@@ -160,8 +161,12 @@ pub(crate) fn generics_with_de(
 pub(crate) fn where_clause(
     ty: &DeriveInput,
     fields: &FieldsNamed,
-    field_bound: TypeParamBound,
+    field_bound: TokenStream,
 ) -> WhereClause {
+    let field_bound = Punctuated::<TypeParamBound, Plus>::parse_terminated
+        .parse2(field_bound)
+        .unwrap();
+
     let mut where_clause = ty
         .generics
         .where_clause

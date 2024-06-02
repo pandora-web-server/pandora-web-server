@@ -27,7 +27,7 @@ pub struct SubDirConf {
 /// This merges the settings from both member fields. Deserializing fields that are not contained
 /// in either of the two structures will result in an error.
 #[merge_conf]
-pub struct SubDirCombined<C> {
+pub struct SubDirCombined<C: Default> {
     /// Subdirectory specific settings
     pub subdir: SubDirConf,
     /// Generic handler settings

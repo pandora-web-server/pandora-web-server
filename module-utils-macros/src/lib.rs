@@ -180,16 +180,17 @@ pub fn derive_request_filter(input: TokenStream) -> TokenStream {
         .unwrap_or_else(|err| err.into_compile_error().into())
 }
 
-/// This macro will automatically implement `DeserializeMap` and `serde::Deserialize` traits for a
-/// structure.
+/// This macro will automatically implement `DeserializeMap`, `serde::Deserialize` and
+/// `serde::DeserializeSeed` traits for a structure.
 ///
 /// This allows `#[merge_conf]` macro to merge this structure efficiently without an
 /// intermediate storage that `#[serde(flatten)]` would use. It also allows flagging unsupported
 /// configuration fields in merged configurations, effectively implementing
 /// `#[serde(deny_unknown_fields)]` that would have been incompatible with `#[serde(flatten)]`.
 ///
-/// The individual fields need to implement `serde::Deserialize`. The following field attributes
-/// are supported, striving for compatibility with the corresponding
+/// The structure has to implement `Default` which will be used as initial value for
+/// `serde::Deserialize`. Individual fields need to implement `serde::Deserialize`. The following
+/// field attributes are supported, striving for compatibility with the corresponding
 /// [Serde field attributes](https://serde.rs/field-attrs.html):
 ///
 /// * `#[module_utils(rename = "name")]` or
@@ -215,10 +216,10 @@ pub fn derive_request_filter(input: TokenStream) -> TokenStream {
 ///   Same as `deserialize_with` but `$module::deserialize` will be used as the `deserialize_with`
 ///   function.
 ///
-/// Unknown fields will cause a deserialization error, missing fields will be returned with their
-/// default value. Essentially,
+/// Unknown fields will cause a deserialization error, missing fields will be left at their initial
+/// value. This is similar to the behavior of
 /// [Serde container attributes](https://serde.rs/container-attrs.html)
-/// `#[serde(deny_unknown_fields)]` and `#[serde(default)]` are implied.
+/// `#[serde(deny_unknown_fields)]` and `#[serde(default)]`.
 ///
 /// Example:
 ///
