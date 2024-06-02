@@ -40,14 +40,13 @@ use common_log_module::{CommonLogHandler, CommonLogOpt};
 use compression_module::{CompressionHandler, CompressionOpt};
 use headers_module::HeadersHandler;
 use log::error;
-use module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
+use module_utils::{merge_conf, merge_opt, DeserializeMap, FromYaml, RequestFilter};
 use pingora_core::server::configuration::{Opt as ServerOpt, ServerConf};
 use pingora_core::server::Server;
 use pingora_core::upstreams::peer::HttpPeer;
 use pingora_core::{Error, ErrorType};
 use pingora_proxy::{http_proxy_service, ProxyHttp, Session};
 use rewrite_module::RewriteHandler;
-use serde::Deserialize;
 use static_files_module::{StaticFilesHandler, StaticFilesOpt};
 use structopt::StructOpt;
 
@@ -95,7 +94,7 @@ struct Opt {
 }
 
 /// Application-specific configuration settings
-#[derive(Debug, Deserialize)]
+#[derive(Debug, DeserializeMap)]
 struct StaticRootAppConf {
     /// List of address/port combinations to listen on, e.g. "127.0.0.1:8080".
     listen: Vec<String>,
@@ -110,7 +109,7 @@ impl Default for StaticRootAppConf {
 }
 
 /// The combined configuration of Pingora server and [`StaticFilesHandler`].
-#[merge_conf(deny_unknown_fields)]
+#[merge_conf]
 struct Conf {
     app: StaticRootAppConf,
     server: ServerConf,

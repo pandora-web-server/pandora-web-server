@@ -20,16 +20,18 @@ proc-macro = true
 [dependencies]
 proc-macro2 = "1.0.84"
 quote = "1.0.36"
-syn = { version = "2.0.62", features = ["full"] }
+syn = { version = "2.0.62", features = ["extra-traits", "full", "visit"] }
 
 [dev-dependencies]
 async-trait.workspace = true
 compression-module.workspace = true
+env_logger.workspace = true
 module-utils.workspace = true
 pingora-core.workspace = true
-serde.workspace = true
 static-files-module.workspace = true
 structopt.workspace = true
+test-log.workspace = true
+tokio.workspace = true
 
 [lints]
 workspace = true

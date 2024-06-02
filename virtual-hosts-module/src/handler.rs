@@ -205,11 +205,10 @@ mod tests {
 
     use async_trait::async_trait;
     use module_utils::pingora::{RequestHeader, TestSession};
-    use module_utils::FromYaml;
-    use serde::Deserialize;
+    use module_utils::{DeserializeMap, FromYaml};
     use test_log::test;
 
-    #[derive(Debug, Default, Deserialize)]
+    #[derive(Debug, Default, DeserializeMap)]
     struct Conf {
         result: RequestFilterResult,
     }

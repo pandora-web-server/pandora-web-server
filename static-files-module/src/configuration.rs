@@ -14,7 +14,7 @@
 
 //! Data structures required for `StaticFilesHandler` configuration
 
-use serde::Deserialize;
+use module_utils::DeserializeMap;
 use std::path::PathBuf;
 use structopt::StructOpt;
 
@@ -48,8 +48,7 @@ pub struct StaticFilesOpt {
 }
 
 /// Configuration file settings of the static files module
-#[derive(Debug, PartialEq, Eq, Deserialize)]
-#[serde(default)]
+#[derive(Debug, PartialEq, Eq, DeserializeMap)]
 pub struct StaticFilesConf {
     /// The root directory.
     pub root: Option<PathBuf>,

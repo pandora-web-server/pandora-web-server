@@ -12,13 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use module_utils::merge_conf;
-use serde::Deserialize;
+use module_utils::{merge_conf, DeserializeMap};
 use std::collections::HashMap;
 
 /// Additional configuration settings for a subdirectory
-#[derive(Debug, Default, Deserialize)]
-#[serde(default)]
+#[derive(Debug, Default, DeserializeMap)]
 pub struct SubDirConf {
     /// If `true`, subdirectory will be removed from the URI before passing it on to the handler.
     pub strip_prefix: bool,
@@ -28,8 +26,8 @@ pub struct SubDirConf {
 ///
 /// This merges the settings from both member fields. Deserializing fields that are not contained
 /// in either of the two structures will result in an error.
-#[merge_conf(deny_unknown_fields)]
-pub struct SubDirCombined<C: Default> {
+#[merge_conf]
+pub struct SubDirCombined<C> {
     /// Subdirectory specific settings
     pub subdir: SubDirConf,
     /// Generic handler settings
@@ -37,8 +35,7 @@ pub struct SubDirCombined<C: Default> {
 }
 
 /// Additional configuration settings for a virtual host
-#[derive(Debug, Default, Deserialize)]
-#[serde(default)]
+#[derive(Debug, Default, DeserializeMap)]
 pub struct VirtualHostConf<C: Default> {
     /// List of additional names for the virtual host
     pub aliases: Vec<String>,
@@ -51,7 +48,7 @@ pub struct VirtualHostConf<C: Default> {
 
 /// Combined configuration structure for virtual hosts
 ///
-/// This merges the settings from both member fields via `serde(flatten)`.
+/// This merges the settings from both member fields.
 #[merge_conf]
 pub struct VirtualHostCombined<C: Default> {
     /// Virtual host specific settings
@@ -61,8 +58,7 @@ pub struct VirtualHostCombined<C: Default> {
 }
 
 /// Virtual hosts configuration
-#[derive(Debug, Default, Deserialize)]
-#[serde(default)]
+#[derive(Debug, Default, DeserializeMap)]
 pub struct VirtualHostsConf<C: Default> {
     /// Maps virtual host names to their configuration
     pub vhosts: HashMap<String, VirtualHostCombined<C>>,

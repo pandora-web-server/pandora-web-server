@@ -18,6 +18,7 @@
 #![allow(clippy::mutable_key_type)]
 
 use http::header::{HeaderName, HeaderValue};
+use module_utils::DeserializeMap;
 use serde::{
     de::{Deserializer, Error},
     Deserialize,
@@ -283,7 +284,7 @@ where
 }
 
 /// Configuration for custom headers
-#[derive(Debug, PartialEq, Eq, Clone, Deserialize)]
+#[derive(Debug, Default, PartialEq, Eq, Clone, Deserialize)]
 pub struct CustomHeadersConf {
     /// Map of header names to their respective values
     #[serde(deserialize_with = "deserialize_headers")]
@@ -303,8 +304,7 @@ impl IntoHeaders for CustomHeadersConf {
 }
 
 /// Configuration file settings of the headers module
-#[derive(Debug, Default, PartialEq, Eq, Deserialize)]
-#[serde(default)]
+#[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
 pub struct HeadersConf {
     /// Custom headers, headers configures as name => value map here
     pub custom_headers: Vec<WithMatchRules<CustomHeadersConf>>,

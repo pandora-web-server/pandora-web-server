@@ -113,11 +113,9 @@ use http::header;
 use http::uri::{Scheme, Uri};
 use log::error;
 use module_utils::pingora::{Error, ErrorType, HttpPeer, Session, SessionWrapper};
-use module_utils::{RequestFilter, RequestFilterResult};
-use serde::{
-    de::{Deserializer, Error as _},
-    Deserialize,
-};
+use module_utils::{DeserializeMap, RequestFilter, RequestFilterResult};
+use serde::de::{Deserializer, Error as _};
+use serde::Deserialize as _;
 use std::net::{SocketAddr, ToSocketAddrs};
 use structopt::StructOpt;
 
@@ -142,12 +140,11 @@ where
 }
 
 /// Configuration settings of the compression module
-#[derive(Debug, Default, Deserialize)]
-#[serde(default)]
+#[derive(Debug, Default, DeserializeMap)]
 pub struct UpstreamConf {
     /// http:// or https:// URL identifying the server that requests should be forwarded for.
     /// Path and query parts of the URL have no effect.
-    #[serde(deserialize_with = "deserialize_uri")]
+    #[module_utils(deserialize_with = "deserialize_uri")]
     pub upstream: Option<Uri>,
 }
 

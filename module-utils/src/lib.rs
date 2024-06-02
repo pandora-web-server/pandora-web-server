@@ -17,6 +17,7 @@
 //! This crate contains some helpers that are useful when using `static-files-module` or
 //! `virtual-hosts-module` crates for example.
 
+mod deserialize;
 pub mod pingora;
 pub mod router;
 pub mod standard_response;
@@ -25,13 +26,14 @@ mod trie;
 use async_trait::async_trait;
 use log::trace;
 use pingora::{wrap_session, Error, ErrorType, ResponseHeader, Session, SessionWrapper};
-use serde::{de::DeserializeOwned, Deserialize};
+use serde::Deserialize;
 use std::fmt::Debug;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 
-pub use module_utils_macros::{merge_conf, merge_opt, RequestFilter};
+pub use deserialize::{DeserializeMap, MapVisitor};
+pub use module_utils_macros::{merge_conf, merge_opt, DeserializeMap, RequestFilter};
 
 // Required for macros
 #[doc(hidden)]
@@ -155,7 +157,8 @@ pub trait FromYaml {
 
 impl<D> FromYaml for D
 where
-    D: DeserializeOwned + Debug + ?Sized,
+    D: Debug + ?Sized,
+    for<'de> D: Deserialize<'de>,
 {
     fn load_from_yaml(path: impl AsRef<Path>) -> Result<Self, Box<Error>> {
         let file = File::open(path.as_ref()).map_err(|err| {

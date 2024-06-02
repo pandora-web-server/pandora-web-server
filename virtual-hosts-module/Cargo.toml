@@ -21,7 +21,6 @@ async-trait.workspace = true
 http.workspace = true
 log.workspace = true
 module-utils.workspace = true
-serde.workspace = true
 
 [dev-dependencies]
 env_logger.workspace = true

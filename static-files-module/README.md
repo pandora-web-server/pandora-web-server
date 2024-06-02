@@ -84,14 +84,10 @@ line options and configuration structures respectively, and `module_utils::FromY
 trait helps reading the configuration file.
 
 ```rust
-use log::error;
 use pingora_core::server::configuration::{Opt as ServerOpt, ServerConf};
 use pingora_core::server::Server;
 use module_utils::{FromYaml, merge_opt, merge_conf};
-use serde::Deserialize;
 use static_files_module::{StaticFilesConf, StaticFilesHandler, StaticFilesOpt};
-use std::fs::File;
-use std::io::BufReader;
 use structopt::StructOpt;
 
 // The command line flags from both structures are merged, so that the user doesn't need to

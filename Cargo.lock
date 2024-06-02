@@ -320,7 +320,6 @@ dependencies = [
  "module-utils",
  "pingora-core",
  "pingora-proxy",
- "serde",
  "structopt",
  "test-log",
  "tokio",
@@ -492,7 +491,6 @@ dependencies = [
  "pingora-core",
  "pingora-proxy",
  "rewrite-module",
- "serde",
  "static-files-module",
  "structopt",
 ]
@@ -511,7 +509,6 @@ dependencies = [
  "pingora-core",
  "pingora-proxy",
  "rewrite-module",
- "serde",
  "static-files-module",
  "structopt",
  "upstream-module",
@@ -1094,14 +1091,16 @@ version = "0.2.0"
 dependencies = [
  "async-trait",
  "compression-module",
+ "env_logger",
  "module-utils",
  "pingora-core",
  "proc-macro2",
  "quote",
- "serde",
  "static-files-module",
  "structopt",
  "syn 2.0.64",
+ "test-log",
+ "tokio",
 ]
 
 [[package]]
@@ -2512,7 +2511,6 @@ dependencies = [
  "module-utils",
  "pingora-core",
  "pingora-proxy",
- "serde",
  "static-files-module",
  "structopt",
  "test-log",

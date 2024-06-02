@@ -111,8 +111,7 @@
 
 use async_trait::async_trait;
 use module_utils::pingora::{Error, SessionWrapper};
-use module_utils::{RequestFilter, RequestFilterResult};
-use serde::Deserialize;
+use module_utils::{DeserializeMap, RequestFilter, RequestFilterResult};
 use structopt::StructOpt;
 
 /// Command line options of the compression module
@@ -128,8 +127,7 @@ pub struct CompressionOpt {
 }
 
 /// Configuration settings of the compression module
-#[derive(Debug, Default, Deserialize)]
-#[serde(default)]
+#[derive(Debug, Default, DeserializeMap)]
 pub struct CompressionConf {
     /// Compression level to be used for dynamic compression (omit to disable compression).
     pub compression_level: Option<u32>,
@@ -197,7 +195,7 @@ mod tests {
     use module_utils::FromYaml;
     use test_log::test;
 
-    #[derive(Debug, Deserialize, Default)]
+    #[derive(Debug, DeserializeMap, Default)]
     struct TestConf {}
 
     #[derive(Debug)]

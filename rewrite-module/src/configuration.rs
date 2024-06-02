@@ -14,6 +14,7 @@
 
 //! Structures required to deserialize Rewrite Module configuration from YAML configuration files.
 
+use module_utils::DeserializeMap;
 use regex::Regex;
 use serde::{
     de::{Deserializer, Error},
@@ -359,8 +360,7 @@ impl Default for RewriteRule {
 }
 
 /// Configuration file settings of the rewrite module
-#[derive(Debug, Default, PartialEq, Eq, Deserialize)]
-#[serde(default)]
+#[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
 pub struct RewriteConf {
     /// A list of rewrite rules
     pub rewrite_rules: Vec<RewriteRule>,

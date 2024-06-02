@@ -16,9 +16,13 @@
 //!
 //! You normally shouldn’t use this crate directly but the `module-utils` crate instead.
 
+mod derive_deserialize_map;
 mod derive_request_filter;
 mod merge_conf;
 mod merge_opt;
+#[cfg(test)]
+mod tests;
+mod utils;
 
 use proc_macro::TokenStream;
 
@@ -60,18 +64,17 @@ pub fn merge_opt(_args: TokenStream, input: TokenStream) -> TokenStream {
 }
 
 /// This attribute macro merges the configuration settings from all structs identified as field of
-/// the current struct. The result will implement `serde::Deserialize`, `Debug` and `Default`
-/// automatically. All field types are required to implement `serde::Deserialize`, `Debug` and
-/// `Default`.
+/// the current struct. The result will implement `DeserializeMap`, `Deserialize`, `Debug`
+/// and `Default` traits automatically. All field types are required to implement
+/// `DeserializeMap`, `Debug` and `Default`.
 ///
 /// ```rust
 /// use pingora_core::server::configuration::ServerConf;
-/// use module_utils::{merge_conf, FromYaml};
+/// use module_utils::{merge_conf, DeserializeMap, FromYaml};
 /// use static_files_module::StaticFilesConf;
-/// use serde::Deserialize;
 /// use std::path::PathBuf;
 ///
-/// #[derive(Debug, Default, Deserialize)]
+/// #[derive(Debug, Default, DeserializeMap)]
 /// struct MyAppConf {
 ///     /// IP address and port for the server to listen on
 ///     listen: String,
@@ -88,30 +91,20 @@ pub fn merge_opt(_args: TokenStream, input: TokenStream) -> TokenStream {
 ///     listen: 127.0.0.1:8080
 ///     error_log: error.log
 ///     root: .
-///     unknown_field: ignored
 /// "#).unwrap();
 /// assert_eq!(conf.app.listen, String::from("127.0.0.1:8080"));
 /// assert_eq!(conf.server.error_log, Some(String::from("error.log")));
 /// assert_eq!(conf.static_files.root, Some(PathBuf::from(".")));
 /// ```
 ///
-/// By default, unknown configuration values will be ignored. You can change that behavior by
-/// specifying the `deny_unknown_fields` parameter.
-///
-/// Note that you should only do this for the top-level configuration, not for configurations that
-/// will be merged further. Otherwise you will get errors about fields which this configuration
-/// structure doesn’t know but which are handled one level up.
-///
-/// *Limitations*: `deny_unknown_fields` will only work correctly if the types merged are either
-/// also merged configurations or structs with the default `Deserialize` implementation (calling
-/// `Deserializer::deserialize_struct` with a correct list of fields).
+/// Unknown fields will cause an error during deserialization:
 ///
 /// ```rust
 /// use compression_module::CompressionConf;
 /// use module_utils::{merge_conf, FromYaml};
 /// use static_files_module::StaticFilesConf;
 ///
-/// #[merge_conf(deny_unknown_fields)]
+/// #[merge_conf]
 /// struct Conf {
 ///     compression: CompressionConf,
 ///     static_files: StaticFilesConf,
@@ -124,8 +117,8 @@ pub fn merge_opt(_args: TokenStream, input: TokenStream) -> TokenStream {
 /// "#).is_err());
 /// ```
 #[proc_macro_attribute]
-pub fn merge_conf(attr: TokenStream, input: TokenStream) -> TokenStream {
-    merge_conf::merge_conf(attr, input).unwrap_or_else(|err| err.into_compile_error().into())
+pub fn merge_conf(_attr: TokenStream, input: TokenStream) -> TokenStream {
+    merge_conf::merge_conf(input).unwrap_or_else(|err| err.into_compile_error().into())
 }
 
 /// This macro will automatically implement `RequestFilter` by chaining the handlers identified
@@ -155,14 +148,12 @@ pub fn merge_conf(attr: TokenStream, input: TokenStream) -> TokenStream {
 /// let conf = Conf::from_yaml(r#"
 ///     root: .
 ///     compression_level: 3
-///     unknown_field: ignored
 /// "#).unwrap();
 /// let handler: Handler = conf.try_into().unwrap();
 /// ```
 ///
-/// By default, the generated handler configuration will ignore unknown fields in the configuration
-/// file. If this is a top-level configuration which won’t be merged further, this behavior can be
-/// changed by specifying the `#[merge_conf(deny_unknown_fields)]` attribute:
+/// As this uses `#[merge_conf]` macro for configurations internally, unknown fields in
+/// configuration will cause an error during deserialization:
 ///
 /// ```rust
 /// use module_utils::{FromYaml, RequestFilter};
@@ -170,7 +161,6 @@ pub fn merge_conf(attr: TokenStream, input: TokenStream) -> TokenStream {
 /// use static_files_module::StaticFilesHandler;
 ///
 /// #[derive(Debug, RequestFilter)]
-/// #[merge_conf(deny_unknown_fields)]
 /// struct Handler {
 ///     compression: CompressionHandler,
 ///     static_files: StaticFilesHandler,
@@ -184,8 +174,86 @@ pub fn merge_conf(attr: TokenStream, input: TokenStream) -> TokenStream {
 ///     unknown_field: flagged
 /// "#).is_err());
 /// ```
-#[proc_macro_derive(RequestFilter, attributes(merge_conf))]
+#[proc_macro_derive(RequestFilter)]
 pub fn derive_request_filter(input: TokenStream) -> TokenStream {
     derive_request_filter::derive_request_filter(input)
+        .unwrap_or_else(|err| err.into_compile_error().into())
+}
+
+/// This macro will automatically implement `DeserializeMap` and `serde::Deserialize` traits for a
+/// structure.
+///
+/// This allows `#[merge_conf]` macro to merge this structure efficiently without an
+/// intermediate storage that `#[serde(flatten)]` would use. It also allows flagging unsupported
+/// configuration fields in merged configurations, effectively implementing
+/// `#[serde(deny_unknown_fields)]` that would have been incompatible with `#[serde(flatten)]`.
+///
+/// The following field attributes are supported, striving for compatibility with the corresponding
+/// [Serde field attributes](https://serde.rs/field-attrs.html):
+///
+/// * `#[module_utils(rename = "name")]` or
+///   `#[module_utils(rename(deserialize = "name"))]`
+///
+///   Deserialize this field with the given name instead of its Rust name.
+/// * `#[module_utils(alias = "name")]`
+///
+///   Deserialize this field from the given name or from its Rust name. May be repeated to specify
+///   multiple possible names for the same field.
+/// * `#[module_utils(skip)]` or `#[serde(skip_deserializing)]`
+///
+///   Skip this field when deserializing, always use the default value instead.
+/// * `#[module_utils(deserialize_with = "path")]`
+///
+///   Deserialize this field using a function that is different from its implementation of
+///   `serde::Deserialize`. The given function must be callable as
+///   `fn<'de, D>(D) -> Result<T, D::Error> where D: serde::Deserializer<'de>`, although it may
+///   also be generic over `T`. Fields used with `deserialize_with` are not required to implement
+///   `serde::Deserialize`.
+/// * `#[serde(with = "module")]`
+///
+///   Same as `deserialize_with` but `$module::deserialize` will be used as the `deserialize_with`
+///   function.
+///
+/// Unknown fields will cause a deserialization error, missing fields will be returned with their
+/// default value. Essentially,
+/// [Serde container attributes](https://serde.rs/container-attrs.html)
+/// `#[serde(deny_unknown_fields)]` and `#[serde(default)]` are implied.
+///
+/// Example:
+///
+/// ```rust
+/// use module_utils::{DeserializeMap, FromYaml, merge_conf};
+///
+/// #[derive(Debug, Default, DeserializeMap)]
+/// struct Conf1 {
+///     value1: u32,
+/// }
+///
+/// #[derive(Debug, Default, DeserializeMap)]
+/// struct Conf2 {
+///     #[module_utils(rename = "Value2")]
+///     value2: String,
+///     #[module_utils(skip)]
+///     value3: Option<bool>,
+/// }
+///
+/// #[merge_conf]
+/// struct Conf {
+///     conf1: Conf1,
+///     conf2: Conf2,
+/// }
+///
+/// let conf = Conf::from_yaml(r#"
+///     value1: 12
+///     Value2: "Hi!"
+/// "#).unwrap();
+///
+/// assert_eq!(conf.conf1.value1, 12);
+/// assert_eq!(conf.conf2.value2, String::from("Hi!"));
+/// assert!(conf.conf2.value3.is_none());
+/// ```
+#[proc_macro_derive(DeserializeMap, attributes(module_utils))]
+pub fn derive_deserialize_map(input: TokenStream) -> TokenStream {
+    derive_deserialize_map::derive_deserialize_map(input)
         .unwrap_or_else(|err| err.into_compile_error().into())
 }

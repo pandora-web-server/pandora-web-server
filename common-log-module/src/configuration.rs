@@ -15,6 +15,7 @@
 //! Structures handling command line options and YAML deserialization for the Common Log Module
 
 use http::{header, HeaderName};
+use module_utils::DeserializeMap;
 use serde::Deserialize;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -102,8 +103,7 @@ impl<'de> Deserialize<'de> for LogField {
 }
 
 /// Configuration settings of the common log module
-#[derive(Debug, Deserialize)]
-#[serde(default)]
+#[derive(Debug, DeserializeMap)]
 pub struct CommonLogConf {
     /// Access log file path
     ///

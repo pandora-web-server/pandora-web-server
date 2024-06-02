@@ -14,339 +14,146 @@
 
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
-use quote::{quote, ToTokens};
-use syn::parse::{Parse, ParseStream, Parser};
-use syn::{Attribute, Data, DeriveInput, Error, Fields, FieldsNamed, GenericParam, Meta, Token};
+use quote::quote;
+use syn::parse::Parser;
+use syn::{Attribute, DeriveInput, Error, FieldsNamed};
 
-struct MergeConfParams {
-    deny_unknown_fields: bool,
-}
+use crate::derive_deserialize_map::generate_deserialize_impl;
+use crate::utils::{generics_with_de, get_fields, type_name_short, where_clause};
 
-impl Parse for MergeConfParams {
-    fn parse(input: ParseStream<'_>) -> syn::Result<Self> {
-        let mut deny_unknown_fields = false;
-
-        for param in input.parse_terminated(Meta::parse, Token![,])? {
-            if let Meta::Path(path) = param {
-                if path.is_ident("deny_unknown_fields") {
-                    deny_unknown_fields = true;
-                } else {
-                    return Err(Error::new_spanned(path, "unknown parameter"));
-                }
-            } else {
-                return Err(Error::new_spanned(param, "boolean parameter expected"));
-            }
-        }
-
-        Ok(Self {
-            deny_unknown_fields,
-        })
-    }
-}
-
-fn retrieve_field_names(fields: &FieldsNamed) -> TokenStream2 {
-    let field_type = fields
-        .named
-        .iter()
-        .map(|field| &field.ty)
-        .collect::<Vec<_>>();
-
-    quote! {
-        {
-            #[derive(::std::fmt::Debug)]
-            struct FieldNamesList {
-                names: ::std::vec::Vec<String>,
-            }
-
-            impl FieldNamesList {
-                fn new() -> Self {
-                    Self {
-                        names: ::std::vec::Vec::new(),
-                    }
-                }
-            }
-
-            impl ::std::fmt::Display for FieldNamesList {
-                fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> std::fmt::Result {
-                    f.write_str("not an actual error")
-                }
-            }
-
-            impl ::std::error::Error for FieldNamesList {}
-
-            impl ::module_utils::serde::de::Error for FieldNamesList {
-                fn custom<T>(msg: T) -> Self
-                where
-                    T: std::fmt::Display
-                {
-                    const HACK_PREFIX: &str = "field names\n";
-                    let msg = msg.to_string();
-                    if let Some(suffix) = msg.strip_prefix(HACK_PREFIX) {
-                        Self {
-                            names: suffix.split('\n').map(|s| s.to_owned()).collect(),
-                        }
-                    } else {
-                        Self::new()
-                    }
-                }
-            }
-
-            struct FieldNamesRetriever {}
-
-            impl<'de> ::module_utils::serde::Deserializer<'de> for FieldNamesRetriever
-            {
-                type Error = FieldNamesList;
-
-                #[inline(always)]
-                fn deserialize_any<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
-                where
-                    V: ::module_utils::serde::de::Visitor<'de>
-                {
-                    Err(Self::Error::new())
-                }
-
-                ::module_utils::serde::forward_to_deserialize_any! [
-                    bool i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 char str string bytes byte_buf
-                    option unit unit_struct newtype_struct seq tuple tuple_struct map enum
-                    identifier ignored_any
-                ];
-
-                #[inline(always)]
-                fn deserialize_struct<V>(
-                    mut self,
-                    _name: &'static ::std::primitive::str,
-                    fields: &'static [&'static ::std::primitive::str],
-                    _visitor: V
-                ) -> Result<V::Value, Self::Error>
-                where
-                    V: ::module_utils::serde::de::Visitor<'de>
-                {
-                    Err(FieldNamesList {
-                        names: fields.iter().map(|s| (*s).to_owned()).collect()
-                    })
-                }
-            }
-
-            let mut field_names = ::std::vec::Vec::new();
-            #(
-                if let Err(field_list) = <#field_type>::deserialize(FieldNamesRetriever {}) {
-                    for name in field_list.names {
-                        if !field_names.contains(&name) {
-                            field_names.push(name);
-                        }
-                    }
-                }
-            )*
-            field_names.sort();
-            field_names
-        }
-    }
-}
-
-fn generate_map_visitor(params: &MergeConfParams) -> TokenStream2 {
-    if params.deny_unknown_fields {
-        quote! {
-            {
-                struct Visitor<'a> {
-                    names: &'a ::std::vec::Vec<::std::string::String>,
-                }
-
-                impl<'de, 'a> ::module_utils::serde::de::Visitor<'de> for Visitor<'a> {
-                    type Value = ::std::vec::Vec::<
-                        (::std::string::String, ::module_utils::serde_yaml::Value)
-                    >;
-
-                    fn expecting(&self, f: &mut ::std::fmt::Formatter<'_>) -> std::fmt::Result {
-                        f.write_str("a map")
-                    }
-
-                    fn visit_map<A>(self, mut map: A) -> std::result::Result<Self::Value, A::Error>
-                    where
-                        A: ::module_utils::serde::de::MapAccess<'de>
-                    {
-                        let mut result = Vec::new();
-                        while let Some(key) = map.next_key::<String>()? {
-                            if self.names.binary_search(&key).is_err() {
-                                // Error::unknown_field() won't accept non-static slices, so we
-                                // duplicate its functionality here.
-                                return Err(A::Error::custom(::std::format_args!(
-                                    "unknown field `{key}`, expected one of `{}`",
-                                    self.names.join("`, `"),
-                                )));
-                            }
-                            result.push((key, map.next_value()?));
-                        }
-                        Ok(result)
-                    }
-                }
-
-                Visitor {
-                    names: &field_names,
-                }
-            }
-        }
-    } else {
-        quote! {
-            {
-                struct Visitor {}
-
-                impl<'de> ::module_utils::serde::de::Visitor<'de> for Visitor {
-                    type Value = ::std::vec::Vec::<
-                        (::std::string::String, ::module_utils::serde_yaml::Value)
-                    >;
-
-                    fn expecting(&self, f: &mut ::std::fmt::Formatter<'_>) -> std::fmt::Result {
-                        f.write_str("a map")
-                    }
-
-                    fn visit_map<A>(self, mut map: A) -> std::result::Result<Self::Value, A::Error>
-                    where
-                        A: ::module_utils::serde::de::MapAccess<'de>
-                    {
-                        let mut result = Vec::new();
-                        while let Some(key) = map.next_key::<String>()? {
-                            result.push((key, map.next_value()?));
-                        }
-                        Ok(result)
-                    }
-                }
-
-                Visitor {}
-            }
-        }
-    }
-}
-
-fn deserialize_map(fields: &FieldsNamed, params: &MergeConfParams) -> TokenStream2 {
-    let retrieve_field_names = retrieve_field_names(fields);
-    let visitor = generate_map_visitor(params);
-
-    quote! {
-        {
-            let field_names = #retrieve_field_names;
-            let visitor = #visitor;
-            let fields = match deserializer.deserialize_map(visitor) {
-                Ok(fields) => fields,
-                Err(err) if err.to_string() == "not an actual error" => {
-                    // This is our error type, an upper-level merged conf trying to determine
-                    // our fields. Make sure to pass on the field names. We cannot do it via
-                    // deserialize_struct() because it only takes static slices whereas ours is
-                    // dynamic. So this hack will call Error::custom() instead.
-                    return Err(D::Error::custom(format!(
-                        "field names\n{}",
-                        field_names.join("\n"),
-                    )));
-                }
-                Err(err) => return Err(err),
-            };
-            fields
-        }
-    }
-}
-
-fn generate_deserialize_impl(
-    input: &DeriveInput,
-    fields: &FieldsNamed,
-    params: &MergeConfParams,
-) -> TokenStream2 {
-    let deserialize_map = deserialize_map(fields, params);
-
-    // This is a custom serde::Deserialize implementation. Normally, using
-    // #[serde(flatten)] would be sufficient to produce the same effect with the
-    // standard implementation. But we want to flag unknown fields, and
-    // #[serde(deny_unknown_fields)] is incompatible with #[serde(flatten)].
-    let struct_name = &input.ident;
-    let struct_generics = &input.generics.params;
-    let struct_generic_names = input
-        .generics
-        .params
-        .iter()
-        .map(|param| match param {
-            GenericParam::Lifetime(param) => param.lifetime.to_token_stream(),
-            GenericParam::Type(param) => param.ident.to_token_stream(),
-            GenericParam::Const(param) => param.ident.to_token_stream(),
-        })
-        .collect::<Vec<_>>();
-    let struct_generic_types = input.generics.params.iter().filter_map(|param| {
-        if let GenericParam::Type(param) = param {
-            Some(&param.ident)
-        } else {
-            None
-        }
-    });
+fn generate_deserialize_map_impl(input: &DeriveInput, fields: &FieldsNamed) -> TokenStream2 {
+    let vis = &input.vis;
+    let struct_name = type_name_short(input);
+    let (de, generics, generics_short) = generics_with_de(input);
+    let where_clause = where_clause(
+        input,
+        fields,
+        syn::parse2(quote! {::module_utils::DeserializeMap<#de>}).unwrap(),
+    );
 
     let field_name = fields
         .named
         .iter()
         .map(|field| field.ident.as_ref())
         .collect::<Vec<_>>();
-    let field_type = fields.named.iter().map(|field| &field.ty);
-
+    let field_type = fields
+        .named
+        .iter()
+        .map(|field| &field.ty)
+        .collect::<Vec<_>>();
+    let field_visitor = field_type
+        .iter()
+        .map(|ty| quote! {<#ty as ::module_utils::DeserializeMap<#de>>::Visitor})
+        .collect::<Vec<_>>();
     quote! {
-        impl<'de, #struct_generics> ::module_utils::serde::Deserialize<'de>
-        for #struct_name<#(#struct_generic_names)*>
-        where
-            #struct_name<#(#struct_generic_names)*>: ::std::default::Default,
-            #(#struct_generic_types: ::module_utils::serde::Deserialize<'de>,)*
-        {
-            fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-            where
-                D: ::module_utils::serde::Deserializer<'de>
-            {
-                use ::module_utils::serde::de::Error;
-
-                let map = #deserialize_map;
-
+        const _: () = {
+            #vis struct __Visitor<#generics> #where_clause {
                 #(
-                    let deserializer = ::module_utils::serde::de::value::MapDeserializer::new(
-                        map.clone().into_iter()
-                    );
-                    let #field_name = <#field_type>::deserialize(deserializer)
-                        .map_err(D::Error::custom)?;
+                    #field_name: #field_visitor,
                 )*
-                Ok(Self {
-                    #(#field_name,)*
-                })
             }
-        }
+
+            impl<#generics> ::module_utils::MapVisitor<#de> for __Visitor<#generics_short> #where_clause {
+                type Value = #struct_name;
+
+                fn accepts_field(field: &::std::primitive::str) -> ::std::primitive::bool {
+                    #(
+                        if #field_visitor::accepts_field(field) {
+                            return true;
+                        }
+                    )*
+                    false
+                }
+
+                fn list_fields(list: &mut ::std::vec::Vec<&'static ::std::primitive::str>) {
+                    #(
+                        #field_visitor::list_fields(list);
+                    )*
+                }
+
+                fn visit_field<D>(
+                    &mut self,
+                    field: &::std::primitive::str,
+                    deserializer: D
+                ) -> ::std::result::Result<(), D::Error>
+                where
+                    D: ::module_utils::serde::de::Deserializer<#de>
+                {
+                    #(
+                        if #field_visitor::accepts_field(field) {
+                            return self.#field_name.visit_field(field, deserializer);
+                        }
+                    )*
+
+                    let mut fields = ::std::vec::Vec::new();
+                    Self::list_fields(&mut fields);
+                    fields.sort();
+
+                    // Error::unknown_field() won't accept non-static slices, so we
+                    // duplicate its functionality here.
+                    return ::std::result::Result::Err(
+                        <D::Error as ::module_utils::serde::de::Error>::custom(
+                            ::std::format_args!(
+                                "unknown field `{field}`, expected one of `{}`",
+                                fields.join("`, `"),
+                            )
+                        )
+                    );
+                }
+
+                fn finalize<E>(self) -> Result<Self::Value, E>
+                where
+                    E: ::module_utils::serde::de::Error
+                {
+                    ::std::result::Result::Ok(Self::Value {
+                        #(
+                            #field_name: self.#field_name.finalize()?,
+                        )*
+                    })
+                }
+            }
+
+            impl<#generics> ::module_utils::DeserializeMap<#de> for #struct_name #where_clause
+            {
+                type Visitor = __Visitor<#generics_short>;
+
+                fn visitor() -> Self::Visitor {
+                    Self::Visitor {
+                        #(
+                            #field_name:
+                                <#field_type as ::module_utils::DeserializeMap>::visitor(),
+                        )*
+                    }
+                }
+            }
+        };
     }
 }
 
-pub(crate) fn merge_conf(attr: TokenStream, input: TokenStream) -> Result<TokenStream, Error> {
-    let params: MergeConfParams = syn::parse(attr)?;
+pub(crate) fn merge_conf(input: TokenStream) -> Result<TokenStream, Error> {
     let mut input: DeriveInput = syn::parse(input)?;
 
-    // Derive Debug, Default and Deserialize implicitly
-    let attributes = quote!(
+    // Derive Debug and Default implicitly
+    let attributes = quote! {
         #[derive(::std::fmt::Debug, ::std::default::Default)]
-    );
+    };
     let attributes = Attribute::parse_outer.parse2(attributes)?;
     input.attrs.extend(attributes);
 
-    match &input.data {
-        Data::Struct(struct_) => {
-            if let Fields::Named(fields) = &struct_.fields {
-                let implementation = generate_deserialize_impl(&input, fields, &params);
+    if let Some(fields) = get_fields(&input) {
+        let implementation_map = generate_deserialize_map_impl(&input, fields);
+        let implementation_deserialize = generate_deserialize_impl(&input);
 
-                Ok(quote! {
-                    #input
-                    #implementation
-                }
-                .into())
-            } else {
-                Err(Error::new_spanned(
-                    &struct_.fields,
-                    "merge_conf can only apply to named fields",
-                ))
-            }
+        Ok(quote! {
+            #input
+            #implementation_map
+            #implementation_deserialize
         }
-        Data::Enum(enum_) => Err(Error::new_spanned(
-            enum_.enum_token,
-            "merge_conf can only apply to struct",
-        )),
-        Data::Union(union_) => Err(Error::new_spanned(
-            union_.union_token,
-            "merge_conf can only apply to struct",
-        )),
+        .into())
+    } else {
+        Err(Error::new_spanned(
+            &input,
+            "merge_conf can only apply to structs with named fields",
+        ))
     }
 }

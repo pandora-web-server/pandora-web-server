@@ -98,14 +98,10 @@
 //! trait helps reading the configuration file.
 //!
 //! ```rust,no_run
-//! use log::error;
 //! use pingora_core::server::configuration::{Opt as ServerOpt, ServerConf};
 //! use pingora_core::server::Server;
 //! use module_utils::{FromYaml, merge_opt, merge_conf};
-//! use serde::Deserialize;
 //! use static_files_module::{StaticFilesConf, StaticFilesHandler, StaticFilesOpt};
-//! use std::fs::File;
-//! use std::io::BufReader;
 //! use structopt::StructOpt;
 //!
 //! // The command line flags from both structures are merged, so that the user doesn't need to
@@ -166,20 +162,16 @@
 //! # use pingora_core::upstreams::peer::HttpPeer;
 //! # use pingora_proxy::{ProxyHttp, Session};
 //! # use module_utils::RequestFilter;
-//! # use serde::Deserialize;
 //! # use static_files_module::StaticFilesHandler;
-//! #
 //! # pub struct MyServer {
 //! #     static_files_handler: StaticFilesHandler,
 //! # }
-//! #
 //! # #[async_trait]
 //! # impl ProxyHttp for MyServer {
 //! #     type CTX = <StaticFilesHandler as RequestFilter>::CTX;
 //! #     fn new_ctx(&self) -> Self::CTX {
 //! #         StaticFilesHandler::new_ctx()
 //! #     }
-//! #
 //! async fn request_filter(
 //!     &self,
 //!     session: &mut Session,
@@ -188,7 +180,6 @@
 //!     session.downstream_compression.adjust_level(3);
 //!     self.static_files_handler.handle(session, ctx).await
 //! }
-//! #
 //! #     async fn upstream_peer(
 //! #         &self,
 //! #         session: &mut Session,

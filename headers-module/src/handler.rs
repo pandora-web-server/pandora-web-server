@@ -139,12 +139,11 @@ mod tests {
 
     use http::header;
     use module_utils::pingora::{RequestHeader, TestSession};
-    use module_utils::FromYaml;
-    use serde::Deserialize;
+    use module_utils::{DeserializeMap, FromYaml};
     use std::ops::{Deref, DerefMut};
     use test_log::test;
 
-    #[derive(Debug, Deserialize, Default)]
+    #[derive(Debug, Default, DeserializeMap)]
     struct TestConf {
         send_response: bool,
     }

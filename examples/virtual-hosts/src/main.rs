@@ -61,12 +61,11 @@ use compression_module::CompressionHandler;
 use headers_module::HeadersHandler;
 use log::error;
 use module_utils::pingora::{Error, HttpPeer, ResponseHeader, Session};
-use module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
+use module_utils::{merge_conf, merge_opt, DeserializeMap, FromYaml, RequestFilter};
 use pingora_core::server::configuration::{Opt as ServerOpt, ServerConf};
 use pingora_core::server::Server;
 use pingora_proxy::{http_proxy_service, ProxyHttp};
 use rewrite_module::RewriteHandler;
-use serde::Deserialize;
 use static_files_module::StaticFilesHandler;
 use structopt::StructOpt;
 use upstream_module::UpstreamHandler;
@@ -118,7 +117,7 @@ struct Opt {
 }
 
 /// Application-specific configuration settings
-#[derive(Debug, Deserialize)]
+#[derive(Debug, DeserializeMap)]
 struct VirtualHostsAppConf {
     /// List of address/port combinations to listen on, e.g. "127.0.0.1:8080".
     listen: Vec<String>,
@@ -133,7 +132,7 @@ impl Default for VirtualHostsAppConf {
 }
 
 /// The combined configuration of Pingora server and [`VirtualHostsHandler`].
-#[merge_conf(deny_unknown_fields)]
+#[merge_conf]
 struct Conf {
     app: VirtualHostsAppConf,
     server: ServerConf,
