@@ -188,7 +188,8 @@ pub fn derive_request_filter(input: TokenStream) -> TokenStream {
 /// configuration fields in merged configurations, effectively implementing
 /// `#[serde(deny_unknown_fields)]` that would have been incompatible with `#[serde(flatten)]`.
 ///
-/// The following field attributes are supported, striving for compatibility with the corresponding
+/// The individual fields need to implement `serde::Deserialize`. The following field attributes
+/// are supported, striving for compatibility with the corresponding
 /// [Serde field attributes](https://serde.rs/field-attrs.html):
 ///
 /// * `#[module_utils(rename = "name")]` or
