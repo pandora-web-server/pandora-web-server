@@ -39,7 +39,7 @@ use async_trait::async_trait;
 use common_log_module::{CommonLogHandler, CommonLogOpt};
 use compression_module::{CompressionHandler, CompressionOpt};
 use headers_module::HeadersHandler;
-use log::error;
+use log::{debug, error};
 use module_utils::{merge_conf, merge_opt, DeserializeMap, FromYaml, RequestFilter};
 use pingora_core::server::configuration::{Opt as ServerOpt, ServerConf};
 use pingora_core::server::Server;
@@ -48,6 +48,7 @@ use pingora_core::{Error, ErrorType};
 use pingora_proxy::{http_proxy_service, ProxyHttp, Session};
 use rewrite_module::RewriteHandler;
 use static_files_module::{StaticFilesHandler, StaticFilesOpt};
+use std::path::PathBuf;
 use structopt::StructOpt;
 
 /// The application implementing the Pingora Proxy interface
@@ -79,15 +80,22 @@ struct StaticRootAppOpt {
     /// specified multiple times.
     #[structopt(short, long)]
     listen: Option<Vec<String>>,
+    /// Use this flag to make the server run in the background.
+    #[structopt(short, long)]
+    daemon: bool,
+    /// Test the configuration and exit. This is useful to validate the configuration before
+    /// restarting the process.
+    #[structopt(short, long)]
+    test: bool,
+    /// The path to the configuration file. This command line flag can be specified multiple times.
+    #[structopt(short, long)]
+    conf: Option<Vec<PathBuf>>,
 }
 
 /// Run a web server exposing a single directory with static content.
-///
-/// This application is based on pingora-proxy and static-files-module.
 #[merge_opt]
 struct Opt {
     app: StaticRootAppOpt,
-    server: ServerOpt,
     log: CommonLogOpt,
     compression: CompressionOpt,
     static_files: StaticFilesOpt,
@@ -149,20 +157,33 @@ fn main() {
     env_logger::init();
 
     let opt = Opt::from_args();
-    let mut conf = opt
-        .server
-        .conf
-        .as_ref()
-        .and_then(|path| match Conf::load_from_yaml(path) {
-            Ok(conf) => Some(conf),
-            Err(err) => {
-                error!("{err}");
-                None
-            }
-        })
-        .unwrap_or_else(Conf::default);
+    let conf =
+        opt.app
+            .conf
+            .unwrap_or(Vec::new())
+            .into_iter()
+            .try_fold(Conf::default(), |conf, path| {
+                debug!("Loading configuration file {path:?}");
+                conf.merge_load_from_yaml(path)
+            });
+    let mut conf = match conf {
+        Ok(conf) => conf,
+        Err(err) => {
+            error!("{err}");
+            Conf::default()
+        }
+    };
 
-    let mut server = Server::new_with_opt_and_conf(opt.server, conf.server);
+    let mut server = Server::new_with_opt_and_conf(
+        ServerOpt {
+            daemon: opt.app.daemon,
+            test: opt.app.test,
+            upgrade: false,
+            nocapture: false,
+            conf: None,
+        },
+        conf.server,
+    );
     server.bootstrap();
 
     conf.handler.log.merge_with_opt(opt.log);

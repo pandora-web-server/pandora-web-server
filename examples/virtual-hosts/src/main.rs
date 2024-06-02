@@ -59,14 +59,15 @@ use async_trait::async_trait;
 use common_log_module::CommonLogHandler;
 use compression_module::CompressionHandler;
 use headers_module::HeadersHandler;
-use log::error;
+use log::{debug, error};
 use module_utils::pingora::{Error, HttpPeer, ResponseHeader, Session};
-use module_utils::{merge_conf, merge_opt, DeserializeMap, FromYaml, RequestFilter};
+use module_utils::{merge_conf, DeserializeMap, FromYaml, RequestFilter};
 use pingora_core::server::configuration::{Opt as ServerOpt, ServerConf};
 use pingora_core::server::Server;
 use pingora_proxy::{http_proxy_service, ProxyHttp};
 use rewrite_module::RewriteHandler;
 use static_files_module::StaticFilesHandler;
+use std::path::PathBuf;
 use structopt::StructOpt;
 use upstream_module::UpstreamHandler;
 use virtual_hosts_module::VirtualHostsHandler;
@@ -98,22 +99,23 @@ struct HostHandler {
     static_files: StaticFilesHandler,
 }
 
-/// Command line options of this application
+/// Run a web server exposing static content under several virtual hosts.
 #[derive(Debug, StructOpt)]
-struct VirtualHostsAppOpt {
+struct Opt {
     /// Address and port to listen on, e.g. "127.0.0.1:8080". This command line flag can be
     /// specified multiple times.
     #[structopt(short, long)]
     listen: Option<Vec<String>>,
-}
-
-/// Run a web server exposing static content under several virtual hosts.
-///
-/// This application is based on pingora-proxy and virtual-hosts-module.
-#[merge_opt]
-struct Opt {
-    app: VirtualHostsAppOpt,
-    server: ServerOpt,
+    /// Use this flag to make the server run in the background.
+    #[structopt(short, long)]
+    daemon: bool,
+    /// Test the configuration and exit. This is useful to validate the configuration before
+    /// restarting the process.
+    #[structopt(short, long)]
+    test: bool,
+    /// The path to the configuration file. This command line flag can be specified multiple times.
+    #[structopt(short, long)]
+    conf: Option<Vec<PathBuf>>,
 }
 
 /// Application-specific configuration settings
@@ -187,20 +189,32 @@ fn main() {
     env_logger::init();
 
     let opt = Opt::from_args();
-    let conf = opt
-        .server
-        .conf
-        .as_ref()
-        .and_then(|path| match Conf::load_from_yaml(path) {
-            Ok(conf) => Some(conf),
-            Err(err) => {
-                error!("{err}");
-                None
-            }
-        })
-        .unwrap_or_else(Conf::default);
+    let conf =
+        opt.conf
+            .unwrap_or(Vec::new())
+            .into_iter()
+            .try_fold(Conf::default(), |conf, path| {
+                debug!("Loading configuration file {path:?}");
+                conf.merge_load_from_yaml(path)
+            });
+    let conf = match conf {
+        Ok(conf) => conf,
+        Err(err) => {
+            error!("{err}");
+            Conf::default()
+        }
+    };
 
-    let mut server = Server::new_with_opt_and_conf(opt.server, conf.server);
+    let mut server = Server::new_with_opt_and_conf(
+        ServerOpt {
+            daemon: opt.daemon,
+            test: opt.test,
+            upgrade: false,
+            nocapture: false,
+            conf: None,
+        },
+        conf.server,
+    );
     server.bootstrap();
 
     let handler = match Handler::new(conf.handler) {
@@ -212,7 +226,7 @@ fn main() {
     };
 
     let mut proxy = http_proxy_service(&server.configuration, VirtualHostsApp::new(handler));
-    for addr in opt.app.listen.unwrap_or(conf.app.listen) {
+    for addr in opt.listen.unwrap_or(conf.app.listen) {
         proxy.add_tcp(&addr);
     }
     server.add_service(proxy);
