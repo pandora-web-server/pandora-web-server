@@ -2,6 +2,13 @@ listen:
 - 127.0.0.1:8080
 - "[::1]:8080"
 compression_level: 3
+
+# Uncomment lines below to enable authentication with credentials me:test
+
+#auth_realm: Protected area
+#auth_credentials:
+#  me: $2y$12$MfCTLFbAMyniWSQ95ciTreTbc.J58py22Yk0shA8whLwGIpkS12my
+
 root: ../../static-files-module/testdata/root
 canonicalize_uri: true
 log_file: "access.log"

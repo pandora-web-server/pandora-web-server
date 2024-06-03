@@ -14,8 +14,9 @@
 
 //! # Single static root example
 //!
-//! This is a simple web server using `compression-module` and `static-files-module` crates. It
-//! combines their command line options with the usual [Pingora command line options](Opt) and
+//! This is a simple web server using `log-module`, `compression-module`, `auth-module`,
+//! `rewrite-module`, `headers-module` and `static-files-module` crates. It combines their
+//! respective command line options with the usual [Pingora command line options](Opt) and
 //! their config file settings with [Pingora`s](ServerConf). In addition, it provides the following
 //! setting:
 //!
@@ -36,6 +37,7 @@
 //! ```
 
 use async_trait::async_trait;
+use auth_module::{AuthHandler, AuthOpt};
 use common_log_module::{CommonLogHandler, CommonLogOpt};
 use compression_module::{CompressionHandler, CompressionOpt};
 use headers_module::HeadersHandler;
@@ -67,6 +69,7 @@ impl StaticRootApp {
 struct Handler {
     log: CommonLogHandler,
     compression: CompressionHandler,
+    auth: AuthHandler,
     rewrite: RewriteHandler,
     headers: HeadersHandler,
     static_files: StaticFilesHandler,
@@ -96,6 +99,7 @@ struct StaticRootAppOpt {
 struct Opt {
     app: StaticRootAppOpt,
     log: CommonLogOpt,
+    auth: AuthOpt,
     compression: CompressionOpt,
     static_files: StaticFilesOpt,
 }
@@ -173,6 +177,7 @@ fn main() {
     server.bootstrap();
 
     conf.handler.log.merge_with_opt(opt.log);
+    conf.handler.auth.merge_with_opt(opt.auth);
     conf.handler.compression.merge_with_opt(opt.compression);
     conf.handler.static_files.merge_with_opt(opt.static_files);
 

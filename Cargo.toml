@@ -3,6 +3,7 @@ resolver = "2"
 members = [
   "module-utils",
   "module-utils-macros",
+  "auth-module",
   "common-log-module",
   "compression-module",
   "headers-module",
@@ -15,6 +16,7 @@ members = [
 default-members = [
   "module-utils",
   "module-utils-macros",
+  "auth-module",
   "common-log-module",
   "compression-module",
   "headers-module",
@@ -31,6 +33,7 @@ rust-version = "1.74"
 async-trait = "0.1.42"
 bytes = "1.0"
 chrono = "~0.4.31"
+auth-module = { path = "auth-module", version = "0.2.0" }
 common-log-module = { path = "common-log-module", version = "0.2.0" }
 compression-module = { path = "compression-module", version = "0.2.0" }
 env_logger = "0.9"

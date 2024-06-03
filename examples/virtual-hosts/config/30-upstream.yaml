@@ -4,4 +4,8 @@ vhosts:
       - 127.0.0.1:8081
       - "[::1]:8081"
     log_file: upstream.access.log
+    auth_realm: Protected area
+    auth_credentials:
+      # User name: me; Password: test
+      me: $2y$12$MfCTLFbAMyniWSQ95ciTreTbc.J58py22Yk0shA8whLwGIpkS12my
     upstream: https://example.com/

@@ -12,9 +12,18 @@ listen:
 # General server settings (https://docs.rs/pingora-core/0.2.0/pingora_core/server/configuration/struct.ServerConf.html)
 daemon: false
 
+# Headers module settings (https://docs.rs/headers-module/latest/headers_module/struct.HeadersConf.html)
+custom_headers:
+- headers:
+    Server: "My server is the best"
+
 # Virtual hosts settings:
 # * https://docs.rs/virtual-hosts-module/latest/virtual_hosts_module/struct.VirtualHostsConf.html
+# * https://docs.rs/log-module/latest/log_module/struct.LogConf.html
 # * https://docs.rs/compression-module/latest/compression_module/struct.CompressionConf.html
+# * https://docs.rs/auth-module/latest/auth_module/struct.AuthConf.html
+# * https://docs.rs/rewrite-module/latest/rewrite_module/struct.RewriteConf.html
+# * https://docs.rs/upstream-module/latest/upstream_module/struct.UpstreamConf.html
 # * https://docs.rs/static-files-module/latest/static_files_module/struct.StaticFilesConf.html
 vhosts:
     localhost:8080:

@@ -1,0 +1,39 @@
+[package]
+name = "auth-module"
+version = "0.2.0"
+authors = ["Wladimir Palant"]
+repository = "https://github.com/palant/pingora-utils"
+categories = ["network-programming", "web-programming::http-server"]
+keywords = ["basic-auth", "auth", "web-server", "http", "pingora"]
+license = "Apache-2.0"
+edition = "2021"
+rust-version.workspace = true
+description = """
+A module implementing handling of HTTP authorization.
+"""
+
+[lib]
+name = "auth_module"
+path = "src/lib.rs"
+
+[dependencies]
+async-trait.workspace = true
+base64 = "0.22.1"
+bcrypt = "0.15.1"
+http.workspace = true
+log.workspace = true
+module-utils.workspace = true
+structopt.workspace = true
+
+[dev-dependencies]
+env_logger.workspace = true
+pingora-core.workspace = true
+pingora-http.workspace = true
+pingora-proxy.workspace = true
+static-files-module.workspace = true
+structopt.workspace = true
+test-log.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true

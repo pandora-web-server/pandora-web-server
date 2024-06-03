@@ -7,14 +7,15 @@ publish = false
 
 [dependencies]
 async-trait.workspace = true
+auth-module.workspace = true
 common-log-module.workspace = true
 compression-module.workspace = true
 env_logger.workspace = true
 headers-module.workspace = true
 log.workspace = true
+module-utils.workspace = true
 pingora-core.workspace = true
 pingora-proxy.workspace = true
-module-utils.workspace = true
 rewrite-module.workspace = true
 static-files-module.workspace = true
 structopt.workspace = true
