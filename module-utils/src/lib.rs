@@ -24,7 +24,7 @@ pub mod standard_response;
 mod trie;
 
 use async_trait::async_trait;
-use log::trace;
+use log::{error, info, trace};
 use pingora::{wrap_session, Error, ErrorType, ResponseHeader, Session, SessionWrapper};
 use serde::{de::DeserializeSeed, Deserialize};
 use std::fmt::Debug;
@@ -144,6 +144,14 @@ pub trait RequestFilter: Sized {
 /// Trait for configuration structures that can be loaded from YAML files. This trait has a blanket
 /// implementation for any structure implementing [`serde::Deserialize`].
 pub trait FromYaml {
+    /// Loads and merges configuration from a number of YAML files. Glob patterns in file names
+    /// will be resolved and file names will be sorted before further processing.
+    fn load_from_files<I>(files: I) -> Result<Self, Box<Error>>
+    where
+        Self: Sized,
+        I: IntoIterator,
+        I::Item: AsRef<str>;
+
     /// Loads configuration from a YAML file.
     fn load_from_yaml(path: impl AsRef<Path>) -> Result<Self, Box<Error>>
     where
@@ -170,6 +178,36 @@ where
     D: Debug + Default,
     for<'de> D: DeserializeSeed<'de, Value = D>,
 {
+    fn load_from_files<I>(files: I) -> Result<Self, Box<Error>>
+    where
+        I: IntoIterator,
+        I::Item: AsRef<str>,
+    {
+        let mut files = files
+            .into_iter()
+            .filter_map(|path| match glob::glob(path.as_ref()) {
+                Ok(iter) => Some(iter),
+                Err(err) => {
+                    error!("Ignoring invalid glob pattern {}: {err}", path.as_ref());
+                    None
+                }
+            })
+            .flatten()
+            .filter_map(|path| match path {
+                Ok(path) => Some(path),
+                Err(err) => {
+                    error!("Failed resolving glob pattern: {err}");
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        files.sort();
+        files.into_iter().try_fold(Self::default(), |conf, path| {
+            info!("Loading configuration file {}", path.display());
+            conf.merge_load_from_yaml(path)
+        })
+    }
+
     fn load_from_yaml(path: impl AsRef<Path>) -> Result<Self, Box<Error>> {
         Self::default().merge_load_from_yaml(path)
     }

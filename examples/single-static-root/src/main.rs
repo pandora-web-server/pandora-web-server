@@ -39,7 +39,7 @@ use async_trait::async_trait;
 use common_log_module::{CommonLogHandler, CommonLogOpt};
 use compression_module::{CompressionHandler, CompressionOpt};
 use headers_module::HeadersHandler;
-use log::{debug, error};
+use log::error;
 use module_utils::{merge_conf, merge_opt, DeserializeMap, FromYaml, RequestFilter};
 use pingora_core::server::configuration::{Opt as ServerOpt, ServerConf};
 use pingora_core::server::Server;
@@ -48,7 +48,6 @@ use pingora_core::{Error, ErrorType};
 use pingora_proxy::{http_proxy_service, ProxyHttp, Session};
 use rewrite_module::RewriteHandler;
 use static_files_module::{StaticFilesHandler, StaticFilesOpt};
-use std::path::PathBuf;
 use structopt::StructOpt;
 
 /// The application implementing the Pingora Proxy interface
@@ -89,7 +88,7 @@ struct StaticRootAppOpt {
     test: bool,
     /// The path to the configuration file. This command line flag can be specified multiple times.
     #[structopt(short, long)]
-    conf: Option<Vec<PathBuf>>,
+    conf: Option<Vec<String>>,
 }
 
 /// Run a web server exposing a single directory with static content.
@@ -149,16 +148,7 @@ fn main() {
     env_logger::init();
 
     let opt = Opt::from_args();
-    let conf =
-        opt.app
-            .conf
-            .unwrap_or(Vec::new())
-            .into_iter()
-            .try_fold(Conf::default(), |conf, path| {
-                debug!("Loading configuration file {path:?}");
-                conf.merge_load_from_yaml(path)
-            });
-    let mut conf = match conf {
+    let mut conf = match Conf::load_from_files(opt.app.conf.unwrap_or_default()) {
         Ok(conf) => conf,
         Err(err) => {
             error!("{err}");

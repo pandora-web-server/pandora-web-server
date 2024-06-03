@@ -59,7 +59,7 @@ use async_trait::async_trait;
 use common_log_module::CommonLogHandler;
 use compression_module::CompressionHandler;
 use headers_module::HeadersHandler;
-use log::{debug, error};
+use log::error;
 use module_utils::pingora::{Error, HttpPeer, ResponseHeader, Session};
 use module_utils::{merge_conf, DeserializeMap, FromYaml, RequestFilter};
 use pingora_core::server::configuration::{Opt as ServerOpt, ServerConf};
@@ -67,7 +67,6 @@ use pingora_core::server::Server;
 use pingora_proxy::{http_proxy_service, ProxyHttp};
 use rewrite_module::RewriteHandler;
 use static_files_module::StaticFilesHandler;
-use std::path::PathBuf;
 use structopt::StructOpt;
 use upstream_module::UpstreamHandler;
 use virtual_hosts_module::VirtualHostsHandler;
@@ -115,7 +114,7 @@ struct Opt {
     test: bool,
     /// The path to the configuration file. This command line flag can be specified multiple times.
     #[structopt(short, long)]
-    conf: Option<Vec<PathBuf>>,
+    conf: Option<Vec<String>>,
 }
 
 /// Application-specific configuration settings
@@ -181,15 +180,7 @@ fn main() {
     env_logger::init();
 
     let opt = Opt::from_args();
-    let conf =
-        opt.conf
-            .unwrap_or(Vec::new())
-            .into_iter()
-            .try_fold(Conf::default(), |conf, path| {
-                debug!("Loading configuration file {path:?}");
-                conf.merge_load_from_yaml(path)
-            });
-    let conf = match conf {
+    let conf = match Conf::load_from_files(opt.conf.unwrap_or_default()) {
         Ok(conf) => conf,
         Err(err) => {
             error!("{err}");

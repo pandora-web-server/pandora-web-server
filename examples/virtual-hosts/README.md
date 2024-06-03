@@ -25,11 +25,11 @@ vhosts:
         root: ./production-root
 ```
 
-An example config file is provided in this directory. You can run this example with the
-following command:
+Example config files are provided in this directory. You can run this example with the following
+command:
 
 ```sh
-cargo run --package example-virtual-hosts -- -c config.yaml
+cargo run --package example-virtual-hosts -- -c config/*.yaml
 ```
 
 To enable debugging output you can use the `RUST_LOG` environment variable:

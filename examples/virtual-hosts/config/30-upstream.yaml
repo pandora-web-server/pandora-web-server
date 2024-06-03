@@ -1,0 +1,7 @@
+vhosts:
+  localhost:8081:
+    aliases:
+      - 127.0.0.1:8081
+      - "[::1]:8081"
+    log_file: upstream.access.log
+    upstream: https://example.com/
