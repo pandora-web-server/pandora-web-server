@@ -191,7 +191,7 @@ fn main() {
     env_logger::init();
 
     let opt = Opt::from_args();
-    let conf = match Conf::load_from_files(opt.conf.unwrap_or_default()) {
+    let mut conf = match Conf::load_from_files(opt.conf.unwrap_or_default()) {
         Ok(conf) => conf,
         Err(err) => {
             error!("{err}");
@@ -199,8 +199,10 @@ fn main() {
         }
     };
 
-    if !opt.listen.as_ref().is_some_and(|l| !l.is_empty()) && conf.app.listen.is_empty() {
-        error!("No addresses specified to listen on, please use --listen command line flag or listen configuration setting");
+    if conf.app.listen.is_empty() {
+        // Make certain we have a listening address
+        conf.app.listen.push("127.0.0.1:8080".to_owned());
+        conf.app.listen.push("[::1]:8080".to_owned());
     }
 
     let mut server = Server::new_with_opt_and_conf(
