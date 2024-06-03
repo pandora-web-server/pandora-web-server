@@ -42,17 +42,17 @@
 //!         root: ./production-root
 //! ```
 //!
-//! An example config file is provided in this directory. You can run this example with the
+//! Example config files are provided in this directory. You can run this example with the
 //! following command:
 //!
 //! ```sh
-//! cargo run --package example-virtual-hosts -- -c config.yaml
+//! cargo run --package example-virtual-hosts -- -c config/*.yaml
 //! ```
 //!
 //! To enable debugging output you can use the `RUST_LOG` environment variable:
 //!
 //! ```sh
-//! RUST_LOG=debug cargo run --package example-virtual-hosts -- -c config.yaml
+//! RUST_LOG=debug cargo run --package example-virtual-hosts -- -c config/*.yaml
 //! ```
 
 use async_trait::async_trait;
