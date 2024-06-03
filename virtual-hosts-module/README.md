@@ -76,7 +76,7 @@ let conf = opt
     .conf
     .as_ref()
     .and_then(|path| Conf::load_from_yaml(path).ok())
-    .unwrap_or_else(Conf::default);
+    .unwrap_or_default();
 
 // Create handler from configuration
 let handler: VirtualHostsHandler<StaticFilesHandler> = conf.virtual_hosts.try_into().unwrap();

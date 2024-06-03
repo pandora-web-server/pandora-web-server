@@ -97,7 +97,7 @@
 //!     .conf
 //!     .as_ref()
 //!     .and_then(|path| Conf::load_from_yaml(path).ok())
-//!     .unwrap_or_else(Conf::default);
+//!     .unwrap_or_default();
 //! conf.upstream.merge_with_opt(opt.upstream);
 //!
 //! let mut server = Server::new_with_opt_and_conf(opt.server, conf.server);

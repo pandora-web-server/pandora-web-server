@@ -126,7 +126,7 @@
 //!     .conf
 //!     .as_ref()
 //!     .and_then(|path| MyServerConf::load_from_yaml(path).ok())
-//!     .unwrap_or_else(MyServerConf::default);
+//!     .unwrap_or_default();
 //!
 //! let mut server = Server::new_with_opt_and_conf(opt.server, conf.server);
 //! server.bootstrap();

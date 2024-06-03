@@ -113,7 +113,7 @@
 //!     .conf
 //!     .as_ref()
 //!     .and_then(|path| Some(Conf::load_from_yaml(path).unwrap()))
-//!     .unwrap_or_else(Conf::default);
+//!     .unwrap_or_default();
 //!
 //! let mut server = Server::new_with_opt_and_conf(opt, conf.server);
 //! server.bootstrap();
