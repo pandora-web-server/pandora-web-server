@@ -138,7 +138,7 @@ pub mod _private {
     //! implement special handling for types like `HashMap` and `Vec` and fall back to overwriting
     //! values everywhere else. But since specialization isn’t stable, we use this work-around
     //! instead:
-    //! https://lukaskalbertodt.github.io/2019/12/05/generalized-autoref-based-specialization.html
+    //! <https://lukaskalbertodt.github.io/2019/12/05/generalized-autoref-based-specialization.html>
 
     use serde::{
         de::{DeserializeSeed, MapAccess, Visitor},
