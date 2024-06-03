@@ -160,7 +160,7 @@ async fn text_file() -> Result<(), Box<Error>> {
 async fn dir_index() -> Result<(), Box<Error>> {
     let meta = Metadata::from_path(&root_path("index.html"), None).unwrap();
 
-    let handler = make_handler(default_conf());
+    let handler = make_handler(extended_conf("index_file: [index.html]"));
     let mut session = make_session("GET", "/").await;
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
@@ -180,7 +180,7 @@ async fn dir_index() -> Result<(), Box<Error>> {
     assert_body(&session, "<html>Hi!</html>\n");
 
     // Without matching directory index this should produce Forbidden response.
-    let handler = make_handler(extended_conf("index_file: []"));
+    let handler = make_handler(default_conf());
 
     let text = response_text(StatusCode::FORBIDDEN);
     let mut session = make_session("GET", "/").await;

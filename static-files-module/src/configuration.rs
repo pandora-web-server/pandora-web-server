@@ -104,7 +104,7 @@ impl Default for StaticFilesConf {
             root: None,
             canonicalize_uri: true,
             redirect_prefix: None,
-            index_file: vec!["index.html".into()],
+            index_file: Vec::new(),
             page_404: None,
             precompressed: Vec::new(),
         }

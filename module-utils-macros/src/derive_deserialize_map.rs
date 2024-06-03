@@ -24,7 +24,7 @@ struct FieldAttributes {
     skip: bool,
     name: Ident,
     deserialize_from: Vec<Ident>,
-    deserialize_with: Path,
+    deserialize: TokenStream2,
 }
 
 impl TryFrom<&Field> for FieldAttributes {
@@ -104,15 +104,24 @@ impl TryFrom<&Field> for FieldAttributes {
         };
         deserialize_from.insert(0, rename.unwrap_or_else(|| name.clone()));
 
-        let deserialize_with = deserialize_with.unwrap_or_else(|| {
-            syn::parse2(quote! {::module_utils::serde::Deserialize::deserialize}).unwrap()
-        });
+        let deserialize = if let Some(deserialize_with) = deserialize_with {
+            quote! {#deserialize_with(deserializer)}
+        } else {
+            let field_name = &field.ident;
+            let field_type = &field.ty;
+            quote! {
+                {
+                    use ::module_utils::_private::DeserializeMerge;
+                    (&&&&::std::marker::PhantomData::<#field_type>).deserialize_merge(self.inner.#field_name, deserializer)
+                }
+            }
+        };
 
         Ok(Self {
             skip,
             name,
             deserialize_from,
-            deserialize_with,
+            deserialize,
         })
     }
 }
@@ -152,7 +161,7 @@ fn generate_deserialize_map_impl(
 
     let field_name = field_attrs.iter().map(|attr| &attr.name);
     let field_deserialize_name = field_attrs.iter().map(|attr| &attr.deserialize_from);
-    let field_deserialize_with = field_attrs.iter().map(|attr| &attr.deserialize_with);
+    let field_deserialize = field_attrs.iter().map(|attr| &attr.deserialize);
     let deserialize_name = collect_deserialize_names(&field_attrs)?;
 
     Ok(quote! {
@@ -181,16 +190,16 @@ fn generate_deserialize_map_impl(
                     list.extend_from_slice(__FIELDS);
                 }
 
-                fn visit_field<D>(&mut self, field: &::std::primitive::str, deserializer: D)
-                    -> ::std::result::Result<(), D::Error>
+                fn visit_field<D>(mut self, field: &::std::primitive::str, deserializer: D)
+                    -> ::std::result::Result<Self, D::Error>
                 where
                     D: ::module_utils::serde::de::Deserializer<#de>
                 {
                     match field {
                         #(
                             #(::std::stringify!(#field_deserialize_name))|* => {
-                                self.inner.#field_name = #field_deserialize_with(deserializer)?;
-                                ::std::result::Result::Ok(())
+                                self.inner.#field_name = #field_deserialize?;
+                                ::std::result::Result::Ok(self)
                             }
                         )*
                         other => ::std::result::Result::Err(
@@ -280,17 +289,17 @@ pub(crate) fn generate_deserialize_impl(input: &DeriveInput) -> TokenStream2 {
                     where
                         A: ::module_utils::serde::de::MapAccess<#de>
                     {
-                        struct __DeserializeSeed<'a, T> {
+                        struct __DeserializeSeed<T> {
                             key: ::std::string::String,
-                            inner: &'a mut T,
+                            inner: T,
                         }
 
                         impl<#de, T> ::module_utils::serde::de::DeserializeSeed<#de>
-                        for __DeserializeSeed<'_, T>
+                        for __DeserializeSeed<T>
                         where
                             T: ::module_utils::MapVisitor<#de>
                         {
-                            type Value = ();
+                            type Value = T;
 
                             fn deserialize<D>(self, deserializer: D)
                                 -> ::std::result::Result<Self::Value, D::Error>
@@ -304,9 +313,9 @@ pub(crate) fn generate_deserialize_impl(input: &DeriveInput) -> TokenStream2 {
                         while let ::std::option::Option::Some(key) =
                             map.next_key::<::std::string::String>()?
                         {
-                            map.next_value_seed(__DeserializeSeed {
+                            self.inner = map.next_value_seed(__DeserializeSeed {
                                 key,
-                                inner: &mut self.inner,
+                                inner: self.inner,
                             })?;
                         }
                         self.inner.finalize()

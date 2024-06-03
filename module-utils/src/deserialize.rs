@@ -42,8 +42,9 @@ pub trait MapVisitor<'de> {
     fn list_fields(list: &mut Vec<&'static str>);
 
     /// Deserializes and stores the value for the given key
-    fn visit_field<D>(&mut self, field: &str, deserializer: D) -> Result<(), D::Error>
+    fn visit_field<D>(self, field: &str, deserializer: D) -> Result<Self, D::Error>
     where
+        Self: Sized,
         D: Deserializer<'de>;
 
     /// Turns collected data into the value
@@ -73,7 +74,7 @@ macro_rules! impl_deserialize_map {
             fn list_fields(list: &mut Vec<&'static str>) {
                 list.extend_from_slice(FIELDS);
             }
-            fn visit_field<D>(&mut self, field: &str, deserializer: D) -> Result<(), D::Error>
+            fn visit_field<D>(mut self, field: &str, deserializer: D) -> Result<Self, D::Error>
             where
                 D: Deserializer<'de>
             {
@@ -81,7 +82,7 @@ macro_rules! impl_deserialize_map {
                     $(
                         stringify!($field) => {
                             self.inner.$field = Deserialize::deserialize(deserializer)?;
-                            Ok(())
+                            Ok(self)
                         }
                     )*
                     other => {
@@ -128,3 +129,113 @@ impl_deserialize_map!(ServerConf {
     upstream_connect_offload_threadpools
     upstream_connect_offload_thread_per_pool
 });
+
+#[doc(hidden)]
+pub mod _private {
+    //! This is a hack meant to make configuration merging possible even with types that don’t
+    //! implement `DeserializeSeed` and where `DeserializedSeed` cannot be implemented (foreign
+    //! types). Normally, we would use specialization: use `DeserializeSeed` where available,
+    //! implement special handling for types like `HashMap` and `Vec` and fall back to overwriting
+    //! values everywhere else. But since specialization isn’t stable, we use this work-around
+    //! instead:
+    //! https://lukaskalbertodt.github.io/2019/12/05/generalized-autoref-based-specialization.html
+
+    use serde::{
+        de::{DeserializeSeed, MapAccess, Visitor},
+        Deserialize, Deserializer,
+    };
+    use std::{collections::HashMap, fmt::Formatter, hash::Hash, marker::PhantomData};
+
+    pub trait DeserializeMerge<'de, T> {
+        fn deserialize_merge<D>(&self, initial: T, deserializer: D) -> Result<T, D::Error>
+        where
+            T: Sized,
+            D: Deserializer<'de>;
+    }
+
+    // Last deref level: if nothing else works, fall back to the regular `Deserialize`
+    // implementation, replacing existing value by new one.
+    impl<'de, T> DeserializeMerge<'de, T> for PhantomData<T>
+    where
+        T: Deserialize<'de>,
+    {
+        fn deserialize_merge<D>(&self, _initial: T, deserializer: D) -> Result<T, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            T::deserialize(deserializer)
+        }
+    }
+
+    // Regular `HashMap` and `Vec` support: fill up old value with data from new one.
+    impl<'de, T, I> DeserializeMerge<'de, T> for &PhantomData<T>
+    where
+        T: Deserialize<'de> + Extend<I> + IntoIterator<Item = I>,
+    {
+        fn deserialize_merge<D>(&self, mut initial: T, deserializer: D) -> Result<T, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            initial.extend(T::deserialize(deserializer)?);
+            Ok(initial)
+        }
+    }
+
+    // `HashMap` with type supporting `DeserializeSeed`: for existing keys, merge the values.
+    impl<'de, K, V> DeserializeMerge<'de, HashMap<K, V>> for &&PhantomData<HashMap<K, V>>
+    where
+        K: Deserialize<'de> + Eq + Hash,
+        V: DeserializeSeed<'de, Value = V> + Default,
+    {
+        fn deserialize_merge<D>(
+            &self,
+            initial: HashMap<K, V>,
+            deserializer: D,
+        ) -> Result<HashMap<K, V>, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            struct HashVisitor<K, V> {
+                inner: HashMap<K, V>,
+            }
+
+            impl<'de, K, V> Visitor<'de> for HashVisitor<K, V>
+            where
+                K: Deserialize<'de> + Eq + Hash,
+                V: DeserializeSeed<'de, Value = V> + Default,
+            {
+                type Value = HashMap<K, V>;
+
+                fn expecting(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+                    formatter.write_str("a map")
+                }
+
+                fn visit_map<A>(mut self, mut map: A) -> Result<Self::Value, A::Error>
+                where
+                    A: MapAccess<'de>,
+                {
+                    while let Some(key) = map.next_key()? {
+                        let value = self.inner.remove(&key).unwrap_or_default();
+                        self.inner.insert(key, map.next_value_seed(value)?);
+                    }
+                    Ok(self.inner)
+                }
+            }
+
+            deserializer.deserialize_map(HashVisitor { inner: initial })
+        }
+    }
+
+    // First deref level: use the type’s own `DeserializeSeed` implementation.
+    impl<'de, T> DeserializeMerge<'de, T> for &&&PhantomData<T>
+    where
+        T: DeserializeSeed<'de, Value = T>,
+    {
+        fn deserialize_merge<D>(&self, initial: T, deserializer: D) -> Result<T, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            initial.deserialize(deserializer)
+        }
+    }
+}

@@ -119,18 +119,10 @@ struct Opt {
 }
 
 /// Application-specific configuration settings
-#[derive(Debug, DeserializeMap)]
+#[derive(Debug, Default, DeserializeMap)]
 struct VirtualHostsAppConf {
     /// List of address/port combinations to listen on, e.g. "127.0.0.1:8080".
     listen: Vec<String>,
-}
-
-impl Default for VirtualHostsAppConf {
-    fn default() -> Self {
-        Self {
-            listen: vec!["127.0.0.1:8080".to_owned(), "[::1]:8080".to_owned()],
-        }
-    }
 }
 
 /// The combined configuration of Pingora server and [`VirtualHostsHandler`].
@@ -204,6 +196,10 @@ fn main() {
             Conf::default()
         }
     };
+
+    if !opt.listen.as_ref().is_some_and(|l| !l.is_empty()) && conf.app.listen.is_empty() {
+        error!("No addresses specified to listen on, please use --listen command line flag or listen configuration setting");
+    }
 
     let mut server = Server::new_with_opt_and_conf(
         ServerOpt {

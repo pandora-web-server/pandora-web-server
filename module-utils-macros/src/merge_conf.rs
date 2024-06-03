@@ -65,16 +65,17 @@ fn generate_deserialize_map_impl(input: &DeriveInput, fields: &FieldsNamed) -> T
                 }
 
                 fn visit_field<D>(
-                    &mut self,
+                    mut self,
                     field: &::std::primitive::str,
                     deserializer: D
-                ) -> ::std::result::Result<(), D::Error>
+                ) -> ::std::result::Result<Self, D::Error>
                 where
                     D: ::module_utils::serde::de::Deserializer<#de>
                 {
                     #(
                         if #field_visitor::accepts_field(field) {
-                            return self.#field_name.visit_field(field, deserializer);
+                            self.#field_name = self.#field_name.visit_field(field, deserializer)?;
+                            return Ok(self);
                         }
                     )*
 
