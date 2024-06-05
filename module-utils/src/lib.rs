@@ -188,7 +188,7 @@ where
             .filter_map(|path| match glob::glob(path.as_ref()) {
                 Ok(iter) => Some(iter),
                 Err(err) => {
-                    error!("Ignoring invalid glob pattern {}: {err}", path.as_ref());
+                    error!("Ignoring invalid glob pattern `{}`: {err}", path.as_ref());
                     None
                 }
             })
@@ -203,7 +203,7 @@ where
             .collect::<Vec<_>>();
         files.sort();
         files.into_iter().try_fold(Self::default(), |conf, path| {
-            info!("Loading configuration file {}", path.display());
+            info!("Loading configuration file `{}`", path.display());
             conf.merge_load_from_yaml(path)
         })
     }
@@ -213,10 +213,11 @@ where
     }
 
     fn merge_load_from_yaml(self, path: impl AsRef<Path>) -> Result<Self, Box<Error>> {
-        let file = File::open(path.as_ref()).map_err(|err| {
+        let path = path.as_ref();
+        let file = File::open(path).map_err(|err| {
             Error::because(
                 ErrorType::FileOpenError,
-                "failed opening configuration file",
+                format!("failed opening configuration file `{}`", path.display()),
                 err,
             )
         })?;
@@ -227,7 +228,7 @@ where
             .map_err(|err| {
                 Error::because(
                     ErrorType::FileReadError,
-                    "failed reading configuration file",
+                    format!("failed reading configuration file `{}`", path.display()),
                     err,
                 )
             })?;
