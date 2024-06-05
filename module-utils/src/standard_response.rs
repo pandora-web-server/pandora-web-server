@@ -15,6 +15,7 @@
 //! Standard responses for various conditions
 
 use http::{header, method::Method, status::StatusCode};
+use maud::{html, DOCTYPE};
 
 use crate::pingora::{Error, ResponseHeader, SessionWrapper};
 
@@ -22,15 +23,25 @@ use crate::pingora::{Error, ResponseHeader, SessionWrapper};
 pub fn response_text(status: StatusCode) -> String {
     let status_str = status.as_str();
     let reason = status.canonical_reason().unwrap_or("");
-    format!(
-        r#"<!DOCTYPE html>
-<html>
-<head><title>{status_str} {reason}</title></head>
-<body>
-<center><h1>{status_str} {reason}</h1></center>
-</body>
-</html>"#
-    )
+    html! {
+        (DOCTYPE)
+        html {
+            head {
+                title {
+                    (status_str) " " (reason)
+                }
+            }
+
+            body {
+                center {
+                    h1 {
+                        (status_str) " " (reason)
+                    }
+                }
+            }
+        }
+    }
+    .into()
 }
 
 async fn response(

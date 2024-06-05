@@ -41,6 +41,7 @@ headers-module = { path = "headers-module", version = "0.2.0" }
 http = "1.0.0"
 httpdate = "1"
 log = "0.4"
+maud = "0.26.0"
 module-utils = { path = "module-utils", version = "0.2.0" }
 module-utils-macros = { path = "module-utils-macros", version = "0.2.0" }
 rewrite-module = { path = "rewrite-module", version = "0.2.0" }

@@ -152,6 +152,7 @@ use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use bcrypt::{hash, verify, DEFAULT_COST};
 use http::{header, Method, StatusCode};
 use log::{error, info, trace};
+use maud::{html, DOCTYPE};
 use module_utils::pingora::{Error, ResponseHeader, SessionWrapper};
 use module_utils::{DeserializeMap, RequestFilter, RequestFilterResult};
 use std::collections::HashMap;
@@ -245,29 +246,34 @@ async fn error_response(
     realm: &str,
     credentials: Option<(&str, &[u8])>,
 ) -> Result<(), Box<Error>> {
-    let credentials = credentials.and_then(|(user, password)| {
-        let user = user.chars().filter(|c| c.is_alphanumeric()).collect::<String>();
-        let password = hash(password, DEFAULT_COST).ok()?;
-        let mut result = user.to_owned();
-        result.push_str(": ");
-        result.push_str(&password);
-        Some(format!(r#"<p>If you are the administrator of this server, you might want to add the following to your configuration:</p>
-<pre>
-        auth_credentials:
-            {user}: {password}
-</pre>
-"#))
-    }).unwrap_or_default();
+    let text = html! {
+        (DOCTYPE)
+        html {
+            head {
+                title {
+                    "401 Unauthorized"
+                }
+            }
 
-    let text = format!(
-        r#"<!DOCTYPE html>
-<html>
-<head><title>401 Unauthorized</title></head>
-<body>
-<center><h1>401 Unauthorized</h1></center>
-{credentials}</body>
-</html>"#
-    );
+            body {
+                center {
+                    h1 {
+                        "401 Unauthorized"
+                    }
+                }
+
+                @if let Some((user, password)) = credentials.and_then(|(u, p)| Some((u, hash(p, DEFAULT_COST).ok()?))) {
+                    p {
+                        "If you are the administrator of this server, you might want to add the following to your configuration:"
+                    }
+                    pre {
+                        "auth_credentials:\n"
+                        "    \"" (user) "\": " (password)
+                    }
+                }
+            }
+        }
+    }.into_string();
 
     let mut header = ResponseHeader::build(StatusCode::UNAUTHORIZED, Some(3))?;
     header.append_header(header::CONTENT_LENGTH, text.len().to_string())?;
@@ -618,7 +624,8 @@ mod tests {
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::ResponseSent
         );
-        assert!(String::from_utf8_lossy(&session.response_body).contains("me: $2b$"));
+        assert!(String::from_utf8_lossy(&session.response_body)
+            .contains("&quot;'&lt;me&gt;'&quot;: $2b$"));
 
         Ok(())
     }
