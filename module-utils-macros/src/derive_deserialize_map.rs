@@ -15,7 +15,7 @@
 use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::quote;
-use syn::{parse::Parse, DeriveInput, Error, Field, FieldsNamed, Ident, LitStr, Path};
+use syn::{DeriveInput, Error, Field, FieldsNamed, Ident, LitStr, Path};
 
 use crate::utils::{generics_with_de, get_fields, type_name_short, where_clause};
 
@@ -23,7 +23,7 @@ use crate::utils::{generics_with_de, get_fields, type_name_short, where_clause};
 struct FieldAttributes {
     skip: bool,
     name: Ident,
-    deserialize_from: Vec<Ident>,
+    deserialize_name: Vec<LitStr>,
     deserialize: TokenStream2,
 }
 
@@ -32,7 +32,7 @@ impl TryFrom<&Field> for FieldAttributes {
 
     fn try_from(field: &Field) -> Result<Self, Self::Error> {
         let mut rename = None;
-        let mut deserialize_from = Vec::new();
+        let mut deserialize_name = Vec::new();
         let mut skip = false;
         let mut deserialize_with = None;
 
@@ -48,25 +48,19 @@ impl TryFrom<&Field> for FieldAttributes {
                     }
                     meta.parse_nested_meta(|meta| {
                         if meta.path.is_ident("deserialize") {
-                            let value = meta.value()?;
-                            let s: LitStr = value.parse()?;
-                            rename = Some(s.parse_with(Ident::parse)?);
+                            rename = Some(meta.value()?.parse()?);
                             Ok(())
                         } else {
                             Err(Error::new_spanned(meta.path, "unexpected parameter"))
                         }
                     })
                     .or_else(|_| {
-                        let value = meta.value()?;
-                        let s: LitStr = value.parse()?;
-                        rename = Some(s.parse_with(Ident::parse)?);
+                        rename = Some(meta.value()?.parse()?);
                         Ok::<_, Error>(())
                     })?;
                     Ok(())
                 } else if meta.path.is_ident("alias") {
-                    let value = meta.value()?;
-                    let s: LitStr = value.parse()?;
-                    deserialize_from.push(s.parse_with(Ident::parse)?);
+                    deserialize_name.push(meta.value()?.parse()?);
                     Ok(())
                 } else if meta.path.is_ident("skip") || meta.path.is_ident("skip_deserializing") {
                     if skip {
@@ -102,7 +96,13 @@ impl TryFrom<&Field> for FieldAttributes {
             skip = true;
             Ident::new("", Span::call_site())
         };
-        deserialize_from.insert(0, rename.unwrap_or_else(|| name.clone()));
+        deserialize_name.insert(
+            0,
+            rename.unwrap_or_else(|| {
+                let lit = name.to_string();
+                LitStr::new(lit.strip_prefix("r#").unwrap_or(&lit), name.span())
+            }),
+        );
 
         let deserialize = if let Some(deserialize_with) = deserialize_with {
             quote! {#deserialize_with(deserializer)}
@@ -120,16 +120,16 @@ impl TryFrom<&Field> for FieldAttributes {
         Ok(Self {
             skip,
             name,
-            deserialize_from,
+            deserialize_name,
             deserialize,
         })
     }
 }
 
-fn collect_deserialize_names(attrs: &[FieldAttributes]) -> Result<Vec<&Ident>, Error> {
+fn collect_deserialize_names(attrs: &[FieldAttributes]) -> Result<Vec<&LitStr>, Error> {
     let mut result = Vec::new();
     for attr in attrs {
-        for name in &attr.deserialize_from {
+        for name in &attr.deserialize_name {
             if result.contains(&name) {
                 return Err(Error::new(name.span(), "duplicate field name"));
             }
@@ -160,7 +160,7 @@ fn generate_deserialize_map_impl(
     field_attrs.retain(|attr| !attr.skip);
 
     let field_name = field_attrs.iter().map(|attr| &attr.name);
-    let field_deserialize_name = field_attrs.iter().map(|attr| &attr.deserialize_from);
+    let field_deserialize_name = field_attrs.iter().map(|attr| &attr.deserialize_name);
     let field_deserialize = field_attrs.iter().map(|attr| &attr.deserialize);
     let deserialize_name = collect_deserialize_names(&field_attrs)?;
 
@@ -168,7 +168,7 @@ fn generate_deserialize_map_impl(
         const _: () = {
             const __FIELDS: &[&::std::primitive::str] = &[
                 #(
-                    ::std::stringify!(#deserialize_name),
+                    #deserialize_name,
                 )*
             ];
 
@@ -197,7 +197,7 @@ fn generate_deserialize_map_impl(
                 {
                     match field {
                         #(
-                            #(::std::stringify!(#field_deserialize_name))|* => {
+                            #(#field_deserialize_name)|* => {
                                 self.inner.#field_name = #field_deserialize?;
                                 ::std::result::Result::Ok(self)
                             }

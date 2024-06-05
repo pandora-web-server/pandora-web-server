@@ -301,8 +301,7 @@ impl<'de> Deserialize<'de> for RegexMatch {
 }
 
 /// A rewrite rule resulting in either request URI change or redirect
-#[derive(Debug, PartialEq, Eq, Deserialize)]
-#[serde(default)]
+#[derive(Debug, PartialEq, Eq, DeserializeMap)]
 pub struct RewriteRule {
     /// Path or a set of paths to rewrite
     ///
