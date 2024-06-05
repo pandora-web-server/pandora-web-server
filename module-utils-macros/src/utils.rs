@@ -19,7 +19,7 @@ use syn::punctuated::Punctuated;
 use syn::token::{Comma, Plus};
 use syn::visit::Visit;
 use syn::{
-    Data, DataStruct, DeriveInput, Fields, FieldsNamed, GenericParam, Ident, Lifetime,
+    Data, DataStruct, DeriveInput, Field, Fields, FieldsNamed, GenericParam, Ident, Lifetime,
     LifetimeParam, Type, TypeParamBound, WhereClause,
 };
 
@@ -158,15 +158,39 @@ pub(crate) fn generics_with_de(
     (de, generics, generics_short)
 }
 
-pub(crate) fn where_clause(
-    ty: &DeriveInput,
-    fields: &FieldsNamed,
-    field_bound: TokenStream,
-) -> WhereClause {
-    let field_bound = Punctuated::<TypeParamBound, Plus>::parse_terminated
-        .parse2(field_bound)
-        .unwrap();
+pub(crate) trait ToFieldBound<'a> {
+    fn to_field_bound(&self, field: &'a Field) -> Option<Punctuated<TypeParamBound, Plus>>;
+}
+impl<'a> ToFieldBound<'a> for TokenStream {
+    fn to_field_bound(&self, _field: &'a Field) -> Option<Punctuated<TypeParamBound, Plus>> {
+        Some(
+            Punctuated::<TypeParamBound, Plus>::parse_terminated
+                .parse2(self.clone())
+                .unwrap(),
+        )
+    }
+}
+impl<'a, F> ToFieldBound<'a> for F
+where
+    F: Fn(&'a Field) -> Option<TokenStream> + 'a,
+{
+    fn to_field_bound(&self, field: &'a Field) -> Option<Punctuated<TypeParamBound, Plus>> {
+        self(field).map(|tokens| {
+            Punctuated::<TypeParamBound, Plus>::parse_terminated
+                .parse2(tokens)
+                .unwrap()
+        })
+    }
+}
 
+pub(crate) fn where_clause<'a, B>(
+    ty: &DeriveInput,
+    fields: &'a FieldsNamed,
+    field_bound: B,
+) -> WhereClause
+where
+    B: ToFieldBound<'a>,
+{
     let mut where_clause = ty
         .generics
         .where_clause
@@ -189,9 +213,11 @@ pub(crate) fn where_clause(
     for field in &fields.named {
         let field_type = &field.ty;
         if contains_generic(field_type, &lifetimes, &idents) {
-            where_clause
-                .predicates
-                .push(syn::parse2(quote! {#field_type: #field_bound}).unwrap());
+            if let Some(field_bound) = field_bound.to_field_bound(field) {
+                where_clause
+                    .predicates
+                    .push(syn::parse2(quote! {#field_type: #field_bound}).unwrap());
+            }
         }
     }
 

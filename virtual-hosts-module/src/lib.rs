@@ -147,7 +147,5 @@
 mod configuration;
 mod handler;
 
-pub use configuration::{
-    SubDirCombined, SubDirConf, VirtualHostCombined, VirtualHostConf, VirtualHostsConf,
-};
+pub use configuration::{SubDirConf, VirtualHostConf, VirtualHostsConf};
 pub use handler::VirtualHostsHandler;

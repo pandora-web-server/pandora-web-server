@@ -12,29 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use module_utils::{merge_conf, DeserializeMap};
+use module_utils::DeserializeMap;
 use std::collections::HashMap;
 
-/// Additional configuration settings for a subdirectory
+/// Subdirectory configuration
 #[derive(Debug, Default, DeserializeMap)]
-pub struct SubDirConf {
+pub struct SubDirConf<C: Default> {
     /// If `true`, subdirectory will be removed from the URI before passing it on to the handler.
     pub strip_prefix: bool,
-}
-
-/// Combined configuration structure for virtual hosts
-///
-/// This merges the settings from both member fields. Deserializing fields that are not contained
-/// in either of the two structures will result in an error.
-#[merge_conf]
-pub struct SubDirCombined<C: Default> {
-    /// Subdirectory specific settings
-    pub subdir: SubDirConf,
     /// Generic handler settings
+    ///
+    /// These settings are flattened and appear at the same level as `strip_prefix` in the
+    /// configuration file.
+    #[module_utils(flatten)]
     pub config: C,
 }
 
-/// Additional configuration settings for a virtual host
+/// Virtual host configuration
 #[derive(Debug, Default, DeserializeMap)]
 pub struct VirtualHostConf<C: Default> {
     /// List of additional names for the virtual host
@@ -43,17 +37,12 @@ pub struct VirtualHostConf<C: Default> {
     /// configuration applies
     pub default: bool,
     /// Maps virtual host's subdirectories to their special configurations
-    pub subdirs: HashMap<String, SubDirCombined<C>>,
-}
-
-/// Combined configuration structure for virtual hosts
-///
-/// This merges the settings from both member fields.
-#[merge_conf]
-pub struct VirtualHostCombined<C: Default> {
-    /// Virtual host specific settings
-    pub host: VirtualHostConf<C>,
+    pub subdirs: HashMap<String, SubDirConf<C>>,
     /// Generic handler settings
+    ///
+    /// These settings are flattened and appear at the same level as `default` in the configuration
+    /// file.
+    #[module_utils(flatten)]
     pub config: C,
 }
 
@@ -61,5 +50,5 @@ pub struct VirtualHostCombined<C: Default> {
 #[derive(Debug, Default, DeserializeMap)]
 pub struct VirtualHostsConf<C: Default> {
     /// Maps virtual host names to their configuration
-    pub vhosts: HashMap<String, VirtualHostCombined<C>>,
+    pub vhosts: HashMap<String, VirtualHostConf<C>>,
 }

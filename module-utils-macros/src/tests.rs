@@ -203,6 +203,11 @@ fn field_attributes() {
         }
     }
 
+    #[derive(Debug, Default, DeserializeMap)]
+    struct Blob {
+        value: String,
+    }
+
     fn custom_deserialize<'de, D>(deserializer: D) -> Result<Blub, D::Error>
     where
         D: Deserializer<'de>,
@@ -223,6 +228,8 @@ fn field_attributes() {
         value4: Blub,
         #[module_utils(skip_deserializing)]
         value5: Option<Blub>,
+        #[module_utils(flatten)]
+        value6: Blob,
     }
 
     let conf = Conf::from_yaml(
@@ -238,16 +245,19 @@ fn field_attributes() {
     assert_eq!(conf.value3.value, "hi!".to_owned());
     assert_eq!(conf.value4.value, "another hi!".to_owned());
     assert!(conf.value5.is_none());
+    assert_eq!(conf.value6.value, String::new());
 
     Conf::from_yaml("value1: renamed").unwrap_err();
     Conf::from_yaml("value2: skipped").unwrap_err();
     Conf::from_yaml("value4: renamed").unwrap_err();
     Conf::from_yaml("value5: skipped").unwrap_err();
+    Conf::from_yaml("value6: flattened").unwrap_err();
 
     let conf = Conf::from_yaml(
         r#"
             hi1: 34
             v3: alias
+            value: v6
         "#,
     )
     .unwrap();
@@ -256,6 +266,7 @@ fn field_attributes() {
     assert_eq!(conf.value3.value, "alias".to_owned());
     assert_eq!(conf.value4.value, String::new());
     assert!(conf.value5.is_none());
+    assert_eq!(conf.value6.value, "v6".to_owned());
 
     let conf = Conf::from_yaml("another1: 56").unwrap();
     assert_eq!(conf.value1, 56);
@@ -263,6 +274,7 @@ fn field_attributes() {
     assert_eq!(conf.value3.value, String::new());
     assert_eq!(conf.value4.value, String::new());
     assert!(conf.value5.is_none());
+    assert_eq!(conf.value6.value, String::new());
 }
 
 #[test]

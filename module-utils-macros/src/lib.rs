@@ -64,9 +64,9 @@ pub fn merge_opt(_args: TokenStream, input: TokenStream) -> TokenStream {
 }
 
 /// This attribute macro merges the configuration settings from all structs identified as field of
-/// the current struct. The result will implement `DeserializeMap`, `Deserialize`, `Debug`
-/// and `Default` traits automatically. All field types are required to implement
-/// `DeserializeMap`, `Debug` and `Default`.
+/// the current struct. It’s essentially a shortcut for deriving `Debug`, `Default` and
+/// `DeserializeMap` traits, the latter with all fields flattened. All field types are required to
+/// implement `Debug`, `Default` and `DeserializeMap`.
 ///
 /// ```rust
 /// use pingora_core::server::configuration::ServerConf;
@@ -152,7 +152,7 @@ pub fn merge_conf(_attr: TokenStream, input: TokenStream) -> TokenStream {
 /// let handler: Handler = conf.try_into().unwrap();
 /// ```
 ///
-/// As this uses `#[merge_conf]` macro for configurations internally, unknown fields in
+/// As this derives `DeserializeMap` trait for configurations internally, unknown fields in
 /// configuration will cause an error during deserialization:
 ///
 /// ```rust
@@ -183,14 +183,15 @@ pub fn derive_request_filter(input: TokenStream) -> TokenStream {
 /// This macro will automatically implement `DeserializeMap`, `serde::Deserialize` and
 /// `serde::DeserializeSeed` traits for a structure.
 ///
-/// This allows `#[merge_conf]` macro to merge this structure efficiently without an
-/// intermediate storage that `#[serde(flatten)]` would use. It also allows flagging unsupported
-/// configuration fields in merged configurations, effectively implementing
-/// `#[serde(deny_unknown_fields)]` that would have been incompatible with `#[serde(flatten)]`.
+/// Unlike Serde’s usual deserialization, this approach is optimized for configuration files. It
+/// allows an efficient implementation of the `flatten` attribute without intermediate storage.
+/// Unknown fields are flagged automatically, effectively implying `deny_unknown_fields` attribute
+/// which Serde does not support in combination with `flatten`. Merging multiple configurations
+/// into a single data structure on the fly is also supported.
 ///
 /// The structure has to implement `Default` which will be used as initial value for
-/// `serde::Deserialize`. Individual fields need to implement `serde::Deserialize`. The following
-/// field attributes are supported, striving for compatibility with the corresponding
+/// `serde::Deserialize`. Individual fields usually need to implement `serde::Deserialize`. The
+/// following field attributes are supported, striving for compatibility with the corresponding
 /// [Serde field attributes](https://serde.rs/field-attrs.html):
 ///
 /// * `#[module_utils(rename = "name")]` or
@@ -201,6 +202,12 @@ pub fn derive_request_filter(input: TokenStream) -> TokenStream {
 ///
 ///   Deserialize this field from the given name or from its Rust name. May be repeated to specify
 ///   multiple possible names for the same field.
+/// * `#[module_utils(flatten)]`
+///
+///   Flatten the contents of this field into the container it is defined in. This removes one
+///   level of structure between the configuration file and the Rust data structure representation.
+///
+///   Unlike regular fields, flattened fields have to implement `DeserializeMap` trait.
 /// * `#[module_utils(skip)]` or `#[serde(skip_deserializing)]`
 ///
 ///   Skip this field when deserializing, always use the default value instead.

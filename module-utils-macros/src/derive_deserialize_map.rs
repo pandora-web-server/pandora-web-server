@@ -15,16 +15,18 @@
 use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::quote;
-use syn::{DeriveInput, Error, Field, FieldsNamed, Ident, LitStr, Path};
+use syn::{DeriveInput, Error, Field, FieldsNamed, Ident, LitStr, Path, Type};
 
 use crate::utils::{generics_with_de, get_fields, type_name_short, where_clause};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct FieldAttributes {
     skip: bool,
     name: Ident,
+    ty: Type,
     deserialize_name: Vec<LitStr>,
     deserialize: TokenStream2,
+    flatten: bool,
 }
 
 impl TryFrom<&Field> for FieldAttributes {
@@ -35,6 +37,7 @@ impl TryFrom<&Field> for FieldAttributes {
         let mut deserialize_name = Vec::new();
         let mut skip = false;
         let mut deserialize_with = None;
+        let mut flatten = false;
 
         for attr in &field.attrs {
             if !attr.path().is_ident("module_utils") {
@@ -68,6 +71,9 @@ impl TryFrom<&Field> for FieldAttributes {
                     }
                     skip = true;
                     Ok(())
+                } else if meta.path.is_ident("flatten") {
+                    flatten = true;
+                    Ok(())
                 } else if meta.path.is_ident("deserialize_with") || meta.path.is_ident("with") {
                     if deserialize_with.is_some() {
                         return Err(Error::new_spanned(
@@ -90,12 +96,34 @@ impl TryFrom<&Field> for FieldAttributes {
             })?;
         }
 
+        if flatten {
+            if let Some(rename) = rename {
+                return Err(Error::new_spanned(
+                    rename,
+                    "rename is incompatible with flatten",
+                ));
+            }
+            if let Some(deserialize_name) = deserialize_name.first() {
+                return Err(Error::new_spanned(
+                    deserialize_name,
+                    "alias is incompatible with flatten",
+                ));
+            }
+            if let Some(deserialize_with) = deserialize_with {
+                return Err(Error::new_spanned(
+                    deserialize_with,
+                    "deserialize_with is incompatible with flatten",
+                ));
+            }
+        }
+
         let name = if let Some(name) = &field.ident {
             name.clone()
         } else {
             skip = true;
             Ident::new("", Span::call_site())
         };
+        let ty = field.ty.clone();
         deserialize_name.insert(
             0,
             rename.unwrap_or_else(|| {
@@ -107,12 +135,10 @@ impl TryFrom<&Field> for FieldAttributes {
         let deserialize = if let Some(deserialize_with) = deserialize_with {
             quote! {#deserialize_with(deserializer)}
         } else {
-            let field_name = &field.ident;
-            let field_type = &field.ty;
             quote! {
                 {
                     use ::module_utils::_private::DeserializeMerge;
-                    (&&&&::std::marker::PhantomData::<#field_type>).deserialize_merge(self.inner.#field_name, deserializer)
+                    (&&&&::std::marker::PhantomData::<#ty>).deserialize_merge(self.#name, deserializer)
                 }
             }
         };
@@ -120,13 +146,15 @@ impl TryFrom<&Field> for FieldAttributes {
         Ok(Self {
             skip,
             name,
+            ty,
             deserialize_name,
             deserialize,
+            flatten,
         })
     }
 }
 
-fn collect_deserialize_names(attrs: &[FieldAttributes]) -> Result<Vec<&LitStr>, Error> {
+fn collect_deserialize_names<'a>(attrs: &[&'a FieldAttributes]) -> Result<Vec<&'a LitStr>, Error> {
     let mut result = Vec::new();
     for attr in attrs {
         for name in &attr.deserialize_name {
@@ -146,23 +174,75 @@ fn generate_deserialize_map_impl(
     let vis = &input.vis;
     let struct_name = type_name_short(input);
     let (de, generics, generics_short) = generics_with_de(input);
-    let where_clause = where_clause(
-        input,
-        fields,
-        quote! {::module_utils::serde::Deserialize<#de>},
-    );
+    let where_clause = where_clause(input, fields, |field| {
+        let attrs = FieldAttributes::try_from(field).ok()?;
+        if attrs.skip {
+            None
+        } else if attrs.flatten {
+            Some(quote! {::module_utils::DeserializeMap<#de>})
+        } else {
+            Some(quote! {::module_utils::serde::Deserialize<#de>})
+        }
+    });
 
-    let mut field_attrs = fields
+    let field_attrs = fields
         .named
         .iter()
         .map(FieldAttributes::try_from)
         .collect::<Result<Vec<_>, _>>()?;
-    field_attrs.retain(|attr| !attr.skip);
+    let field_name = field_attrs
+        .iter()
+        .map(|attr| &attr.name)
+        .collect::<Vec<_>>();
+    let inner_type = field_attrs
+        .iter()
+        .map(|attr| {
+            let ty = &attr.ty;
+            if attr.flatten {
+                quote! {<#ty as ::module_utils::DeserializeMap<#de>>::Visitor}
+            } else {
+                quote! {#ty}
+            }
+        })
+        .collect::<Vec<_>>();
+    let init = field_attrs.iter().map(|attr| {
+        let field_name = &attr.name;
+        if attr.flatten {
+            quote! {self.#field_name.visitor()}
+        } else {
+            quote! {self.#field_name}
+        }
+    });
+    let finalize = field_attrs.iter().map(|attr| {
+        let field_name = &attr.name;
+        if attr.flatten {
+            quote! {self.#field_name.finalize()?}
+        } else {
+            quote! {self.#field_name}
+        }
+    });
 
-    let field_name = field_attrs.iter().map(|attr| &attr.name);
-    let field_deserialize_name = field_attrs.iter().map(|attr| &attr.deserialize_name);
-    let field_deserialize = field_attrs.iter().map(|attr| &attr.deserialize);
-    let deserialize_name = collect_deserialize_names(&field_attrs)?;
+    let flattened_name = field_attrs
+        .iter()
+        .filter(|attr| attr.flatten)
+        .map(|attr| &attr.name);
+    let flattened_type = field_attrs
+        .iter()
+        .zip(inner_type.iter())
+        .filter_map(|(attr, ty)| if attr.flatten { Some(ty) } else { None })
+        .collect::<Vec<_>>();
+
+    let regular_fields = field_attrs
+        .iter()
+        .filter(|attr| !attr.skip && !attr.flatten)
+        .collect::<Vec<_>>();
+    let regular_name = regular_fields
+        .iter()
+        .map(|attr| &attr.name)
+        .collect::<Vec<_>>();
+    let regular_deserialize_name = regular_fields.iter().map(|attr| &attr.deserialize_name);
+    let regular_deserialize = regular_fields.iter().map(|attr| &attr.deserialize);
+    let deserialize_name = collect_deserialize_names(&regular_fields)?;
 
     Ok(quote! {
         const _: () = {
@@ -173,8 +253,10 @@ fn generate_deserialize_map_impl(
             ];
 
             #vis struct __Visitor<#generics> #where_clause {
-                inner: #struct_name,
-                marker: ::std::marker::PhantomData<&#de ()>,
+                #(
+                    #field_name: #inner_type,
+                )*
+                __marker: ::std::marker::PhantomData<&#de ()>,
             }
 
             impl<#generics> ::module_utils::MapVisitor<#de> for __Visitor<#generics_short>
@@ -183,11 +265,22 @@ fn generate_deserialize_map_impl(
                 type Value = #struct_name;
 
                 fn accepts_field(field: &::std::primitive::str) -> ::std::primitive::bool {
-                    __FIELDS.contains(&field)
+                    if __FIELDS.contains(&field) {
+                        return true;
+                    }
+                    #(
+                        if #flattened_type::accepts_field(field) {
+                            return true;
+                        }
+                    )*
+                    false
                 }
 
                 fn list_fields(list: &mut ::std::vec::Vec<&'static ::std::primitive::str>) {
                     list.extend_from_slice(__FIELDS);
+                    #(
+                        #flattened_type::list_fields(list);
+                    )*
                 }
 
                 fn visit_field<D>(mut self, field: &::std::primitive::str, deserializer: D)
@@ -197,17 +290,34 @@ fn generate_deserialize_map_impl(
                 {
                     match field {
                         #(
-                            #(#field_deserialize_name)|* => {
-                                self.inner.#field_name = #field_deserialize?;
+                            #(#regular_deserialize_name)|* => {
+                                self.#regular_name = #regular_deserialize?;
                                 ::std::result::Result::Ok(self)
                             }
                         )*
-                        other => ::std::result::Result::Err(
-                            <D::Error as ::module_utils::serde::de::Error>::unknown_field(
-                                other,
-                                __FIELDS
+                        other => {
+                            #(
+                                if #flattened_type::accepts_field(field) {
+                                    self.#flattened_name = self.#flattened_name.visit_field(field, deserializer)?;
+                                    return ::std::result::Result::Ok(self);
+                                }
+                            )*
+
+                            let mut fields = ::std::vec::Vec::new();
+                            Self::list_fields(&mut fields);
+                            fields.sort();
+
+                            // Error::unknown_field() won't accept non-static slices, so we
+                            // duplicate its functionality here.
+                            ::std::result::Result::Err(
+                                <D::Error as ::module_utils::serde::de::Error>::custom(
+                                    ::std::format_args!(
+                                        "unknown field `{field}`, expected one of `{}`",
+                                        fields.join("`, `"),
+                                    )
+                                )
                             )
-                        ),
+                        }
                     }
                 }
 
@@ -215,7 +325,11 @@ fn generate_deserialize_map_impl(
                 where
                     E: ::module_utils::serde::de::Error
                 {
-                    ::std::result::Result::Ok(self.inner)
+                    ::std::result::Result::Ok(Self::Value {
+                        #(
+                            #field_name: #finalize,
+                        )*
+                    })
                 }
             }
 
@@ -226,8 +340,10 @@ fn generate_deserialize_map_impl(
 
                 fn visitor(self) -> Self::Visitor {
                     Self::Visitor {
-                        inner: self,
-                        marker: ::std::marker::PhantomData,
+                        #(
+                            #field_name: #init,
+                        )*
+                        __marker: ::std::marker::PhantomData,
                     }
                 }
             }
@@ -235,7 +351,7 @@ fn generate_deserialize_map_impl(
     })
 }
 
-pub(crate) fn generate_deserialize_impl(input: &DeriveInput) -> TokenStream2 {
+fn generate_deserialize_impl(input: &DeriveInput) -> TokenStream2 {
     // This could be a blanket implementation for anything implementing DeserializeMap trait.
     // But it has to be an explicit implementation because blanket implementations for foreign
     // traits aren’t allowed.

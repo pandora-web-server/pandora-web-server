@@ -169,10 +169,10 @@ where
         let mut aliases = HashMap::new();
         let mut default = None;
         for (host, host_conf) in conf.vhosts.into_iter() {
-            for alias in host_conf.host.aliases.into_iter() {
+            for alias in host_conf.aliases.into_iter() {
                 aliases.insert(alias, host.clone());
             }
-            if host_conf.host.default {
+            if host_conf.default {
                 if let Some(previous) = &default {
                     warn!("both {previous} and {host} are marked as default virtual host, ignoring the latter");
                 } else {
@@ -181,12 +181,8 @@ where
             }
             handlers.push(&host, "", (false, host_conf.config.try_into()?));
 
-            for (path, conf) in host_conf.host.subdirs {
-                handlers.push(
-                    &host,
-                    path,
-                    (conf.subdir.strip_prefix, conf.config.try_into()?),
-                );
+            for (path, conf) in host_conf.subdirs {
+                handlers.push(&host, path, (conf.strip_prefix, conf.config.try_into()?));
             }
         }
         let handlers = handlers.build();
