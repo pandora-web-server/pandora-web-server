@@ -29,7 +29,7 @@ pub(crate) trait IntoMergedConf {
 
 impl<C> IntoMergedConf for Vec<WithMatchRules<C>>
 where
-    C: Debug + PartialEq + Eq + Clone + Mergeable + IntoHeaders,
+    C: Default + Eq + Clone + Mergeable + IntoHeaders,
 {
     fn into_merged(self) -> HashMap<(String, String), MergedConf> {
         let mut configs = HashMap::new();

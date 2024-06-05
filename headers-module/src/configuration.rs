@@ -18,7 +18,7 @@
 #![allow(clippy::mutable_key_type)]
 
 use http::header::{HeaderName, HeaderValue};
-use module_utils::DeserializeMap;
+use module_utils::{merge_conf, DeserializeMap};
 use serde::{
     de::{Deserializer, Error},
     Deserialize,
@@ -168,8 +168,7 @@ impl Ord for MatchRule {
 ///
 /// The configuration entry is only applied to a host/path configuration if there is a matching
 /// rule and that rule is an include rule.
-#[derive(Debug, PartialEq, Eq, Deserialize)]
-#[serde(default)]
+#[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
 pub struct MatchRules {
     /// Rules determining the locations where the configuration entry should apply
     pub include: Vec<MatchRule>,
@@ -178,9 +177,19 @@ pub struct MatchRules {
 }
 
 impl MatchRules {
+    const RULE_DEFAULT: &'static MatchRule = &MatchRule {
+        host: String::new(),
+        path: String::new(),
+        prefix: true,
+    };
+
     /// Produces all rules, both include and exclude
-    pub(crate) fn iter(&self) -> Box<impl Iterator<Item = &MatchRule>> {
-        Box::new(self.include.iter().chain(self.exclude.iter()))
+    pub(crate) fn iter(&self) -> Box<dyn Iterator<Item = &MatchRule> + '_> {
+        if self.include.is_empty() && self.exclude.is_empty() {
+            Box::new(std::iter::once(Self::RULE_DEFAULT))
+        } else {
+            Box::new(self.include.iter().chain(self.exclude.iter()))
+        }
     }
 
     /// Checks whether the rules match the given host/path combination. If there is a matching rule
@@ -211,6 +220,11 @@ impl MatchRules {
             })
         }
 
+        if self.include.is_empty() && self.exclude.is_empty() {
+            // Match everything by default
+            return Some(Self::RULE_DEFAULT);
+        }
+
         let exclude = find_match(&self.exclude, host, path, allow_exact);
         let include = find_match(&self.include, host, path, allow_exact);
         if let Some(exclude) = exclude {
@@ -221,20 +235,6 @@ impl MatchRules {
             }
         } else {
             include
-        }
-    }
-}
-
-impl Default for MatchRules {
-    fn default() -> Self {
-        // By default, match everything
-        Self {
-            include: vec![MatchRule {
-                host: String::new(),
-                path: String::new(),
-                prefix: true,
-            }],
-            exclude: Vec::new(),
         }
     }
 }
@@ -253,14 +253,13 @@ pub(crate) trait IntoHeaders {
 
 /// Combines a given configuration with match rules determining what host/path combinations it
 /// should apply to.
-#[derive(Debug, PartialEq, Eq, Deserialize)]
-pub struct WithMatchRules<C: Debug + PartialEq + Eq> {
+#[derive(PartialEq, Eq)]
+#[merge_conf]
+pub struct WithMatchRules<C: Default + PartialEq + Eq> {
     /// The match rules
-    #[serde(flatten, default)]
     pub match_rules: MatchRules,
 
     /// The actual configuration
-    #[serde(flatten)]
     pub conf: C,
 }
 
@@ -284,10 +283,10 @@ where
 }
 
 /// Configuration for custom headers
-#[derive(Debug, Default, PartialEq, Eq, Clone, Deserialize)]
+#[derive(Debug, Default, PartialEq, Eq, Clone, DeserializeMap)]
 pub struct CustomHeadersConf {
     /// Map of header names to their respective values
-    #[serde(deserialize_with = "deserialize_headers")]
+    #[module_utils(deserialize_with = "deserialize_headers")]
     pub headers: HashMap<HeaderName, HeaderValue>,
 }
 
