@@ -48,15 +48,18 @@ async fn response(
     session: &mut impl SessionWrapper,
     status: StatusCode,
     location: Option<&str>,
+    cookie: Option<&str>,
 ) -> Result<(), Box<Error>> {
     let text = response_text(status);
 
-    let num_headers = if location.is_some() { 3 } else { 2 };
-    let mut header = ResponseHeader::build(status, Some(num_headers))?;
+    let mut header = ResponseHeader::build(status, Some(4))?;
     header.append_header(header::CONTENT_LENGTH, text.len().to_string())?;
     header.append_header(header::CONTENT_TYPE, "text/html")?;
     if let Some(location) = location {
         header.append_header(header::LOCATION, location)?;
+    }
+    if let Some(cookie) = cookie {
+        header.append_header(header::SET_COOKIE, cookie)?;
     }
     session.write_response_header(Box::new(header)).await?;
 
@@ -72,7 +75,7 @@ pub async fn error_response(
     session: &mut impl SessionWrapper,
     status: StatusCode,
 ) -> Result<(), Box<Error>> {
-    response(session, status, None).await
+    response(session, status, None, None).await
 }
 
 /// Responds with a redirect to the given location.
@@ -81,5 +84,15 @@ pub async fn redirect_response(
     status: StatusCode,
     location: &str,
 ) -> Result<(), Box<Error>> {
-    response(session, status, Some(location)).await
+    response(session, status, Some(location), None).await
+}
+
+/// Responds with a redirect to the given location and setting a cookie.
+pub async fn redirect_response_with_cookie(
+    session: &mut impl SessionWrapper,
+    status: StatusCode,
+    location: &str,
+    cookie: &str,
+) -> Result<(), Box<Error>> {
+    response(session, status, Some(location), Some(cookie)).await
 }

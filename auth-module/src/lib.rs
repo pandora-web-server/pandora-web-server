@@ -15,14 +15,14 @@
 //! # Auth Module for Pingora
 //!
 //! This crate allows putting up an authentication check before further processing of the request
-//! happens. Only authorized users can proceed, others get a “401 Unauthorized” response. This
-//! barrier can apply to the entire server or, with the help of the Virtual Hosts Module, only a
-//! single virtual host/subdirectory.
+//! happens. Only authorized users will be able to access the content. This barrier can apply to
+//! the entire web server or, with the help of the Virtual Hosts Module, only a single virtual
+//! host/subdirectory.
 //!
 //! A configuration could look like this:
 //!
 //! ```yaml
-//! auth_realm: Protected area
+//! auth_mode: page
 //! auth_credentials:
 //!     me: $2y$12$iuKHb5UsRqktrX2X9.iSEOP1n1.tS7s/KB.Dq3HlE0E6CxlfsJyZK
 //!     you: $2y$12$diY.HNTgfg0tIJKJxwmq.edEep5RcuAuQaAvXsP22oSPKY/dS1IVW
@@ -31,11 +31,62 @@
 //! This sets up two users `me` and `you` with their respective password hashes, corresponding with
 //! the passwords `test` and `test2`.
 //!
+//! ## Common settings
+//!
+//! The following settings always apply:
+//!
+//! * `auth_credentials`: A map containing user names and respective password hashes (see “Password
+//!   hashes” section below). The module activates only if this setting has some entries.
+//! * `auth_mode`: Either `http` or `page`. The former uses
+//!   [Basic access authentication](https://en.wikipedia.org/wiki/Basic_access_authentication), the
+//!   latter (default) displays a web page to handle logging in.
+//! * `auth_display_hash`: If `true`, unsuccessful login attempts will display the password hash
+//!   for the entered password (see “Password hashes” section below).
+//! * `auth_rate_limits`: Login rate limits to prevent denial-of-service attacks against the server
+//!   by triggering the (necessarily slow) login validation frequently. This can contain three
+//!   entries `total`, `per_ip` and `per_user`, the default values are 16, 4 and 4 respectively.
+//!   The value 0 disables the rate limiting category. Note that the default values might be too
+//!   low for `http` mode where each server request is considered a login attempt.
+//!
+//! ## `http` mode settings
+//!
+//! In `http` mode the `auth_realm` setting also applies. It determines the “realm” parameter sent
+//! to the browser in the authentication challenge. Modern browsers no longer display this
+//! parameter to the user, but will automatically use the same credentials when encountering
+//! website areas with identical “realm.”
+//!
+//! ## `page` mode settings
+//!
+//! In `page` mode several additional settings apply:
+//!
+//! * `auth_page_strings`: This map allows adjusting the text of the default login page. The
+//!   strings `title` (page title), `heading` (heading above the login form), `error` (error
+//!   message on invalid login), `username_label` (label of the user name field), `password_label`
+//!   (label of the password field), `button_text` (text of the submit button) can be specified.
+//! * `auth_page_session`: Various session-related parameters:
+//!   * `login_page`: An optional path of the login page to use instead of the default page.
+//!     *Note*: while the request to the login page will be allowed, requests to resources used by
+//!     that page won’t be. These resources either have to be placed outside the area protected by
+//!     the Authentication Module, or the page can use inline resource and `data:` URIs to avoid
+//!     dependencies.
+//!   * `token_secret`: Hex-encoded secret used to sign tokens issued on successful login. Normally
+//!     you should generate 16 bytes (32 hex digits) randomly. If this setting is omitted, a secret
+//!     will be randomly generated during server startup. While this is a viable option, a server
+//!     restart will always invalidate all previously issued tokens, requiring users to log in
+//!     again.
+//!   * `cookie_name`: The cookie used to store the token issued upon successful login.
+//!   * `session_expiration`: The time interval after which a login session will expire, requiring
+//!     the user to log in again. This interval can be specified in hours (e.g. `2h`) or days (e.g.
+//!     `7d`). *Note*: Changing this setting will have no effect on already issued tokens.
+//! * `auth_redirect_prefix`: This setting should be specified when using Virtual Hosts Module with
+//!   `strip_prefix` set to `true`. It should be set to the subdirectory that Authentication Module
+//!   applies to, to ensure correct redirects after logging in.
+//!
 //! ## Password hashes
 //!
 //! The supported password hashes use the [bcrypt algorithm](https://en.wikipedia.org/wiki/Bcrypt)
 //! and should start with either `$2b$` or `$2y$`. While `$2a$` and `$2x$` hashes can be handled as
-//! well, these should be considered insecure due to implementation bugs.
+//! well, using these is discouraged due to implementation bugs.
 //!
 //! A hash can be generated using the `htpasswd` tool distributed along with the Apache web server:
 //!
@@ -50,10 +101,11 @@
 //! 2. Add the `auth_display_hash: true` setting to your configuration.
 //! 3. Run the server and navigate to the password protected area with your browser.
 //! 4. When prompted by the browser, enter the credentials you want to use.
-//! 5. When prompted for credentials again, close the prompt to see the “401 Unauthorized” page.
+//! 5. When using `http` mode, close the prompt when the browser prompts you for credentials again.
+//!    You should see the “401 Unauthorized” page then.
 //!
-//! The page will contain the credentials you should add to your configuration. You can remove the
-//! `auth_display_hash: true` setting now.
+//! The page will contain a configuration suggestion with the generated credentials. You can remove
+//! the `auth_display_hash: true` setting now.
 //!
 //! ## Code example
 //!
@@ -147,16 +199,49 @@
 //!
 //! For complete code see `single-static-root` and `virtual-hosts` examples in the repository.
 
+mod basic;
+mod common;
+mod page;
+
 use async_trait::async_trait;
-use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
-use bcrypt::{hash, verify, DEFAULT_COST};
-use http::{header, Method, StatusCode};
-use log::{error, info, trace};
-use maud::{html, DOCTYPE};
-use module_utils::pingora::{Error, ResponseHeader, SessionWrapper};
+use http::Uri;
+use log::{error, info};
+use module_utils::pingora::{Error, ErrorType, SessionWrapper};
 use module_utils::{DeserializeMap, RequestFilter, RequestFilterResult};
+use serde::{de::Unexpected, Deserialize, Deserializer};
 use std::collections::HashMap;
+use std::str::FromStr;
+use std::time::Duration;
 use structopt::StructOpt;
+
+use basic::basic_auth;
+use page::page_auth;
+
+/// Authentication mode
+#[derive(Debug, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AuthMode {
+    /// Basic HTTP authentication
+    HTTP,
+    /// Webpage-based authentication
+    #[default]
+    Page,
+}
+
+impl FromStr for AuthMode {
+    type Err = Box<Error>;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "http" => Ok(Self::HTTP),
+            "page" => Ok(Self::Page),
+            _ => Err(Error::explain(
+                ErrorType::InternalError,
+                "invalid auth mode value",
+            )),
+        }
+    }
+}
 
 /// Command line options of the auth module
 #[derive(Debug, StructOpt)]
@@ -167,9 +252,6 @@ pub struct AuthOpt {
     /// This allows you to produce a hash for your password without using any third-party tools.
     #[structopt(long)]
     pub auth_display_hash: bool,
-    /// The authentication realm to communicate to the browser
-    #[structopt(long)]
-    pub auth_realm: Option<String>,
     /// Authorization credentials using the format user:hash. This command line flag can be
     /// specified multiple times.
     ///
@@ -177,6 +259,164 @@ pub struct AuthOpt {
     /// command line flag to generate a password hash without third-party tools.
     #[structopt(long)]
     pub auth_credentials: Option<Vec<String>>,
+    /// Authentication mode, either "http" or "page"
+    #[structopt(long)]
+    pub auth_mode: Option<AuthMode>,
+    /// The authentication realm to communicate to the browser (HTTP mode only)
+    #[structopt(long)]
+    pub auth_realm: Option<String>,
+}
+
+/// Login rate limits
+#[derive(Debug, DeserializeMap)]
+pub struct AuthRateLimits {
+    /// Total number of requests allowed per second
+    ///
+    /// The value 0 disables rate limiting here.
+    total: isize,
+    /// Number of requests allowed per second per IP address
+    ///
+    /// The value 0 disables rate limiting here.
+    per_ip: isize,
+    /// Number of requests allowed per second per user name
+    ///
+    /// The value 0 disables rate limiting here.
+    per_user: isize,
+}
+
+impl Default for AuthRateLimits {
+    fn default() -> Self {
+        Self {
+            total: 16,
+            per_ip: 4,
+            per_user: 4,
+        }
+    }
+}
+
+/// Texts used on the auth page
+#[derive(Debug, DeserializeMap)]
+pub struct AuthPageStrings {
+    /// Title of the authentication page
+    pub title: String,
+
+    /// Heading text of the authentication page
+    pub heading: String,
+
+    /// Text of the "invalid credentials" error on the authentication page
+    pub error: String,
+
+    /// Label of the user name field on the authentication page
+    pub username_label: String,
+
+    /// Label of the password field on the authentication page
+    pub password_label: String,
+
+    /// Submit button text on the authentication page
+    pub button_text: String,
+}
+
+impl Default for AuthPageStrings {
+    fn default() -> Self {
+        Self {
+            title: "Access denied".to_owned(),
+            heading: "Access is restricted, please log in.".to_owned(),
+            error: "Invalid credentials, please try again.".to_owned(),
+            username_label: "User name:".to_owned(),
+            password_label: "Password:".to_owned(),
+            button_text: "Log in".to_owned(),
+        }
+    }
+}
+
+fn deserialize_uri<'de, D>(deserializer: D) -> Result<Option<Uri>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::Error;
+
+    let path = String::deserialize(deserializer)?;
+    let uri = Uri::try_from(&path)
+        .map_err(|_| D::Error::invalid_value(Unexpected::Str(&path), &"URI path"))?;
+    Ok(Some(uri))
+}
+
+fn deserialize_hex<'de, D>(deserializer: D) -> Result<Option<Vec<u8>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::Error;
+
+    let data = String::deserialize(deserializer)?;
+    if data.len() % 2 != 0 {
+        return Err(D::Error::invalid_value(
+            Unexpected::Str(&data),
+            &"hex-encoded string",
+        ));
+    }
+    Ok(Some(
+        (0..data.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&data[i..i + 2], 16))
+            .collect::<Result<_, _>>()
+            .map_err(|_| D::Error::invalid_value(Unexpected::Str(&data), &"hex-encoded string"))?,
+    ))
+}
+
+fn deserialize_interval<'de, D>(deserializer: D) -> Result<Duration, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::Error;
+
+    let interval = String::deserialize(deserializer)?;
+    let (interval, factor) = if let Some(interval) = interval.strip_suffix('h') {
+        (interval, 60 * 60)
+    } else if let Some(interval) = interval.strip_suffix('d') {
+        (interval, 24 * 60 * 60)
+    } else {
+        (interval.as_str(), 24 * 60 * 60)
+    };
+
+    let interval = u64::from_str(interval)
+        .map_err(|_| D::Error::invalid_value(Unexpected::Str(interval), &"number"))?;
+    Ok(Duration::new(interval * factor, 0))
+}
+
+/// Session settings (page mode only)
+#[derive(Debug, DeserializeMap)]
+pub struct AuthPageSession {
+    /// URI path of the page to be used for logging in instead of the default login page.
+    #[module_utils(deserialize_with = "deserialize_uri")]
+    pub login_page: Option<Uri>,
+
+    /// Hex-encoded token secret
+    ///
+    /// If missing, a random token secret will be generated at startup. A server restart will
+    /// invalidate all active sessions then.
+    #[module_utils(deserialize_with = "deserialize_hex")]
+    pub token_secret: Option<Vec<u8>>,
+
+    /// Name of the cookie to store the JWT token
+    pub cookie_name: String,
+
+    /// Authentication expiration interval
+    ///
+    /// In the configuration file this can be specified in days or in hours: `7d` (7 days), `2h`
+    /// (2 hours).
+    #[module_utils(deserialize_with = "deserialize_interval")]
+    pub session_expiration: Duration,
+}
+
+impl Default for AuthPageSession {
+    fn default() -> Self {
+        Self {
+            login_page: None,
+            token_secret: None,
+            cookie_name: "token".to_owned(),
+            session_expiration: Duration::from_secs(7 * 24 * 60 * 60),
+        }
+    }
 }
 
 /// Authentication configuration
@@ -185,10 +425,30 @@ pub struct AuthConf {
     /// If `true`, the credentials of failed login attempts will be displayed on the resulting
     /// 401 Unauthorized page.
     pub auth_display_hash: bool,
-    /// Realm for the authentication challenge
-    pub auth_realm: String,
+
     /// Accepted credentials by user name
     pub auth_credentials: HashMap<String, String>,
+
+    /// Login rate limits
+    ///
+    /// Note that in Basic HTTP mode each request is a “login”
+    pub auth_rate_limits: AuthRateLimits,
+
+    /// Authentication mode, either Basic HTTP authentication or web page
+    pub auth_mode: AuthMode,
+
+    /// Realm for the authentication challenge (Basic HTTP mode only)
+    pub auth_realm: String,
+
+    /// Texts used on the auth page
+    pub auth_page_strings: AuthPageStrings,
+
+    /// Session settings (page mode only)
+    pub auth_page_session: AuthPageSession,
+
+    /// When redirecting the user after login, prefix redirect targets with the given string. This
+    /// is useful when the auth handler is applied to a subdirectory of the actual webspace.
+    pub auth_redirect_prefix: Option<String>,
 }
 
 impl AuthConf {
@@ -198,10 +458,6 @@ impl AuthConf {
     pub fn merge_with_opt(&mut self, opt: AuthOpt) {
         if opt.auth_display_hash {
             self.auth_display_hash = true;
-        }
-
-        if let Some(auth_realm) = opt.auth_realm {
-            self.auth_realm = auth_realm;
         }
 
         if let Some(auth_credentials) = opt.auth_credentials {
@@ -214,6 +470,14 @@ impl AuthConf {
                 }
             }
         }
+
+        if let Some(auth_mode) = opt.auth_mode {
+            self.auth_mode = auth_mode;
+        }
+
+        if let Some(auth_realm) = opt.auth_realm {
+            self.auth_realm = auth_realm;
+        }
     }
 }
 
@@ -221,8 +485,13 @@ impl Default for AuthConf {
     fn default() -> Self {
         Self {
             auth_display_hash: false,
-            auth_realm: "Server authentication".to_owned(),
             auth_credentials: HashMap::new(),
+            auth_rate_limits: Default::default(),
+            auth_mode: AuthMode::Page,
+            auth_realm: "Server authentication".to_owned(),
+            auth_page_strings: Default::default(),
+            auth_page_session: Default::default(),
+            auth_redirect_prefix: None,
         }
     }
 }
@@ -236,57 +505,24 @@ pub struct AuthHandler {
 impl TryFrom<AuthConf> for AuthHandler {
     type Error = Box<Error>;
 
-    fn try_from(conf: AuthConf) -> Result<Self, Self::Error> {
+    fn try_from(mut conf: AuthConf) -> Result<Self, Self::Error> {
+        if conf.auth_mode == AuthMode::Page && conf.auth_page_session.token_secret.is_none() {
+            const TOKEN_LENGTH: usize = 16;
+            let mut token = vec![0; TOKEN_LENGTH];
+            if let Err(err) = getrandom::getrandom(&mut token) {
+                return Err(Error::because(
+                    ErrorType::InternalError,
+                    "failed generating new random auth token",
+                    err,
+                ));
+            }
+
+            info!("No auth token in configuration, generated a random one. Server restart will invalidate existing sessions.");
+            conf.auth_page_session.token_secret = Some(token);
+        }
+
         Ok(Self { conf })
     }
-}
-
-async fn error_response(
-    session: &mut impl SessionWrapper,
-    realm: &str,
-    credentials: Option<(&str, &[u8])>,
-) -> Result<(), Box<Error>> {
-    let text = html! {
-        (DOCTYPE)
-        html {
-            head {
-                title {
-                    "401 Unauthorized"
-                }
-            }
-
-            body {
-                center {
-                    h1 {
-                        "401 Unauthorized"
-                    }
-                }
-
-                @if let Some((user, password)) = credentials.and_then(|(u, p)| Some((u, hash(p, DEFAULT_COST).ok()?))) {
-                    p {
-                        "If you are the administrator of this server, you might want to add the following to your configuration:"
-                    }
-                    pre {
-                        "auth_credentials:\n"
-                        "    \"" (user) "\": " (password)
-                    }
-                }
-            }
-        }
-    }.into_string();
-
-    let mut header = ResponseHeader::build(StatusCode::UNAUTHORIZED, Some(3))?;
-    header.append_header(header::CONTENT_LENGTH, text.len().to_string())?;
-    header.append_header(header::CONTENT_TYPE, "text/html")?;
-    header.append_header(header::WWW_AUTHENTICATE, format!("Basic realm=\"{realm}\""))?;
-    // TODO header.append_header(header::WWW_AUTHENTICATE, )?;
-    session.write_response_header(Box::new(header)).await?;
-
-    if session.req_header().method != Method::HEAD {
-        session.write_response_body(text.into()).await?;
-    }
-
-    Ok(())
 }
 
 #[async_trait]
@@ -306,327 +542,9 @@ impl RequestFilter for AuthHandler {
             return Ok(RequestFilterResult::Unhandled);
         }
 
-        let auth = match session.req_header().headers.get(header::AUTHORIZATION) {
-            Some(auth) => auth,
-            None => {
-                trace!("Rejecting request, no Authorization header");
-                error_response(session, &self.conf.auth_realm, None).await?;
-                return Ok(RequestFilterResult::ResponseSent);
-            }
-        };
-
-        let auth = match auth.to_str() {
-            Ok(auth) => auth,
-            Err(err) => {
-                info!(
-                    "Rejecting request, Authorization header cannot be converted to string: {err}"
-                );
-                error_response(session, &self.conf.auth_realm, None).await?;
-                return Ok(RequestFilterResult::ResponseSent);
-            }
-        };
-
-        let (scheme, credentials) = auth.split_once(' ').unwrap_or(("", ""));
-        if scheme != "Basic" {
-            info!("Rejecting request, unsupported authorization scheme: {scheme}");
-            error_response(session, &self.conf.auth_realm, None).await?;
-            return Ok(RequestFilterResult::ResponseSent);
+        match self.conf.auth_mode {
+            AuthMode::HTTP => basic_auth(&self.conf, session).await,
+            AuthMode::Page => page_auth(&self.conf, session).await,
         }
-
-        let credentials = match BASE64_STANDARD.decode(credentials) {
-            Ok(credentials) => credentials,
-            Err(err) => {
-                info!("Rejecting request, failed decoding base64: {err}");
-                error_response(session, &self.conf.auth_realm, None).await?;
-                return Ok(RequestFilterResult::ResponseSent);
-            }
-        };
-
-        let (user, password, display_hash) =
-            if let Some(index) = credentials.iter().position(|b| *b == b':') {
-                (
-                    String::from_utf8(credentials[0..index].to_vec()).unwrap_or_default(),
-                    &credentials[index + 1..],
-                    self.conf.auth_display_hash,
-                )
-            } else {
-                ("".to_owned(), "".as_bytes(), false)
-            };
-        let credentials = if display_hash {
-            Some((user.as_str(), password))
-        } else {
-            None
-        };
-
-        let result = if let Some(expected) = self.conf.auth_credentials.get(&user) {
-            verify(password, expected)
-        } else {
-            // This user name is unknown. We still go through verification to prevent timing
-            // attacks. But we test an empty password against bcrypt-hashed string "test", this is
-            // guaranteed to fail.
-            verify(
-                b"",
-                "$2y$12$/GSb/xs3Ss/Jq0zv5qBZWeH3oz8RzEi.PuOhPJ8qiP6yCc2dtDbnK",
-            )
-        };
-
-        let valid = match result {
-            Ok(valid) => valid,
-            Err(err) => {
-                info!("Rejecting request, bcrypt failure: {err}");
-                error_response(session, &self.conf.auth_realm, credentials).await?;
-                return Ok(RequestFilterResult::ResponseSent);
-            }
-        };
-
-        if !valid {
-            info!("Rejecting request, wrong password");
-            error_response(session, &self.conf.auth_realm, credentials).await?;
-            return Ok(RequestFilterResult::ResponseSent);
-        }
-
-        Ok(RequestFilterResult::Unhandled)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    use module_utils::pingora::{RequestHeader, TestSession};
-    use module_utils::standard_response::response_text;
-    use module_utils::FromYaml;
-    use test_log::test;
-
-    fn default_conf() -> &'static str {
-        r#"
-            auth_realm: "Protected area"
-            auth_credentials:
-                # test
-                me: $2y$04$V15kxj8/a7JsIb6lXkcK7ex.IiNSM3.nbLJaLbkAi10iVXUip/JoC
-                # test2
-                another: $2y$04$s/KAIlzQM8VfPsf9.YKAGOfZhMp44lcXHLB9avFGnON3D1QKG9clS
-        "#
-    }
-
-    fn make_handler(conf: &str) -> AuthHandler {
-        <AuthHandler as RequestFilter>::Conf::from_yaml(conf)
-            .unwrap()
-            .try_into()
-            .unwrap()
-    }
-
-    async fn make_session() -> TestSession {
-        let header = RequestHeader::build("GET", b"/", None).unwrap();
-        TestSession::from(header).await
-    }
-
-    fn assert_headers(header: &ResponseHeader, expected: Vec<(&str, &str)>) {
-        let mut headers: Vec<_> = header
-            .headers
-            .iter()
-            .filter(|(name, _)| *name != header::CONNECTION && *name != header::DATE)
-            .map(|(name, value)| {
-                (
-                    name.as_str().to_ascii_lowercase(),
-                    value.to_str().unwrap().to_owned(),
-                )
-            })
-            .collect();
-        headers.sort();
-
-        let mut expected: Vec<_> = expected
-            .into_iter()
-            .map(|(name, value)| (name.to_ascii_lowercase(), value.to_owned()))
-            .collect();
-        expected.sort();
-
-        assert_eq!(headers, expected);
-    }
-
-    #[test(tokio::test)]
-    async fn request_filter() -> Result<(), Box<Error>> {
-        let error_response = response_text(StatusCode::UNAUTHORIZED);
-
-        // Unconfigured, should allow request through
-        let handler = make_handler("auth_realm: unconfigured");
-        let mut session = make_session().await;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::Unhandled
-        );
-
-        // No Authorization header
-        let handler = make_handler(default_conf());
-        let mut session = make_session().await;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(session.response_written().unwrap().status, 401);
-        assert_headers(
-            session.response_written().unwrap(),
-            vec![
-                ("Content-Type", "text/html"),
-                ("Content-Length", &error_response.len().to_string()),
-                ("WWW-Authenticate", "Basic realm=\"Protected area\""),
-            ],
-        );
-        assert_eq!(
-            String::from_utf8_lossy(&session.response_body),
-            error_response
-        );
-
-        // Unknown auth scheme
-        let handler = make_handler(default_conf());
-        let mut session = make_session().await;
-        session
-            .req_header_mut()
-            .insert_header("Authorization", "Unknown bWU6dGVzdA==")?;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(session.response_written().unwrap().status, 401);
-        assert_headers(
-            session.response_written().unwrap(),
-            vec![
-                ("Content-Type", "text/html"),
-                ("Content-Length", &error_response.len().to_string()),
-                ("WWW-Authenticate", "Basic realm=\"Protected area\""),
-            ],
-        );
-        assert_eq!(
-            String::from_utf8_lossy(&session.response_body),
-            error_response
-        );
-
-        // Missing credentials
-        let handler = make_handler(default_conf());
-        let mut session = make_session().await;
-        session
-            .req_header_mut()
-            .insert_header("Authorization", "Basic")?;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(session.response_written().unwrap().status, 401);
-        assert_headers(
-            session.response_written().unwrap(),
-            vec![
-                ("Content-Type", "text/html"),
-                ("Content-Length", &error_response.len().to_string()),
-                ("WWW-Authenticate", "Basic realm=\"Protected area\""),
-            ],
-        );
-        assert_eq!(
-            String::from_utf8_lossy(&session.response_body),
-            error_response
-        );
-
-        // Credentials without colon
-        let handler = make_handler(default_conf());
-        let mut session = make_session().await;
-        session
-            .req_header_mut()
-            .insert_header("Authorization", "Basic bWV0ZXN0")?;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(session.response_written().unwrap().status, 401);
-        assert_headers(
-            session.response_written().unwrap(),
-            vec![
-                ("Content-Type", "text/html"),
-                ("Content-Length", &error_response.len().to_string()),
-                ("WWW-Authenticate", "Basic realm=\"Protected area\""),
-            ],
-        );
-        assert_eq!(
-            String::from_utf8_lossy(&session.response_body),
-            error_response
-        );
-
-        // Wrong credentials
-        let handler = make_handler(default_conf());
-        let mut session = make_session().await;
-        session
-            .req_header_mut()
-            .insert_header("Authorization", "Basic bWU6dGVzdDI=")?;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(session.response_written().unwrap().status, 401);
-        assert_headers(
-            session.response_written().unwrap(),
-            vec![
-                ("Content-Type", "text/html"),
-                ("Content-Length", &error_response.len().to_string()),
-                ("WWW-Authenticate", "Basic realm=\"Protected area\""),
-            ],
-        );
-        assert_eq!(
-            String::from_utf8_lossy(&session.response_body),
-            error_response
-        );
-
-        // Wrong user name
-        let handler = make_handler(default_conf());
-        let mut session = make_session().await;
-        session
-            .req_header_mut()
-            .insert_header("Authorization", "Basic eW91OnRlc3Q=")?;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(session.response_written().unwrap().status, 401);
-        assert_headers(
-            session.response_written().unwrap(),
-            vec![
-                ("Content-Type", "text/html"),
-                ("Content-Length", &error_response.len().to_string()),
-                ("WWW-Authenticate", "Basic realm=\"Protected area\""),
-            ],
-        );
-        assert_eq!(
-            String::from_utf8_lossy(&session.response_body),
-            error_response
-        );
-
-        // Correct credentials
-        let handler = make_handler(default_conf());
-        let mut session = make_session().await;
-        session
-            .req_header_mut()
-            .insert_header("Authorization", "Basic bWU6dGVzdA==")?;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::Unhandled
-        );
-
-        // Display hash on wrong credentials
-        let handler = make_handler(
-            r#"
-                auth_display_hash: true
-                auth_credentials:
-                    me: abc
-            "#,
-        );
-        let mut session = make_session().await;
-        session
-            .req_header_mut()
-            .insert_header("Authorization", "Basic JzxtZT4nOnRlc3Q=")?;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert!(String::from_utf8_lossy(&session.response_body)
-            .contains("&quot;'&lt;me&gt;'&quot;: $2b$"));
-
-        Ok(())
     }
 }

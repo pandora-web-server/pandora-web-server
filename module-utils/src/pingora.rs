@@ -179,13 +179,21 @@ pub struct TestSession {
 }
 
 impl TestSession {
-    /// Creates a new test session based on a mock of the network communication.
+    /// Creates a new test session based with the given header.
     pub async fn from(header: RequestHeader) -> Self {
+        Self::with_body(header, "").await
+    }
+
+    /// Creates a new test session based with the given header and request body.
+    pub async fn with_body(mut header: RequestHeader, body: impl AsRef<[u8]>) -> Self {
         let mut cursor = Cursor::new(Vec::<u8>::new());
-        let _ = cursor.write(b"GET / HTTP/1.1\r\n");
+        let _ = cursor.write(b"POST / HTTP/1.1\r\n");
         let _ = cursor.write(b"Connection: close\r\n");
         let _ = cursor.write(b"\r\n");
+        let _ = cursor.write(body.as_ref());
         let _ = cursor.seek(SeekFrom::Start(0));
+
+        let _ = header.insert_header(header::CONTENT_LENGTH, body.as_ref().len());
 
         let mut inner = Session::new_h1(Box::new(cursor));
         assert!(inner.read_request().await.unwrap());

@@ -1,6 +1,7 @@
 listen:
 - 127.0.0.1:8080
 - "[::1]:8080"
+threads: 32
 compression_level: 3
 
 # Uncomment lines below to enable authentication with credentials me:test

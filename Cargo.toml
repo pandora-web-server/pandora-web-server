@@ -31,9 +31,9 @@ rust-version = "1.74"
 
 [workspace.dependencies]
 async-trait = "0.1.42"
+auth-module = { path = "auth-module", version = "0.2.0" }
 bytes = "1.0"
 chrono = "~0.4.31"
-auth-module = { path = "auth-module", version = "0.2.0" }
 common-log-module = { path = "common-log-module", version = "0.2.0" }
 compression-module = { path = "compression-module", version = "0.2.0" }
 env_logger = "0.9"
@@ -44,11 +44,12 @@ log = "0.4"
 maud = "0.26.0"
 module-utils = { path = "module-utils", version = "0.2.0" }
 module-utils-macros = { path = "module-utils-macros", version = "0.2.0" }
-rewrite-module = { path = "rewrite-module", version = "0.2.0" }
 percent-encoding = "2.1"
 pingora-core = "0.2.0"
 pingora-http = "0.2.0"
+pingora-limits = "0.2.0"
 pingora-proxy = "0.2.0"
+rewrite-module = { path = "rewrite-module", version = "0.2.0" }
 serde = { version = "1.0", features = ["derive"] }
 static-files-module = { path = "static-files-module", version = "0.2.0" }
 structopt = "0.3"

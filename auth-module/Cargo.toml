@@ -20,10 +20,19 @@ path = "src/lib.rs"
 async-trait.workspace = true
 base64 = "0.22.1"
 bcrypt = "0.15.1"
+bytes.workspace = true
+getrandom = "0.2.15"
+hmac = "0.12.1"
 http.workspace = true
+jwt = "0.16.0"
+lazy_static = "1.4.0"
 log.workspace = true
 maud.workspace = true
 module-utils.workspace = true
+pingora-limits.workspace = true
+serde.workspace = true
+serde_urlencoded = "0.7.1"
+sha2 = "0.10.8"
 structopt.workspace = true
 
 [dev-dependencies]
