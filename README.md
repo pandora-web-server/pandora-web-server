@@ -3,7 +3,7 @@
 This repository contains various crates meant to extend Pingora server functionality. At the moment these are:
 
 * [Module utils](../../tree/main/module-utils): Various useful helpers for the other crates
-* [Auth Module](../../tree/main/auth-module): Support for HTTP Authentication
+* [Auth Module](../../tree/main/auth-module): Authentication support
 * [Common Log Module](../../tree/main/common-log-module): Creation of access logs in the [Common Log Format](https://en.wikipedia.org/wiki/Common_Log_Format)
 * [Compression Module](../../tree/main/compression-module): Helps configure Pingora’s built-in compression
 * [Headers Module](../../tree/main/headers-module): Configure HTTP headers to be added to responses
