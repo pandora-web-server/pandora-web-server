@@ -61,6 +61,23 @@ pub trait SessionWrapper: Send + Deref<Target = Session> + DerefMut {
         host_from_header(self).or_else(|| host_from_uri(self))
     }
 
+    /// Return the client (peer) address of the connection.
+    ///
+    /// Unlike the identical method of the Pingora session, this value can be overwritten.
+    fn client_addr(&self) -> Option<&SocketAddr> {
+        let addr = self.extensions().get();
+        if addr.is_some() {
+            addr
+        } else {
+            self.deref().client_addr()
+        }
+    }
+
+    /// Overwrites the client address for this connection.
+    fn set_client_addr(&mut self, addr: SocketAddr) {
+        self.extensions_mut().insert(addr);
+    }
+
     /// Returns a reference to the associated extensions.
     ///
     /// *Note*: The extensions are only present for the lifetime of the wrapper. Unlike `Session`

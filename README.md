@@ -7,6 +7,7 @@ This repository contains various crates meant to extend Pingora server functiona
 * [Common Log Module](../../tree/main/common-log-module): Creation of access logs in the [Common Log Format](https://en.wikipedia.org/wiki/Common_Log_Format)
 * [Compression Module](../../tree/main/compression-module): Helps configure Pingora’s built-in compression
 * [Headers Module](../../tree/main/headers-module): Configure HTTP headers to be added to responses
+* [IP Anonymization Module](../../tree/main/ip-anonymization-module): Remove part of the IP address to anonymize responses
 * [Rewrite Module](../../tree/main/rewrite-module): Rules to modify request URI or produce redirect responses
 * [Static Files Module](../../tree/main/static-files-module): Serve static files from a directory
 * [Upstream Module](../../tree/main/upstream-module): Helps configure Pingora’s built-in upstream proxying

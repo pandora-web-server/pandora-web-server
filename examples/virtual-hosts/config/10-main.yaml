@@ -3,6 +3,7 @@ listen:
 - "[::1]:8080"
 - 127.0.0.1:8081
 - "[::1]:8081"
+anonymization_enabled: true
 custom_headers:
 - headers:
     Cache-Control: "max-age=604800"

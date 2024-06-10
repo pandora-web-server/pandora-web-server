@@ -1,0 +1,35 @@
+[package]
+name = "ip-anonymization-module"
+version = "0.2.0"
+authors = ["Wladimir Palant"]
+repository = "https://github.com/palant/pingora-utils"
+categories = ["network-programming", "web-programming::http-server"]
+keywords = ["anonymization", "ip-address", "web-server", "http", "pingora"]
+license = "Apache-2.0"
+edition = "2021"
+rust-version.workspace = true
+description = """
+A module removing part of the IP address to anonymize requests.
+"""
+
+[lib]
+name = "ip_anonymization_module"
+path = "src/lib.rs"
+
+[dependencies]
+async-trait.workspace = true
+log.workspace = true
+module-utils.workspace = true
+structopt.workspace = true
+
+[dev-dependencies]
+env_logger.workspace = true
+pingora-core.workspace = true
+pingora-proxy.workspace = true
+static-files-module.workspace = true
+structopt.workspace = true
+test-log.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true

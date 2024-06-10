@@ -41,6 +41,7 @@ use auth_module::{AuthHandler, AuthOpt};
 use common_log_module::{CommonLogHandler, CommonLogOpt};
 use compression_module::{CompressionHandler, CompressionOpt};
 use headers_module::HeadersHandler;
+use ip_anonymization_module::{IPAnonymizationHandler, IPAnonymizationOpt};
 use log::error;
 use module_utils::{merge_conf, merge_opt, DeserializeMap, FromYaml, RequestFilter};
 use pingora_core::server::configuration::{Opt as ServerOpt, ServerConf};
@@ -67,6 +68,7 @@ impl StaticRootApp {
 /// Handler combining Compression and Static Files modules
 #[derive(Debug, RequestFilter)]
 struct Handler {
+    anonymization: IPAnonymizationHandler,
     log: CommonLogHandler,
     compression: CompressionHandler,
     auth: AuthHandler,
@@ -98,6 +100,7 @@ struct StaticRootAppOpt {
 #[merge_opt]
 struct Opt {
     app: StaticRootAppOpt,
+    anonymization: IPAnonymizationOpt,
     log: CommonLogOpt,
     auth: AuthOpt,
     compression: CompressionOpt,
@@ -178,6 +181,7 @@ fn main() {
     );
     server.bootstrap();
 
+    conf.handler.anonymization.merge_with_opt(opt.anonymization);
     conf.handler.log.merge_with_opt(opt.log);
     conf.handler.auth.merge_with_opt(opt.auth);
     conf.handler.compression.merge_with_opt(opt.compression);

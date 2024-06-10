@@ -69,6 +69,7 @@ use auth_module::AuthHandler;
 use common_log_module::CommonLogHandler;
 use compression_module::CompressionHandler;
 use headers_module::HeadersHandler;
+use ip_anonymization_module::IPAnonymizationHandler;
 use log::error;
 use module_utils::pingora::{Error, HttpPeer, ResponseHeader, Session};
 use module_utils::{merge_conf, DeserializeMap, FromYaml, RequestFilter};
@@ -95,6 +96,7 @@ impl VirtualHostsApp {
 
 #[derive(Debug, RequestFilter)]
 struct Handler {
+    anonymization: IPAnonymizationHandler,
     headers: HeadersHandler,
     virtual_hosts: VirtualHostsHandler<HostHandler>,
 }
