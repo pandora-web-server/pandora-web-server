@@ -14,7 +14,7 @@
 
 //! Structures handling command line options and YAML deserialization for the Common Log Module
 
-use http::{header, HeaderName};
+use http::HeaderName;
 use module_utils::DeserializeMap;
 use serde::Deserialize;
 use std::path::PathBuf;
@@ -123,17 +123,7 @@ impl Default for CommonLogConf {
     fn default() -> Self {
         Self {
             log_file: PathBuf::from("-"),
-            log_format: vec![
-                LogField::RemoteAddr,
-                LogField::None,
-                LogField::None,
-                LogField::TimeLocal,
-                LogField::Request,
-                LogField::Status,
-                LogField::BytesSent,
-                LogField::RequestHeader(header::REFERER),
-                LogField::RequestHeader(header::USER_AGENT),
-            ],
+            log_format: Vec::new(),
         }
     }
 }
@@ -151,6 +141,8 @@ impl CommonLogConf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use http::header;
 
     #[test]
     fn log_field_parsing() {

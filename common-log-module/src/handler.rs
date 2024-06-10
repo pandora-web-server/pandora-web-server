@@ -15,6 +15,7 @@
 //! Handler for Pingora’s `request_filter` and `logging` phases
 
 use async_trait::async_trait;
+use http::header;
 use lazy_static::lazy_static;
 use log::error;
 use module_utils::pingora::{Error, ErrorType, Session, SessionWrapper};
@@ -68,6 +69,21 @@ impl TryFrom<CommonLogConf> for CommonLogHandler {
     fn try_from(mut conf: CommonLogConf) -> Result<Self, Self::Error> {
         // Normalize parent directory in case the same file is specified with different paths
         conf.log_file = normalize_path(conf.log_file)?;
+
+        // If no log format specified, use default
+        if conf.log_format.is_empty() {
+            conf.log_format = vec![
+                LogField::RemoteAddr,
+                LogField::None,
+                LogField::None,
+                LogField::TimeLocal,
+                LogField::Request,
+                LogField::Status,
+                LogField::BytesSent,
+                LogField::RequestHeader(header::REFERER),
+                LogField::RequestHeader(header::USER_AGENT),
+            ];
+        }
 
         Ok(Self { conf })
     }
