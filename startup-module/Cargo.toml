@@ -1,0 +1,27 @@
+[package]
+name = "startup-module"
+version = "0.2.0"
+authors = ["Wladimir Palant"]
+repository = "https://github.com/palant/pingora-utils"
+categories = ["network-programming", "web-programming::http-server"]
+keywords = ["proxy", "web-server", "http", "pingora"]
+license = "Apache-2.0"
+edition = "2021"
+rust-version.workspace = true
+description = """
+A module simplifying configuring and starting a Pingora-based web server.
+"""
+
+[lib]
+name = "startup_module"
+path = "src/lib.rs"
+
+[dependencies]
+module-utils.workspace = true
+structopt.workspace = true
+
+[dev-dependencies]
+async-trait.workspace = true
+
+[lints]
+workspace = true

@@ -14,10 +14,9 @@ env_logger.workspace = true
 headers-module.workspace = true
 ip-anonymization-module.workspace = true
 log.workspace = true
-pingora-core.workspace = true
-pingora-proxy.workspace = true
 module-utils.workspace = true
 rewrite-module.workspace = true
+startup-module.workspace = true
 static-files-module.workspace = true
 structopt.workspace = true
 

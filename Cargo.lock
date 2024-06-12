@@ -585,9 +585,8 @@ dependencies = [
  "ip-anonymization-module",
  "log",
  "module-utils",
- "pingora-core",
- "pingora-proxy",
  "rewrite-module",
+ "startup-module",
  "static-files-module",
  "structopt",
 ]
@@ -605,9 +604,8 @@ dependencies = [
  "ip-anonymization-module",
  "log",
  "module-utils",
- "pingora-core",
- "pingora-proxy",
  "rewrite-module",
+ "startup-module",
  "static-files-module",
  "structopt",
  "upstream-module",
@@ -2333,6 +2331,15 @@ name = "stable_deref_trait"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
+
+[[package]]
+name = "startup-module"
+version = "0.2.0"
+dependencies = [
+ "async-trait",
+ "module-utils",
+ "structopt",
+]
 
 [[package]]
 name = "static-files-module"

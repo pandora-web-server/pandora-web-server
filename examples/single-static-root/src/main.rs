@@ -14,14 +14,10 @@
 
 //! # Single static root example
 //!
-//! This is a simple web server using `log-module`, `compression-module`, `auth-module`,
-//! `rewrite-module`, `headers-module` and `static-files-module` crates. It combines their
-//! respective command line options with the usual [Pingora command line options](Opt) and
-//! their config file settings with [Pingora`s](ServerConf). In addition, it provides the following
-//! setting:
-//!
-//! * `listen` (`--listen` as command line flag): A list of IP address/port combinations the server
-//!   should listen on, e.g. `0.0.0.0:8080`.
+//! This is a simple web server using `startup-module`, `anonymization-module`, `log-module`,
+//! `compression-module`, `auth-module`, `rewrite-module`, `headers-module` and
+//! `static-files-module` crates. It combines all their respective command line options and their
+//! config file settings.
 //!
 //! An example config file is provided in this directory. You can run this example with the
 //! following command:
@@ -43,13 +39,10 @@ use compression_module::{CompressionHandler, CompressionOpt};
 use headers_module::HeadersHandler;
 use ip_anonymization_module::{IPAnonymizationHandler, IPAnonymizationOpt};
 use log::error;
-use module_utils::{merge_conf, merge_opt, DeserializeMap, FromYaml, RequestFilter};
-use pingora_core::server::configuration::{Opt as ServerOpt, ServerConf};
-use pingora_core::server::Server;
-use pingora_core::upstreams::peer::HttpPeer;
-use pingora_core::{Error, ErrorType};
-use pingora_proxy::{http_proxy_service, ProxyHttp, Session};
+use module_utils::pingora::{Error, ErrorType, HttpPeer, ProxyHttp, Session};
+use module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
 use rewrite_module::RewriteHandler;
+use startup_module::{StartupConf, StartupOpt};
 use static_files_module::{StaticFilesHandler, StaticFilesOpt};
 use structopt::StructOpt;
 
@@ -77,29 +70,10 @@ struct Handler {
     static_files: StaticFilesHandler,
 }
 
-/// Command line options of this application
-#[derive(Debug, StructOpt)]
-struct StaticRootAppOpt {
-    /// Address and port to listen on, e.g. "127.0.0.1:8080". This command line flag can be
-    /// specified multiple times.
-    #[structopt(short, long)]
-    listen: Option<Vec<String>>,
-    /// Use this flag to make the server run in the background.
-    #[structopt(short, long)]
-    daemon: bool,
-    /// Test the configuration and exit. This is useful to validate the configuration before
-    /// restarting the process.
-    #[structopt(short, long)]
-    test: bool,
-    /// The path to the configuration file. This command line flag can be specified multiple times.
-    #[structopt(short, long)]
-    conf: Option<Vec<String>>,
-}
-
 /// Run a web server exposing a single directory with static content.
 #[merge_opt]
 struct Opt {
-    app: StaticRootAppOpt,
+    startup: StartupOpt,
     anonymization: IPAnonymizationOpt,
     log: CommonLogOpt,
     auth: AuthOpt,
@@ -107,18 +81,10 @@ struct Opt {
     static_files: StaticFilesOpt,
 }
 
-/// Application-specific configuration settings
-#[derive(Debug, Default, DeserializeMap)]
-struct StaticRootAppConf {
-    /// List of address/port combinations to listen on, e.g. "127.0.0.1:8080".
-    listen: Vec<String>,
-}
-
 /// The combined configuration of Pingora server and [`StaticFilesHandler`].
 #[merge_conf]
 struct Conf {
-    app: StaticRootAppConf,
-    server: ServerConf,
+    startup: StartupConf,
     handler: <Handler as RequestFilter>::Conf,
 }
 
@@ -155,31 +121,13 @@ fn main() {
     env_logger::init();
 
     let opt = Opt::from_args();
-    let mut conf = match Conf::load_from_files(opt.app.conf.unwrap_or_default()) {
+    let mut conf = match Conf::load_from_files(opt.startup.conf.as_deref().unwrap_or(&[])) {
         Ok(conf) => conf,
         Err(err) => {
             error!("{err}");
             Conf::default()
         }
     };
-
-    if conf.app.listen.is_empty() {
-        // Make certain we have a listening address
-        conf.app.listen.push("127.0.0.1:8080".to_owned());
-        conf.app.listen.push("[::1]:8080".to_owned());
-    }
-
-    let mut server = Server::new_with_opt_and_conf(
-        ServerOpt {
-            daemon: opt.app.daemon,
-            test: opt.app.test,
-            upgrade: false,
-            nocapture: false,
-            conf: None,
-        },
-        conf.server,
-    );
-    server.bootstrap();
 
     conf.handler.anonymization.merge_with_opt(opt.anonymization);
     conf.handler.log.merge_with_opt(opt.log);
@@ -195,11 +143,9 @@ fn main() {
         }
     };
 
-    let mut proxy = http_proxy_service(&server.configuration, StaticRootApp::new(handler));
-    for addr in opt.app.listen.unwrap_or(conf.app.listen) {
-        proxy.add_tcp(&addr);
-    }
-    server.add_service(proxy);
+    let server = conf
+        .startup
+        .into_server(StaticRootApp::new(handler), Some(opt.startup));
 
     server.run_forever();
 }

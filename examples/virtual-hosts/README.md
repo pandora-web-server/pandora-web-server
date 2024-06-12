@@ -1,15 +1,14 @@
 # Virtual hosts example
 
-This web server uses `virtual-hosts-module` crate to handle virtual hosts. The
+This web server uses `virtual-hosts-module` crate to handle virtual hosts. Various modules like
 `compression-module` and `static-files-module` crates are used for each individual virtual
-host. The configuration file looks like this:
+host. Other modules like `custom-headers-module` are used at the top level and apply to all
+virtual hosts. The configuration file looks like this:
 
 ```yaml
-# Application-specific settings
+# Startup module settings (https://docs.rs/startup-module/latest/startup_module/struct.StartupConf.html)
 listen:
 - "[::]:8080"
-
-# General server settings (https://docs.rs/pingora-core/0.2.0/pingora_core/server/configuration/struct.ServerConf.html)
 daemon: false
 
 # Headers module settings (https://docs.rs/headers-module/latest/headers_module/struct.HeadersConf.html)

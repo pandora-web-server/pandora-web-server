@@ -14,16 +14,15 @@
 
 //! # Virtual hosts example
 //!
-//! This web server uses `virtual-hosts-module` crate to handle virtual hosts. The
+//! This web server uses `virtual-hosts-module` crate to handle virtual hosts. Various modules like
 //! `compression-module` and `static-files-module` crates are used for each individual virtual
-//! host. The configuration file looks like this:
+//! host. Other modules like `custom-headers-module` are used at the top level and apply to all
+//! virtual hosts. The configuration file looks like this:
 //!
 //! ```yaml
-//! # Application-specific settings
+//! # Startup module settings (https://docs.rs/startup-module/latest/startup_module/struct.StartupConf.html)
 //! listen:
 //! - "[::]:8080"
-//!
-//! # General server settings (https://docs.rs/pingora-core/0.2.0/pingora_core/server/configuration/struct.ServerConf.html)
 //! daemon: false
 //!
 //! # Headers module settings (https://docs.rs/headers-module/latest/headers_module/struct.HeadersConf.html)
@@ -71,12 +70,10 @@ use compression_module::CompressionHandler;
 use headers_module::HeadersHandler;
 use ip_anonymization_module::IPAnonymizationHandler;
 use log::error;
-use module_utils::pingora::{Error, HttpPeer, ResponseHeader, Session};
-use module_utils::{merge_conf, DeserializeMap, FromYaml, RequestFilter};
-use pingora_core::server::configuration::{Opt as ServerOpt, ServerConf};
-use pingora_core::server::Server;
-use pingora_proxy::{http_proxy_service, ProxyHttp};
+use module_utils::pingora::{Error, HttpPeer, ProxyHttp, ResponseHeader, Session};
+use module_utils::{merge_conf, FromYaml, RequestFilter};
 use rewrite_module::RewriteHandler;
+use startup_module::{StartupConf, StartupOpt};
 use static_files_module::StaticFilesHandler;
 use structopt::StructOpt;
 use upstream_module::UpstreamHandler;
@@ -111,37 +108,10 @@ struct HostHandler {
     static_files: StaticFilesHandler,
 }
 
-/// Run a web server exposing static content under several virtual hosts.
-#[derive(Debug, StructOpt)]
-struct Opt {
-    /// Address and port to listen on, e.g. "127.0.0.1:8080". This command line flag can be
-    /// specified multiple times.
-    #[structopt(short, long)]
-    listen: Option<Vec<String>>,
-    /// Use this flag to make the server run in the background.
-    #[structopt(short, long)]
-    daemon: bool,
-    /// Test the configuration and exit. This is useful to validate the configuration before
-    /// restarting the process.
-    #[structopt(short, long)]
-    test: bool,
-    /// The path to the configuration file. This command line flag can be specified multiple times.
-    #[structopt(short, long)]
-    conf: Option<Vec<String>>,
-}
-
-/// Application-specific configuration settings
-#[derive(Debug, Default, DeserializeMap)]
-struct VirtualHostsAppConf {
-    /// List of address/port combinations to listen on, e.g. "127.0.0.1:8080".
-    listen: Vec<String>,
-}
-
 /// The combined configuration of Pingora server and [`VirtualHostsHandler`].
 #[merge_conf]
 struct Conf {
-    app: VirtualHostsAppConf,
-    server: ServerConf,
+    startup: StartupConf,
     handler: <Handler as RequestFilter>::Conf,
 }
 
@@ -192,32 +162,14 @@ impl ProxyHttp for VirtualHostsApp {
 fn main() {
     env_logger::init();
 
-    let opt = Opt::from_args();
-    let mut conf = match Conf::load_from_files(opt.conf.unwrap_or_default()) {
+    let opt = StartupOpt::from_args();
+    let conf = match Conf::load_from_files(opt.conf.as_deref().unwrap_or(&[])) {
         Ok(conf) => conf,
         Err(err) => {
             error!("{err}");
             Conf::default()
         }
     };
-
-    if conf.app.listen.is_empty() {
-        // Make certain we have a listening address
-        conf.app.listen.push("127.0.0.1:8080".to_owned());
-        conf.app.listen.push("[::1]:8080".to_owned());
-    }
-
-    let mut server = Server::new_with_opt_and_conf(
-        ServerOpt {
-            daemon: opt.daemon,
-            test: opt.test,
-            upgrade: false,
-            nocapture: false,
-            conf: None,
-        },
-        conf.server,
-    );
-    server.bootstrap();
 
     let handler = match Handler::new(conf.handler) {
         Ok(handler) => handler,
@@ -227,11 +179,8 @@ fn main() {
         }
     };
 
-    let mut proxy = http_proxy_service(&server.configuration, VirtualHostsApp::new(handler));
-    for addr in opt.listen.unwrap_or(conf.app.listen) {
-        proxy.add_tcp(&addr);
-    }
-    server.add_service(proxy);
-
+    let server = conf
+        .startup
+        .into_server(VirtualHostsApp::new(handler), Some(opt));
     server.run_forever();
 }
