@@ -97,7 +97,7 @@
 //! Alternatively, you can use this module to generate a password hash for you:
 //!
 //! 1. To activate the module, make sure the `auth_credentials` setting isn’t empty. It doesn’t
-//! have to contain a valid set of credentials, any value will do.
+//!    have to contain a valid set of credentials, any value will do.
 //! 2. Add the `auth_display_hash: true` setting to your configuration.
 //! 3. Run the server and navigate to the password protected area with your browser.
 //! 4. When prompted by the browser, enter the credentials you want to use.
