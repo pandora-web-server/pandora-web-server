@@ -15,7 +15,7 @@
 use async_trait::async_trait;
 use module_utils::pingora::{Error, RequestHeader, SessionWrapper, TestSession};
 use module_utils::{merge_conf, DeserializeMap, FromYaml, RequestFilter, RequestFilterResult};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::Debug;
 use test_log::test;
 
@@ -415,4 +415,167 @@ fn from_yaml_seed() {
             ],
         );
     }
+}
+
+#[test]
+fn merge_across_maps() {
+    fn assert_hashmap_eq<V: Debug + Eq>(left: &HashMap<String, V>, right: Vec<(&str, V)>) {
+        let right = HashMap::from_iter(right.into_iter().map(|(k, v)| (k.to_owned(), v)));
+        assert_eq!(left, &right);
+    }
+
+    fn assert_btreemap_eq<V: Debug + Eq>(left: &BTreeMap<String, V>, right: Vec<(&str, V)>) {
+        let right = BTreeMap::from_iter(right.into_iter().map(|(k, v)| (k.to_owned(), v)));
+        assert_eq!(left, &right);
+    }
+
+    #[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
+    struct ConfInner {
+        value1: u32,
+        value2: u32,
+    }
+
+    #[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
+    struct Conf {
+        map1: HashMap<String, ConfInner>,
+        map2: BTreeMap<String, ConfInner>,
+    }
+
+    let conf = Conf::from_yaml(
+        r#"
+            map1:
+                hi:
+                    value1: 12
+            map2:
+                hi:
+                    value1: 12
+        "#,
+    )
+    .unwrap();
+    assert_hashmap_eq(
+        &conf.map1,
+        vec![(
+            "hi",
+            ConfInner {
+                value1: 12,
+                value2: 0,
+            },
+        )],
+    );
+    assert_btreemap_eq(
+        &conf.map2,
+        vec![(
+            "hi",
+            ConfInner {
+                value1: 12,
+                value2: 0,
+            },
+        )],
+    );
+
+    let conf = conf
+        .merge_from_yaml(
+            r#"
+            map1:
+                hi:
+                    value2: 34
+                another:
+                    value2: 56
+            map2:
+                hi:
+                    value2: 34
+                another:
+                    value2: 56
+        "#,
+        )
+        .unwrap();
+    assert_hashmap_eq(
+        &conf.map1,
+        vec![
+            (
+                "hi",
+                ConfInner {
+                    value1: 12,
+                    value2: 34,
+                },
+            ),
+            (
+                "another",
+                ConfInner {
+                    value1: 0,
+                    value2: 56,
+                },
+            ),
+        ],
+    );
+    assert_btreemap_eq(
+        &conf.map2,
+        vec![
+            (
+                "hi",
+                ConfInner {
+                    value1: 12,
+                    value2: 34,
+                },
+            ),
+            (
+                "another",
+                ConfInner {
+                    value1: 0,
+                    value2: 56,
+                },
+            ),
+        ],
+    );
+
+    let conf = conf
+        .merge_from_yaml(
+            r#"
+            map1:
+                hi:
+                    value1: 78
+            map2:
+                hi:
+                    value1: 78
+        "#,
+        )
+        .unwrap();
+    assert_hashmap_eq(
+        &conf.map1,
+        vec![
+            (
+                "hi",
+                ConfInner {
+                    value1: 78,
+                    value2: 34,
+                },
+            ),
+            (
+                "another",
+                ConfInner {
+                    value1: 0,
+                    value2: 56,
+                },
+            ),
+        ],
+    );
+    assert_btreemap_eq(
+        &conf.map2,
+        vec![
+            (
+                "hi",
+                ConfInner {
+                    value1: 78,
+                    value2: 34,
+                },
+            ),
+            (
+                "another",
+                ConfInner {
+                    value1: 0,
+                    value2: 56,
+                },
+            ),
+        ],
+    );
 }

@@ -144,7 +144,12 @@ pub mod _private {
         de::{DeserializeSeed, MapAccess, Visitor},
         Deserialize, Deserializer,
     };
-    use std::{collections::HashMap, fmt::Formatter, hash::Hash, marker::PhantomData};
+    use std::{
+        collections::{BTreeMap, HashMap},
+        fmt::Formatter,
+        hash::Hash,
+        marker::PhantomData,
+    };
 
     pub trait DeserializeMerge<'de, T> {
         fn deserialize_merge<D>(&self, initial: T, deserializer: D) -> Result<T, D::Error>
@@ -195,11 +200,11 @@ pub mod _private {
         where
             D: Deserializer<'de>,
         {
-            struct HashVisitor<K, V> {
+            struct MapVisitor<K, V> {
                 inner: HashMap<K, V>,
             }
 
-            impl<'de, K, V> Visitor<'de> for HashVisitor<K, V>
+            impl<'de, K, V> Visitor<'de> for MapVisitor<K, V>
             where
                 K: Deserialize<'de> + Eq + Hash,
                 V: DeserializeSeed<'de, Value = V> + Default,
@@ -222,7 +227,52 @@ pub mod _private {
                 }
             }
 
-            deserializer.deserialize_map(HashVisitor { inner: initial })
+            deserializer.deserialize_map(MapVisitor { inner: initial })
+        }
+    }
+
+    // `BTreeMap` with type supporting `DeserializeSeed`: for existing keys, merge the values.
+    impl<'de, K, V> DeserializeMerge<'de, BTreeMap<K, V>> for &&PhantomData<BTreeMap<K, V>>
+    where
+        K: Deserialize<'de> + Ord,
+        V: DeserializeSeed<'de, Value = V> + Default,
+    {
+        fn deserialize_merge<D>(
+            &self,
+            initial: BTreeMap<K, V>,
+            deserializer: D,
+        ) -> Result<BTreeMap<K, V>, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            struct MapVisitor<K, V> {
+                inner: BTreeMap<K, V>,
+            }
+
+            impl<'de, K, V> Visitor<'de> for MapVisitor<K, V>
+            where
+                K: Deserialize<'de> + Ord,
+                V: DeserializeSeed<'de, Value = V> + Default,
+            {
+                type Value = BTreeMap<K, V>;
+
+                fn expecting(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+                    formatter.write_str("a map")
+                }
+
+                fn visit_map<A>(mut self, mut map: A) -> Result<Self::Value, A::Error>
+                where
+                    A: MapAccess<'de>,
+                {
+                    while let Some(key) = map.next_key()? {
+                        let value = self.inner.remove(&key).unwrap_or_default();
+                        self.inner.insert(key, map.next_value_seed(value)?);
+                    }
+                    Ok(self.inner)
+                }
+            }
+
+            deserializer.deserialize_map(MapVisitor { inner: initial })
         }
     }
 
