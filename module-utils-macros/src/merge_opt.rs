@@ -22,7 +22,7 @@ pub(crate) fn merge_opt(input: TokenStream) -> Result<TokenStream, Error> {
     let mut input: DeriveInput = syn::parse(input)?;
 
     // Derive Debug and StructOpt implicitly
-    let attributes = quote! {#[derive(::std::fmt::Debug, ::structopt::StructOpt)]};
+    let attributes = quote! {#[derive(::std::fmt::Debug, ::module_utils::structopt::StructOpt)]};
     let attributes = Attribute::parse_outer.parse2(attributes)?;
     input.attrs.extend(attributes);
 

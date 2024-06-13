@@ -1377,6 +1377,7 @@ dependencies = [
  "pingora-proxy",
  "serde",
  "serde_yaml",
+ "structopt",
 ]
 
 [[package]]

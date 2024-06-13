@@ -41,6 +41,8 @@ pub use async_trait;
 pub use serde;
 #[doc(hidden)]
 pub use serde_yaml;
+#[doc(hidden)]
+pub use structopt;
 
 /// Request filter result indicating how the current request should be processed further
 #[derive(Debug, Copy, Clone, PartialEq, Default, Deserialize)]
