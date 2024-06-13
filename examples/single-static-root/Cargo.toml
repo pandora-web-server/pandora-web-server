@@ -6,7 +6,6 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
-async-trait.workspace = true
 auth-module.workspace = true
 common-log-module.workspace = true
 compression-module.workspace = true

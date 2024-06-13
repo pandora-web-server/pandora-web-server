@@ -17,7 +17,6 @@ an upstream peer and modifies the request by adding the appropriate `Host` heade
 retrieves the previously selected upstream peer.
 
 ```rust
-use async_trait::async_trait;
 use module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
 use startup_module::{DefaultApp, StartupConf, StartupOpt};
 use structopt::StructOpt;

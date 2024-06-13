@@ -94,7 +94,6 @@
 //! `handler.call_response_filter()` during the `upstream_response_filter` phase.
 //!
 //! ```rust
-//! use async_trait::async_trait;
 //! use compression_module::{CompressionHandler, CompressionOpt};
 //! use headers_module::HeadersHandler;
 //! use module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};

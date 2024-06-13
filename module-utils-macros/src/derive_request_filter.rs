@@ -84,7 +84,7 @@ fn generate_request_filter_impl(
                 }
             }
 
-            #[async_trait::async_trait]
+            #[::module_utils::async_trait::async_trait]
             impl<#generics> ::module_utils::RequestFilter for #struct_name
             #where_clause
             {

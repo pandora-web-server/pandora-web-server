@@ -23,7 +23,6 @@ pub mod router;
 pub mod standard_response;
 mod trie;
 
-use async_trait::async_trait;
 use log::{error, info, trace};
 use pingora::{wrap_session, Error, ErrorType, HttpPeer, ResponseHeader, Session, SessionWrapper};
 use serde::{de::DeserializeSeed, Deserialize};
@@ -36,6 +35,8 @@ pub use deserialize::{DeserializeMap, MapVisitor, _private};
 pub use module_utils_macros::{merge_conf, merge_opt, DeserializeMap, RequestFilter};
 
 // Required for macros
+#[doc(hidden)]
+pub use async_trait;
 #[doc(hidden)]
 pub use serde;
 #[doc(hidden)]
@@ -58,7 +59,7 @@ pub enum RequestFilterResult {
 }
 
 /// Trait to be implemented by request filters.
-#[async_trait]
+#[async_trait::async_trait]
 pub trait RequestFilter: Sized {
     /// Configuration type of this handler.
     type Conf;

@@ -59,7 +59,6 @@
 //! before it has been altered. Later the actual logging is performed during the `logging` phase.
 //!
 //! ```rust
-//! use async_trait::async_trait;
 //! use common_log_module::{CommonLogHandler, CommonLogOpt};
 //! use module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
 //! use startup_module::{DefaultApp, StartupConf, StartupOpt};

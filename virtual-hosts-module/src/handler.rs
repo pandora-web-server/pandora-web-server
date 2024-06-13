@@ -249,7 +249,6 @@ where
 mod tests {
     use super::*;
 
-    use async_trait::async_trait;
     use module_utils::pingora::{RequestHeader, TestSession};
     use module_utils::{DeserializeMap, FromYaml};
     use test_log::test;
