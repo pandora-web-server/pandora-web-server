@@ -143,7 +143,7 @@
 //!         session: &mut Session,
 //!         ctx: &mut Self::CTX,
 //!     ) -> Result<bool, Box<Error>> {
-//!         self.handler.handle(session, ctx).await
+//!         self.handler.call_request_filter(session, ctx).await
 //!     }
 //!
 //!     async fn upstream_peer(
@@ -160,7 +160,7 @@
 //!         upstream_response: &mut ResponseHeader,
 //!         ctx: &mut Self::CTX,
 //!     ) {
-//!         self.handler.handle_response(session, upstream_response, ctx)
+//!         self.handler.call_response_filter(session, upstream_response, ctx)
 //!     }
 //! }
 //!

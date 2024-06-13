@@ -262,7 +262,7 @@ mod tests {
         let mut session = make_session("https://localhost/").await;
         assert!(
             handler
-                .handle(session.deref_mut(), &mut Handler::new_ctx())
+                .call_request_filter(session.deref_mut(), &mut Handler::new_ctx())
                 .await?
         );
         assert_headers(
@@ -278,7 +278,7 @@ mod tests {
         let mut session = make_session("https://localhost/subdir/file.txt").await;
         assert!(
             handler
-                .handle(session.deref_mut(), &mut Handler::new_ctx())
+                .call_request_filter(session.deref_mut(), &mut Handler::new_ctx())
                 .await?
         );
         assert_headers(
@@ -293,7 +293,7 @@ mod tests {
         let mut session = make_session("https://example.com/whatever").await;
         assert!(
             handler
-                .handle(session.deref_mut(), &mut Handler::new_ctx())
+                .call_request_filter(session.deref_mut(), &mut Handler::new_ctx())
                 .await?
         );
         assert_headers(
@@ -308,7 +308,7 @@ mod tests {
         let mut session = make_session("https://example.net/whatever").await;
         assert!(
             handler
-                .handle(session.deref_mut(), &mut Handler::new_ctx())
+                .call_request_filter(session.deref_mut(), &mut Handler::new_ctx())
                 .await?
         );
         assert_headers(
@@ -329,9 +329,13 @@ mod tests {
 
         let mut session = make_session("https://localhost/").await;
         let mut ctx = Handler::new_ctx();
-        assert!(!handler.handle(session.deref_mut(), &mut ctx).await?);
+        assert!(
+            !handler
+                .call_request_filter(session.deref_mut(), &mut ctx)
+                .await?
+        );
         let mut header = make_response_header().unwrap();
-        handler.handle_response(session.deref_mut(), &mut header, &mut ctx);
+        handler.call_response_filter(session.deref_mut(), &mut header, &mut ctx);
         assert_headers(
             &header,
             vec![
@@ -344,9 +348,13 @@ mod tests {
 
         let mut session = make_session("https://localhost/subdir/file.txt").await;
         let mut ctx = Handler::new_ctx();
-        assert!(!handler.handle(session.deref_mut(), &mut ctx).await?);
+        assert!(
+            !handler
+                .call_request_filter(session.deref_mut(), &mut ctx)
+                .await?
+        );
         let mut header = make_response_header().unwrap();
-        handler.handle_response(session.deref_mut(), &mut header, &mut ctx);
+        handler.call_response_filter(session.deref_mut(), &mut header, &mut ctx);
         assert_headers(
             &header,
             vec![
@@ -358,9 +366,13 @@ mod tests {
 
         let mut session = make_session("https://example.com/whatever").await;
         let mut ctx = Handler::new_ctx();
-        assert!(!handler.handle(session.deref_mut(), &mut ctx).await?);
+        assert!(
+            !handler
+                .call_request_filter(session.deref_mut(), &mut ctx)
+                .await?
+        );
         let mut header = make_response_header().unwrap();
-        handler.handle_response(session.deref_mut(), &mut header, &mut ctx);
+        handler.call_response_filter(session.deref_mut(), &mut header, &mut ctx);
         assert_headers(
             &header,
             vec![
@@ -372,9 +384,13 @@ mod tests {
 
         let mut session = make_session("https://example.net/whatever").await;
         let mut ctx = Handler::new_ctx();
-        assert!(!handler.handle(session.deref_mut(), &mut ctx).await?);
+        assert!(
+            !handler
+                .call_request_filter(session.deref_mut(), &mut ctx)
+                .await?
+        );
         let mut header = make_response_header().unwrap();
-        handler.handle_response(session.deref_mut(), &mut header, &mut ctx);
+        handler.call_response_filter(session.deref_mut(), &mut header, &mut ctx);
         assert_headers(
             &header,
             vec![

@@ -74,7 +74,7 @@
 //!     ) -> Result<bool, Box<Error>> {
 //!         // Select upstream peer according to configuration. This could be called based on some
 //!         // conditions.
-//!         self.handler.handle(session, ctx).await
+//!         self.handler.call_request_filter(session, ctx).await
 //!     }
 //!
 //!     async fn upstream_peer(
@@ -307,7 +307,7 @@ mod tests {
         let handler = make_handler(false);
         let mut session = make_session().await;
         let mut ctx = UpstreamHandler::new_ctx();
-        assert!(!handler.handle(&mut session, &mut ctx).await?);
+        assert!(!handler.call_request_filter(&mut session, &mut ctx).await?);
 
         assert_eq!(
             UpstreamHandler::upstream_peer(&mut session, &mut ctx)
@@ -325,7 +325,7 @@ mod tests {
         let handler = make_handler(true);
         let mut session = make_session().await;
         let mut ctx = UpstreamHandler::new_ctx();
-        assert!(!handler.handle(&mut session, &mut ctx).await?);
+        assert!(!handler.call_request_filter(&mut session, &mut ctx).await?);
 
         let peer = UpstreamHandler::upstream_peer(&mut session, &mut ctx)
             .await

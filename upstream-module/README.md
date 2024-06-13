@@ -60,7 +60,7 @@ impl ProxyHttp for MyServer {
     ) -> Result<bool, Box<Error>> {
         // Select upstream peer according to configuration. This could be called based on some
         // conditions.
-        self.handler.handle(session, ctx).await
+        self.handler.call_request_filter(session, ctx).await
     }
 
     async fn upstream_peer(

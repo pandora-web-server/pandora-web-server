@@ -128,7 +128,7 @@ impl ProxyHttp for VirtualHostsApp {
         session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> Result<bool, Box<Error>> {
-        self.handler.handle(session, ctx).await
+        self.handler.call_request_filter(session, ctx).await
     }
 
     async fn upstream_peer(
@@ -146,7 +146,7 @@ impl ProxyHttp for VirtualHostsApp {
         ctx: &mut Self::CTX,
     ) {
         self.handler
-            .handle_response(session, upstream_response, ctx)
+            .call_response_filter(session, upstream_response, ctx)
     }
 
     async fn logging(&self, session: &mut Session, _e: Option<&Error>, ctx: &mut Self::CTX) {

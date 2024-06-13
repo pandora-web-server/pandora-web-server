@@ -74,10 +74,14 @@ pub trait RequestFilter: Sized {
 
     /// Handles the `request_filter` phase of the current request.
     ///
-    /// This will wrap the current session and call `request_filter` methods of the individual
-    /// handlers then. It will then create a result that can be returned from the `request_filter`
-    /// phase directly.
-    async fn handle(&self, session: &mut Session, ctx: &mut Self::CTX) -> Result<bool, Box<Error>>
+    /// This will wrap the current session and call `request_filter` and `request_filter_done`
+    /// methods of the handler. The result of this method can be returned in the `request_filter`
+    /// phase without further conversion.
+    async fn call_request_filter(
+        &self,
+        session: &mut Session,
+        ctx: &mut Self::CTX,
+    ) -> Result<bool, Box<Error>>
     where
         Self::CTX: Send,
     {
@@ -89,9 +93,8 @@ pub trait RequestFilter: Sized {
 
     /// Handles the `upstream_response_filter` or `response_filter` phase of the current request.
     ///
-    /// This will wrap the current session and call `response_filter` methods of the individual
-    /// handlers then.
-    fn handle_response(
+    /// This will wrap the current session and call `response_filter` method of the handler then.
+    fn call_response_filter(
         &self,
         session: &mut Session,
         response: &mut ResponseHeader,
@@ -106,12 +109,12 @@ pub trait RequestFilter: Sized {
     /// Per-request state of this handler, see [`pingora_proxy::ProxyHttp::CTX`]
     type CTX;
 
-    /// Creates a new sate object, see [`pingora_proxy::ProxyHttp::new_ctx`]
+    /// Creates a new state object, see [`pingora_proxy::ProxyHttp::new_ctx`]
     fn new_ctx() -> Self::CTX;
 
     /// Handler to run during Pingora’s `request_filter` state, see
     /// [`pingora_proxy::ProxyHttp::request_filter`]. This uses a different return type to account
-    /// for the existence of multiple request filters.
+    /// for the existence of multiple chained request filters.
     async fn request_filter(
         &self,
         session: &mut impl SessionWrapper,
