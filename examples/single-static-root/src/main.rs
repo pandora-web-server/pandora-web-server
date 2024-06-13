@@ -32,31 +32,17 @@
 //! RUST_LOG=debug cargo run --package example-single-static-root -- -c config.yaml
 //! ```
 
-use async_trait::async_trait;
 use auth_module::{AuthHandler, AuthOpt};
 use common_log_module::{CommonLogHandler, CommonLogOpt};
 use compression_module::{CompressionHandler, CompressionOpt};
 use headers_module::HeadersHandler;
 use ip_anonymization_module::{IPAnonymizationHandler, IPAnonymizationOpt};
 use log::error;
-use module_utils::pingora::{Error, HttpPeer, ProxyHttp, ResponseHeader, Session};
 use module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
 use rewrite_module::RewriteHandler;
-use startup_module::{StartupConf, StartupOpt};
+use startup_module::{DefaultApp, StartupConf, StartupOpt};
 use static_files_module::{StaticFilesHandler, StaticFilesOpt};
 use structopt::StructOpt;
-
-/// The application implementing the Pingora Proxy interface
-struct StaticRootApp {
-    handler: Handler,
-}
-
-impl StaticRootApp {
-    /// Creates a new application instance with the given handler.
-    fn new(handler: Handler) -> Self {
-        Self { handler }
-    }
-}
 
 /// Handler combining Compression and Static Files modules
 #[derive(Debug, RequestFilter)]
@@ -88,44 +74,6 @@ struct Conf {
     handler: <Handler as RequestFilter>::Conf,
 }
 
-#[async_trait]
-impl ProxyHttp for StaticRootApp {
-    type CTX = <Handler as RequestFilter>::CTX;
-
-    fn new_ctx(&self) -> Self::CTX {
-        Handler::new_ctx()
-    }
-
-    async fn request_filter(
-        &self,
-        session: &mut Session,
-        ctx: &mut Self::CTX,
-    ) -> Result<bool, Box<Error>> {
-        self.handler.call_request_filter(session, ctx).await
-    }
-
-    async fn upstream_peer(
-        &self,
-        session: &mut Session,
-        ctx: &mut Self::CTX,
-    ) -> Result<Box<HttpPeer>, Box<Error>> {
-        self.handler.call_upstream_peer(session, ctx).await
-    }
-
-    fn upstream_response_filter(
-        &self,
-        session: &mut Session,
-        response: &mut ResponseHeader,
-        ctx: &mut Self::CTX,
-    ) {
-        self.handler.call_response_filter(session, response, ctx)
-    }
-
-    async fn logging(&self, session: &mut Session, _e: Option<&Error>, ctx: &mut Self::CTX) {
-        self.handler.log.logging(session, &mut ctx.log).await;
-    }
-}
-
 fn main() {
     env_logger::init();
 
@@ -144,7 +92,7 @@ fn main() {
     conf.handler.compression.merge_with_opt(opt.compression);
     conf.handler.static_files.merge_with_opt(opt.static_files);
 
-    let handler = match Handler::new(conf.handler) {
+    let app = match DefaultApp::<Handler>::from_conf(conf.handler) {
         Ok(handler) => handler,
         Err(err) => {
             error!("{err}");
@@ -152,9 +100,7 @@ fn main() {
         }
     };
 
-    let server = conf
-        .startup
-        .into_server(StaticRootApp::new(handler), Some(opt.startup));
+    let server = conf.startup.into_server(app, Some(opt.startup));
 
     server.run_forever();
 }

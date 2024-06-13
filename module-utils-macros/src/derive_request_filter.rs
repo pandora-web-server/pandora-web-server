@@ -154,6 +154,17 @@ fn generate_request_filter_impl(
                         self.#field_name.response_filter(_session, _response, _ctx.as_mut().map(|ctx| &mut ctx.#field_name));
                     )*
                 }
+
+                async fn logging(
+                    &self,
+                    _session: &mut impl ::module_utils::pingora::SessionWrapper,
+                    _e: ::std::option::Option<&::module_utils::pingora::Error>,
+                    _ctx: &mut Self::CTX,
+                ) {
+                    #(
+                        self.#field_name.logging(_session, _e, &mut _ctx.#field_name).await;
+                    )*
+                }
             }
         };
     }

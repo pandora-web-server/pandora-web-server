@@ -63,33 +63,19 @@
 //! RUST_LOG=debug cargo run --package example-virtual-hosts -- -c config/*.yaml
 //! ```
 
-use async_trait::async_trait;
 use auth_module::AuthHandler;
 use common_log_module::CommonLogHandler;
 use compression_module::CompressionHandler;
 use headers_module::HeadersHandler;
 use ip_anonymization_module::IPAnonymizationHandler;
 use log::error;
-use module_utils::pingora::{Error, HttpPeer, ProxyHttp, ResponseHeader, Session};
 use module_utils::{merge_conf, FromYaml, RequestFilter};
 use rewrite_module::RewriteHandler;
-use startup_module::{StartupConf, StartupOpt};
+use startup_module::{DefaultApp, StartupConf, StartupOpt};
 use static_files_module::StaticFilesHandler;
 use structopt::StructOpt;
 use upstream_module::UpstreamHandler;
 use virtual_hosts_module::VirtualHostsHandler;
-
-/// The application implementing the Pingora Proxy interface
-struct VirtualHostsApp {
-    handler: Handler,
-}
-
-impl VirtualHostsApp {
-    /// Creates a new application instance with the given virtual hosts handler.
-    fn new(handler: Handler) -> Self {
-        Self { handler }
-    }
-}
 
 #[derive(Debug, RequestFilter)]
 struct Handler {
@@ -115,50 +101,6 @@ struct Conf {
     handler: <Handler as RequestFilter>::Conf,
 }
 
-#[async_trait]
-impl ProxyHttp for VirtualHostsApp {
-    type CTX = <Handler as RequestFilter>::CTX;
-
-    fn new_ctx(&self) -> Self::CTX {
-        Handler::new_ctx()
-    }
-
-    async fn request_filter(
-        &self,
-        session: &mut Session,
-        ctx: &mut Self::CTX,
-    ) -> Result<bool, Box<Error>> {
-        self.handler.call_request_filter(session, ctx).await
-    }
-
-    async fn upstream_peer(
-        &self,
-        session: &mut Session,
-        ctx: &mut Self::CTX,
-    ) -> Result<Box<HttpPeer>, Box<Error>> {
-        self.handler.call_upstream_peer(session, ctx).await
-    }
-
-    fn upstream_response_filter(
-        &self,
-        session: &mut Session,
-        upstream_response: &mut ResponseHeader,
-        ctx: &mut Self::CTX,
-    ) {
-        self.handler
-            .call_response_filter(session, upstream_response, ctx)
-    }
-
-    async fn logging(&self, session: &mut Session, _e: Option<&Error>, ctx: &mut Self::CTX) {
-        if let Some(handler) = self.handler.virtual_hosts.as_inner(&ctx.virtual_hosts) {
-            handler
-                .log
-                .logging(session, &mut ctx.virtual_hosts.log)
-                .await;
-        }
-    }
-}
-
 fn main() {
     env_logger::init();
 
@@ -171,7 +113,7 @@ fn main() {
         }
     };
 
-    let handler = match Handler::new(conf.handler) {
+    let app = match DefaultApp::<Handler>::from_conf(conf.handler) {
         Ok(handler) => handler,
         Err(err) => {
             error!("{err}");
@@ -179,8 +121,6 @@ fn main() {
         }
     };
 
-    let server = conf
-        .startup
-        .into_server(VirtualHostsApp::new(handler), Some(opt));
+    let server = conf.startup.into_server(app, Some(opt));
     server.run_forever();
 }

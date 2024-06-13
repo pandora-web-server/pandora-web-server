@@ -41,21 +41,16 @@ files. This is useful after the logs have been rotated for example.
 
 ## Code example
 
-This handler needs to run first during the `request_filter` phase, so that it can capture
-relevant data before it has been altered. Later the actual logging can be performed during the
-`logging` phase. As such, it isn’t suitable for `DefaultApp` defined in `startup-module` but
-requires an explicit `ProxyHttp` implementation.
+`CommonLogHandler` first handles the `request_filter` phase where it captures relevant data
+before it has been altered. Later the actual logging is performed during the `logging` phase.
 
 ```rust
 use async_trait::async_trait;
 use common_log_module::{CommonLogHandler, CommonLogOpt};
-use module_utils::pingora::{Error, HttpPeer, ProxyHttp, Session};
 use module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
-use startup_module::{StartupConf, StartupOpt};
+use startup_module::{DefaultApp, StartupConf, StartupOpt};
 use static_files_module::StaticFilesHandler;
 use structopt::StructOpt;
-
-// Define handler and its configuration structures.
 
 #[derive(Debug, RequestFilter)]
 struct Handler {
@@ -75,53 +70,12 @@ struct Opt {
     log: CommonLogOpt,
 }
 
-// Define server application
-
-struct MyServer {
-    handler: Handler,
-}
-
-#[async_trait]
-impl ProxyHttp for MyServer {
-    type CTX = <Handler as RequestFilter>::CTX;
-    fn new_ctx(&self) -> Self::CTX {
-        Handler::new_ctx()
-    }
-
-    async fn request_filter(
-        &self,
-        session: &mut Session,
-        ctx: &mut Self::CTX,
-    ) -> Result<bool, Box<Error>> {
-        self.handler.call_request_filter(session, ctx).await
-    }
-
-    async fn upstream_peer(
-        &self,
-        session: &mut Session,
-        ctx: &mut Self::CTX,
-    ) -> Result<Box<HttpPeer>, Box<Error>> {
-        panic!("Upstream phase should not be reached");
-    }
-
-    async fn logging(
-        &self,
-        session: &mut Session,
-        _e: Option<&Error>,
-        ctx: &mut Self::CTX,
-    ) {
-        self.handler.log.logging(session, &mut ctx.log);
-    }
-}
-
-// Startup
-
 let opt = Opt::from_args();
 let mut conf = Conf::load_from_files(opt.startup.conf.as_deref().unwrap_or(&[])).unwrap();
 conf.handler.log.merge_with_opt(opt.log);
 
-let handler = Handler::try_from(conf.handler).unwrap();
-let server = conf.startup.into_server(MyServer { handler }, Some(opt.startup));
+let app = DefaultApp::<Handler>::from_conf(conf.handler).unwrap();
+let server = conf.startup.into_server(app, Some(opt.startup));
 
 // Do something with the server here, e.g. call server.run_forever()
 ```

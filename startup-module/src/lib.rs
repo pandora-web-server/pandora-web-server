@@ -73,8 +73,8 @@ use module_utils::RequestFilter;
 
 /// A trivial Pingora app implementation, to be passed to [`StartupConf::into_server`]
 ///
-/// This app will only handle the `request_filter`, `upstream_peer` and `upstream_response_filter`
-/// phases. All processing will be delegated to the respective `RequestFilter` methods.
+/// This app will only handle the `request_filter`, `upstream_peer`, `upstream_response_filter` and
+/// `logging` phases. All processing will be delegated to the respective `RequestFilter` methods.
 #[derive(Debug)]
 pub struct DefaultApp<H> {
     handler: H,
@@ -132,5 +132,9 @@ where
         ctx: &mut Self::CTX,
     ) {
         self.handler.call_response_filter(session, response, ctx)
+    }
+
+    async fn logging(&self, session: &mut Session, e: Option<&Error>, ctx: &mut Self::CTX) {
+        self.handler.call_logging(session, e, ctx).await
     }
 }

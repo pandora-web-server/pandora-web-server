@@ -18,7 +18,7 @@ use async_trait::async_trait;
 use http::header;
 use lazy_static::lazy_static;
 use log::error;
-use module_utils::pingora::{Error, ErrorType, Session, SessionWrapper};
+use module_utils::pingora::{Error, ErrorType, SessionWrapper};
 use module_utils::{RequestFilter, RequestFilterResult};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -181,11 +181,13 @@ impl RequestFilter for CommonLogHandler {
 
         Ok(RequestFilterResult::Unhandled)
     }
-}
 
-impl CommonLogHandler {
-    /// A handler supposed to be called during Pingora’s logging phase
-    pub async fn logging(&self, session: &mut Session, ctx: &mut RequestCtx) {
+    async fn logging(
+        &self,
+        session: &mut impl SessionWrapper,
+        _e: Option<&Error>,
+        ctx: &mut RequestCtx,
+    ) {
         if self.conf.log_file.as_os_str().is_empty() {
             // Logging disabled
             return;

@@ -128,6 +128,17 @@ pub trait RequestFilter: Sized {
         self.response_filter(&mut session, response, Some(ctx))
     }
 
+    /// Handles the `logging` phase of the current request.
+    ///
+    /// This will wrap the current session and call `logging` method of the handler then.
+    async fn call_logging(&self, session: &mut Session, e: Option<&Error>, ctx: &mut Self::CTX)
+    where
+        Self::CTX: Send,
+    {
+        let mut session = wrap_session(session, self);
+        self.logging(&mut session, e, ctx).await
+    }
+
     /// Per-request state of this handler, see [`pingora_proxy::ProxyHttp::CTX`]
     type CTX;
 
@@ -173,6 +184,15 @@ pub trait RequestFilter: Sized {
         _session: &mut impl SessionWrapper,
         _response: &mut ResponseHeader,
         _ctx: Option<&mut Self::CTX>,
+    ) {
+    }
+
+    /// Handler to run during Pingora’s `logging` phase, see [`pingora_proxy::ProxyHttp::logging`].
+    async fn logging(
+        &self,
+        _session: &mut impl SessionWrapper,
+        _e: Option<&Error>,
+        _ctx: &mut Self::CTX,
     ) {
     }
 }

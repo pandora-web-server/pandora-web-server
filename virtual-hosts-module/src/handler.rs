@@ -194,6 +194,17 @@ where
             handler.response_filter(session, response, ctx.map(|ctx| ctx.deref_mut()));
         }
     }
+
+    async fn logging(
+        &self,
+        session: &mut impl SessionWrapper,
+        e: Option<&Error>,
+        ctx: &mut Self::CTX,
+    ) {
+        if let Some(handler) = self.as_inner(ctx) {
+            handler.logging(session, e, ctx).await;
+        }
+    }
 }
 
 impl<C, H> TryFrom<VirtualHostsConf<C>> for VirtualHostsHandler<H>
