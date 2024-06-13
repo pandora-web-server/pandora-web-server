@@ -68,14 +68,13 @@ mod configuration;
 
 use async_trait::async_trait;
 pub use configuration::{StartupConf, StartupOpt};
-use module_utils::pingora::{Error, ErrorType, HttpPeer, ProxyHttp, Session};
+use module_utils::pingora::{Error, HttpPeer, ProxyHttp, ResponseHeader, Session};
 use module_utils::RequestFilter;
 
 /// A trivial Pingora app implementation, to be passed to [`StartupConf::into_server`]
 ///
-/// This app will only handle the `request_filter` phase. If the `upstream_peer` phase is reached,
-/// it will always produce a 404 Not Found error. This makes it unsuitable for any handlers that
-/// require phases beyond `request_filter` to be handled.
+/// This app will only handle the `request_filter`, `upstream_peer` and `upstream_response_filter`
+/// phases. All processing will be delegated to the respective `RequestFilter` methods.
 #[derive(Debug)]
 pub struct DefaultApp<H> {
     handler: H,
@@ -120,9 +119,18 @@ where
 
     async fn upstream_peer(
         &self,
-        _session: &mut Session,
-        _ctx: &mut Self::CTX,
+        session: &mut Session,
+        ctx: &mut Self::CTX,
     ) -> Result<Box<HttpPeer>, Box<Error>> {
-        Err(Error::new(ErrorType::HTTPStatus(404)))
+        self.handler.call_upstream_peer(session, ctx).await
+    }
+
+    fn upstream_response_filter(
+        &self,
+        session: &mut Session,
+        response: &mut ResponseHeader,
+        ctx: &mut Self::CTX,
+    ) {
+        self.handler.call_response_filter(session, response, ctx)
     }
 }

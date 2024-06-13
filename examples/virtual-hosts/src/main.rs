@@ -136,7 +136,7 @@ impl ProxyHttp for VirtualHostsApp {
         session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> Result<Box<HttpPeer>, Box<Error>> {
-        UpstreamHandler::upstream_peer(session, &mut ctx.virtual_hosts.upstream).await
+        self.handler.call_upstream_peer(session, ctx).await
     }
 
     fn upstream_response_filter(

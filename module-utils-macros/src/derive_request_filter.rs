@@ -125,6 +125,25 @@ fn generate_request_filter_impl(
                     )*
                 }
 
+                async fn upstream_peer(
+                    &self,
+                    _session: &mut impl ::module_utils::pingora::SessionWrapper,
+                    _ctx: &mut Self::CTX,
+                ) -> ::std::result::Result<
+                    ::std::option::Option<::std::boxed::Box<::module_utils::pingora::HttpPeer>>,
+                    ::std::boxed::Box<::module_utils::pingora::Error>
+                >
+                {
+                    #(
+                        if let Some(peer) =
+                            self.#field_name.upstream_peer(_session, &mut _ctx.#field_name).await?
+                        {
+                            return Ok(Some(peer));
+                        }
+                    )*
+                    Ok(None)
+                }
+
                 fn response_filter(
                     &self,
                     _session: &mut impl ::module_utils::pingora::SessionWrapper,

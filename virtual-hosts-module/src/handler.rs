@@ -15,11 +15,12 @@
 use async_trait::async_trait;
 use http::uri::Uri;
 use log::warn;
-use module_utils::pingora::{Error, SessionWrapper};
+use module_utils::pingora::{Error, HttpPeer, ResponseHeader, SessionWrapper};
 use module_utils::router::Router;
 use module_utils::{RequestFilter, RequestFilterResult};
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
 use crate::configuration::VirtualHostsConf;
@@ -99,6 +100,9 @@ impl<H: Debug> VirtualHostsHandler<H> {
     }
 }
 
+struct Marker;
+type IndexEntry = (usize, PhantomData<Marker>);
+
 #[async_trait]
 impl<H> RequestFilter for VirtualHostsHandler<H>
 where
@@ -142,6 +146,12 @@ where
 
         if let Some((handler, index, new_path)) = handler {
             ctx.index = Some(index);
+
+            // Save ctx.index in session as well, response_filter could be called without context
+            session
+                .extensions_mut()
+                .insert::<IndexEntry>((index, PhantomData::<Marker>));
+
             if let Some(new_path) = new_path {
                 // Capture original URI, logging might need it
                 let orig_uri = session.req_header().uri.clone();
@@ -153,6 +163,35 @@ where
             handler.request_filter(session, ctx).await
         } else {
             Ok(RequestFilterResult::Unhandled)
+        }
+    }
+
+    async fn upstream_peer(
+        &self,
+        session: &mut impl SessionWrapper,
+        ctx: &mut Self::CTX,
+    ) -> Result<Option<Box<HttpPeer>>, Box<Error>> {
+        if let Some(handler) = self.as_inner(ctx) {
+            handler.upstream_peer(session, ctx).await
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn response_filter(
+        &self,
+        session: &mut impl SessionWrapper,
+        response: &mut ResponseHeader,
+        ctx: Option<&mut Self::CTX>,
+    ) {
+        let handler = ctx
+            .as_ref()
+            .and_then(|ctx| ctx.index)
+            .or_else(|| session.extensions().get::<IndexEntry>().map(|(i, _)| *i))
+            .and_then(|index| self.handlers.retrieve(index))
+            .map(|(_, h)| h);
+        if let Some(handler) = handler {
+            handler.response_filter(session, response, ctx.map(|ctx| ctx.deref_mut()));
         }
     }
 }

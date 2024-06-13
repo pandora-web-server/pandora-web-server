@@ -39,7 +39,7 @@ use compression_module::{CompressionHandler, CompressionOpt};
 use headers_module::HeadersHandler;
 use ip_anonymization_module::{IPAnonymizationHandler, IPAnonymizationOpt};
 use log::error;
-use module_utils::pingora::{Error, ErrorType, HttpPeer, ProxyHttp, Session};
+use module_utils::pingora::{Error, HttpPeer, ProxyHttp, ResponseHeader, Session};
 use module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
 use rewrite_module::RewriteHandler;
 use startup_module::{StartupConf, StartupOpt};
@@ -106,10 +106,19 @@ impl ProxyHttp for StaticRootApp {
 
     async fn upstream_peer(
         &self,
-        _session: &mut Session,
-        _ctx: &mut Self::CTX,
+        session: &mut Session,
+        ctx: &mut Self::CTX,
     ) -> Result<Box<HttpPeer>, Box<Error>> {
-        Err(Error::new(ErrorType::HTTPStatus(404)))
+        self.handler.call_upstream_peer(session, ctx).await
+    }
+
+    fn upstream_response_filter(
+        &self,
+        session: &mut Session,
+        response: &mut ResponseHeader,
+        ctx: &mut Self::CTX,
+    ) {
+        self.handler.call_response_filter(session, response, ctx)
     }
 
     async fn logging(&self, session: &mut Session, _e: Option<&Error>, ctx: &mut Self::CTX) {

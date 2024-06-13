@@ -26,21 +26,16 @@
 //!
 //! ## Code example
 //!
-//! `UpstreamHandler` has to be called in both `request_filter` and `upstream_peer` phases. The
-//! former selects an upstream peer and modifies the request by adding the appropriate `Host`
-//! header. The latter retrieves the previously selected upstream peer. As such, this handler isn’t
-//! suitable for `DefaultApp` defined in `startup-module` but requires an explicit `ProxyHttp`
-//! implementation.
+//! `UpstreamHandler` handles both `request_filter` and `upstream_peer` phases. The former selects
+//! an upstream peer and modifies the request by adding the appropriate `Host` header. The latter
+//! retrieves the previously selected upstream peer.
 //!
 //! ```rust
 //! use async_trait::async_trait;
-//! use module_utils::pingora::{Error, HttpPeer, ProxyHttp, Session};
 //! use module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
-//! use startup_module::{StartupConf, StartupOpt};
+//! use startup_module::{DefaultApp, StartupConf, StartupOpt};
 //! use structopt::StructOpt;
 //! use upstream_module::{UpstreamConf, UpstreamHandler, UpstreamOpt};
-//!
-//! // Define configuration structures.
 //!
 //! #[merge_conf]
 //! struct Conf {
@@ -54,47 +49,12 @@
 //!     upstream: UpstreamOpt,
 //! }
 //!
-//! // Define server application
-//!
-//! pub struct MyServer {
-//!     handler: UpstreamHandler,
-//! }
-//!
-//! #[async_trait]
-//! impl ProxyHttp for MyServer {
-//!     type CTX = <UpstreamHandler as RequestFilter>::CTX;
-//!     fn new_ctx(&self) -> Self::CTX {
-//!         UpstreamHandler::new_ctx()
-//!     }
-//!
-//!     async fn request_filter(
-//!         &self,
-//!         session: &mut Session,
-//!         ctx: &mut Self::CTX,
-//!     ) -> Result<bool, Box<Error>> {
-//!         // Select upstream peer according to configuration. This could be called based on some
-//!         // conditions.
-//!         self.handler.call_request_filter(session, ctx).await
-//!     }
-//!
-//!     async fn upstream_peer(
-//!         &self,
-//!         session: &mut Session,
-//!         ctx: &mut Self::CTX,
-//!     ) -> Result<Box<HttpPeer>, Box<Error>> {
-//!         // Return previously selected peer if any
-//!         UpstreamHandler::upstream_peer(session, ctx).await
-//!     }
-//! }
-//!
-//! // Startup
-//!
 //! let opt = Opt::from_args();
 //! let mut conf = Conf::load_from_files(opt.startup.conf.as_deref().unwrap_or(&[])).unwrap();
 //! conf.upstream.merge_with_opt(opt.upstream);
 //!
-//! let handler = UpstreamHandler::try_from(conf.upstream).unwrap();
-//! let server = conf.startup.into_server(MyServer { handler }, Some(opt.startup));
+//! let app = DefaultApp::<UpstreamHandler>::from_conf(conf.upstream).unwrap();
+//! let server = conf.startup.into_server(app, Some(opt.startup));
 //!
 //! // Do something with the server here, e.g. call server.run_forever()
 //! ```
@@ -105,7 +65,7 @@ use async_trait::async_trait;
 use http::header;
 use http::uri::{Scheme, Uri};
 use log::error;
-use module_utils::pingora::{Error, ErrorType, HttpPeer, Session, SessionWrapper};
+use module_utils::pingora::{Error, ErrorType, HttpPeer, SessionWrapper};
 use module_utils::{DeserializeMap, RequestFilter, RequestFilterResult};
 use serde::de::{Deserializer, Error as _};
 use serde::Deserialize as _;
@@ -164,26 +124,6 @@ pub struct UpstreamContext {
 pub struct UpstreamHandler {
     host_port: String,
     context: Option<UpstreamContext>,
-}
-
-impl UpstreamHandler {
-    /// This function should be called during the `upstream_peer` phase of Pingora Proxy to produce
-    /// the upstream peer which was determined in the `request_filter` phase. Will return a 404 Not
-    /// Found error if no upstream is configured.
-    pub async fn upstream_peer(
-        _session: &mut Session,
-        ctx: &mut Option<UpstreamContext>,
-    ) -> Result<Box<HttpPeer>, Box<Error>> {
-        if let Some(context) = ctx {
-            Ok(Box::new(HttpPeer::new(
-                context.addr,
-                context.tls,
-                context.sni.clone(),
-            )))
-        } else {
-            Err(Error::new(ErrorType::HTTPStatus(404)))
-        }
-    }
 }
 
 impl TryFrom<UpstreamConf> for UpstreamHandler {
@@ -272,6 +212,22 @@ impl RequestFilter for UpstreamHandler {
             Ok(RequestFilterResult::Unhandled)
         }
     }
+
+    async fn upstream_peer(
+        &self,
+        _session: &mut impl SessionWrapper,
+        ctx: &mut Self::CTX,
+    ) -> Result<Option<Box<HttpPeer>>, Box<Error>> {
+        if let Some(context) = ctx {
+            Ok(Some(Box::new(HttpPeer::new(
+                context.addr,
+                context.tls,
+                context.sni.clone(),
+            ))))
+        } else {
+            Ok(None)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -308,14 +264,11 @@ mod tests {
         let mut session = make_session().await;
         let mut ctx = UpstreamHandler::new_ctx();
         assert!(!handler.call_request_filter(&mut session, &mut ctx).await?);
-
-        assert_eq!(
-            UpstreamHandler::upstream_peer(&mut session, &mut ctx)
-                .await
-                .unwrap_err()
-                .etype,
-            ErrorType::HTTPStatus(404)
-        );
+        assert!(handler
+            .upstream_peer(&mut session, &mut ctx)
+            .await
+            .unwrap()
+            .is_none());
 
         Ok(())
     }
@@ -327,8 +280,10 @@ mod tests {
         let mut ctx = UpstreamHandler::new_ctx();
         assert!(!handler.call_request_filter(&mut session, &mut ctx).await?);
 
-        let peer = UpstreamHandler::upstream_peer(&mut session, &mut ctx)
+        let peer = handler
+            .upstream_peer(&mut session, &mut ctx)
             .await
+            .unwrap()
             .unwrap();
         assert_eq!(peer.scheme.to_string(), "HTTPS".to_owned());
         assert_eq!(peer.sni, "example.com");
@@ -342,16 +297,15 @@ mod tests {
 
     #[test(tokio::test)]
     async fn not_called() -> Result<(), Box<Error>> {
+        let handler = make_handler(true);
         let mut session = make_session().await;
         let mut ctx = UpstreamHandler::new_ctx();
 
-        assert_eq!(
-            UpstreamHandler::upstream_peer(&mut session, &mut ctx)
-                .await
-                .unwrap_err()
-                .etype,
-            ErrorType::HTTPStatus(404)
-        );
+        assert!(handler
+            .upstream_peer(&mut session, &mut ctx)
+            .await
+            .unwrap()
+            .is_none());
 
         Ok(())
     }
