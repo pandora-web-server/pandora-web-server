@@ -28,9 +28,8 @@ phase:
 ```rust
 use ip_anonymization_module::{IPAnonymizationHandler, IPAnonymizationOpt};
 use module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
-use pingora_core::server::configuration::{Opt as ServerOpt, ServerConf};
-use pingora_core::server::Server;
-use static_files_module::StaticFilesHandler;
+use startup_module::{DefaultApp, StartupConf, StartupOpt};
+use static_files_module::{StaticFilesHandler, StaticFilesOpt};
 use structopt::StructOpt;
 
 #[derive(Debug, RequestFilter)]
@@ -41,29 +40,26 @@ struct Handler {
 
 #[merge_conf]
 struct Conf {
-    server: ServerConf,
+    startup: StartupConf,
     handler: <Handler as RequestFilter>::Conf,
 }
 
 #[merge_opt]
 struct Opt {
-    server: ServerOpt,
+    startup: StartupOpt,
     anonymization: IPAnonymizationOpt,
+    static_files: StaticFilesOpt,
 }
 
 let opt = Opt::from_args();
-let mut conf = opt
-    .server
-    .conf
-    .as_ref()
-    .and_then(|path| Some(Conf::load_from_yaml(path).unwrap()))
-    .unwrap_or_default();
+let mut conf = Conf::load_from_files(opt.startup.conf.as_deref().unwrap_or(&[])).unwrap();
 conf.handler.anonymization.merge_with_opt(opt.anonymization);
+conf.handler.static_files.merge_with_opt(opt.static_files);
 
-let mut server = Server::new_with_opt_and_conf(opt.server, conf.server);
-server.bootstrap();
+let app = DefaultApp::<Handler>::from_conf(conf.handler).unwrap();
+let server = conf.startup.into_server(app, Some(opt.startup));
 
-let handler = Handler::new(conf.handler);
+// Do something with the server here, e.g. call server.run_forever()
 ```
 
-For complete code see [single-static-root example](https://github.com/palant/pingora-utils/tree/main/examples/single-static-root) and [virtual-hosts](https://github.com/palant/pingora-utils/tree/main/examples/virtual-hosts) examples in the repository.
+For more comprehensive examples see the [`examples` directory in the repository](https://github.com/palant/pingora-utils/tree/main/examples).

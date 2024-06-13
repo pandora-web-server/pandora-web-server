@@ -24,17 +24,16 @@ http.workspace = true
 httpdate.workspace = true
 log.workspace = true
 mime_guess = { version = "2.0.4", default-features = false }
-percent-encoding.workspace = true
 module-utils.workspace = true
+percent-encoding.workspace = true
 serde.workspace = true
 structopt.workspace = true
 
 [dev-dependencies]
-async-trait.workspace = true
+compression-module.workspace = true
 const_format = "0.2.32"
 env_logger.workspace = true
-pingora-core.workspace = true
-pingora-proxy.workspace = true
+startup-module.workspace = true
 test-log.workspace = true
 tokio.workspace = true
 

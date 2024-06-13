@@ -31,16 +31,16 @@ use proc_macro::TokenStream;
 /// All field types are required to implement `structopt::StructOpt` and `Debug`.
 ///
 /// ```rust
-/// use pingora_core::server::configuration::Opt as ServerOpt;
 /// use module_utils::merge_opt;
+/// use startup_module::StartupOpt;
 /// use static_files_module::StaticFilesOpt;
 /// use structopt::StructOpt;
 ///
 /// #[derive(Debug, StructOpt)]
 /// struct MyAppOpt {
-///     /// IP address and port for the server to listen on
-///     #[structopt(long, default_value = "127.0.0.1:8080")]
-///     listen: String,
+///     /// Use to make the server roll over
+///     #[structopt(long)]
+///     roll_over: bool,
 /// }
 ///
 /// /// Starts my great application.
@@ -49,13 +49,13 @@ use proc_macro::TokenStream;
 /// #[merge_opt]
 /// struct Opt {
 ///     app: MyAppOpt,
-///     server: ServerOpt,
+///     startup: StartupOpt,
 ///     static_files: StaticFilesOpt,
 /// }
 ///
 /// let opt = Opt::from_args();
 /// println!("Application options: {:?}", opt.app);
-/// println!("Pingora server options: {:?}", opt.server);
+/// println!("Startup module options: {:?}", opt.startup);
 /// println!("Static files options: {:?}", opt.static_files);
 /// ```
 #[proc_macro_attribute]
@@ -69,31 +69,31 @@ pub fn merge_opt(_args: TokenStream, input: TokenStream) -> TokenStream {
 /// implement `Debug`, `Default` and `DeserializeMap`.
 ///
 /// ```rust
-/// use pingora_core::server::configuration::ServerConf;
 /// use module_utils::{merge_conf, DeserializeMap, FromYaml};
+/// use startup_module::StartupConf;
 /// use static_files_module::StaticFilesConf;
 /// use std::path::PathBuf;
 ///
 /// #[derive(Debug, Default, DeserializeMap)]
 /// struct MyAppConf {
-///     /// IP address and port for the server to listen on
-///     listen: String,
+///     /// If `true`, the server will roll over
+///     roll_over: bool,
 /// }
 ///
 /// #[merge_conf]
 /// struct Conf {
 ///     app: MyAppConf,
-///     server: ServerConf,
+///     startup: StartupConf,
 ///     static_files: StaticFilesConf,
 /// }
 ///
 /// let conf = Conf::from_yaml(r#"
-///     listen: 127.0.0.1:8080
-///     error_log: error.log
+///     roll_over: true
+///     listen: [127.0.0.1:8080]
 ///     root: .
 /// "#).unwrap();
-/// assert_eq!(conf.app.listen, String::from("127.0.0.1:8080"));
-/// assert_eq!(conf.server.error_log, Some(String::from("error.log")));
+/// assert!(conf.app.roll_over);
+/// assert_eq!(conf.startup.listen, vec!["127.0.0.1:8080".to_owned()]);
 /// assert_eq!(conf.static_files.root, Some(PathBuf::from(".")));
 /// ```
 ///

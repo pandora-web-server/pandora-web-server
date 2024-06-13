@@ -46,15 +46,15 @@ matches are preferred over prefix matches.
 ## Code example
 
 You would normally combine the handler of this module with the handlers of other modules such
-as `static-files-module`. The resulting configuration can then be merged with Pingora’s usual
-configuration:
+as `static-files-module`. The `module-utils` and `startup-modules` provide helpers to simplify
+merging of configuration and the command-line options of various handlers as well as creating a
+server instance from the configuration:
 
 ```rust
-use module_utils::{merge_conf, FromYaml, RequestFilter};
-use pingora_core::server::configuration::{Opt as ServerOpt, ServerConf};
-use pingora_core::server::Server;
+use module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
 use rewrite_module::RewriteHandler;
-use static_files_module::StaticFilesHandler;
+use startup_module::{DefaultApp, StartupConf, StartupOpt};
+use static_files_module::{StaticFilesHandler, StaticFilesOpt};
 use structopt::StructOpt;
 
 #[derive(Debug, RequestFilter)]
@@ -65,60 +65,24 @@ struct Handler {
 
 #[merge_conf]
 struct Conf {
-    server: ServerConf,
+    startup: StartupConf,
     handler: <Handler as RequestFilter>::Conf,
 }
 
-let opt = ServerOpt::from_args();
-let conf = opt
-    .conf
-    .as_ref()
-    .and_then(|path| Some(Conf::load_from_yaml(path).unwrap()))
-    .unwrap_or_default();
-
-let mut server = Server::new_with_opt_and_conf(opt, conf.server);
-server.bootstrap();
-
-let handler = Handler::new(conf.handler);
-```
-
-You can then use that handler in your server implementation:
-
-```rust
-use async_trait::async_trait;
-use module_utils::RequestFilter;
-use pingora_core::Error;
-use pingora_core::upstreams::peer::HttpPeer;
-use pingora_http::ResponseHeader;
-use pingora_proxy::{ProxyHttp, Session};
-
-struct MyServer {
-    handler: Handler,
+#[merge_opt]
+struct Opt {
+    startup: StartupOpt,
+    static_files: StaticFilesOpt,
 }
 
-#[async_trait]
-impl ProxyHttp for MyServer {
-    type CTX = <Handler as RequestFilter>::CTX;
-    fn new_ctx(&self) -> Self::CTX {
-        Handler::new_ctx()
-    }
+let opt = Opt::from_args();
+let mut conf = Conf::load_from_files(opt.startup.conf.as_deref().unwrap_or(&[])).unwrap();
+conf.handler.static_files.merge_with_opt(opt.static_files);
 
-    async fn request_filter(
-        &self,
-        session: &mut Session,
-        ctx: &mut Self::CTX,
-    ) -> Result<bool, Box<Error>> {
-        self.handler.handle(session, ctx).await
-    }
+let app = DefaultApp::<Handler>::from_conf(conf.handler).unwrap();
+let server = conf.startup.into_server(app, Some(opt.startup));
 
-    async fn upstream_peer(
-        &self,
-        session: &mut Session,
-        ctx: &mut Self::CTX,
-    ) -> Result<Box<HttpPeer>, Box<Error>> {
-        panic!("Upstream phase should not be reached");
-    }
-}
+// Do something with the server here, e.g. call server.run_forever()
 ```
 
-For complete code see [single-static-root example](https://github.com/palant/pingora-utils/tree/main/examples/single-static-root) and [virtual-hosts](https://github.com/palant/pingora-utils/tree/main/examples/virtual-hosts) examples in the repository.
+For more comprehensive examples see the [`examples` directory in the repository](https://github.com/palant/pingora-utils/tree/main/examples).

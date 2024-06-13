@@ -12,85 +12,46 @@ configuration options:
 
 ## Code example
 
-You will usually want to merge Pingora’s command-line options and configuration settings with
-the ones provided by this crate:
+You would normally put this handler in front of other handlers, such as the Static Files
+Module. The `module-utils` and `startup-modules` provide helpers to simplify merging of
+configuration and the command-line options of various handlers as well as creating a server
+instance from the configuration:
 
 ```rust
 use compression_module::{CompressionConf, CompressionHandler, CompressionOpt};
-use module_utils::{merge_conf, merge_opt, FromYaml};
-use pingora_core::server::Server;
-use pingora_core::server::configuration::{Opt as ServerOpt, ServerConf};
+use module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
+use startup_module::{DefaultApp, StartupConf, StartupOpt};
+use static_files_module::{StaticFilesHandler, StaticFilesOpt};
 use structopt::StructOpt;
+
+#[derive(Debug, RequestFilter)]
+struct Handler {
+    compression: CompressionHandler,
+    static_files: StaticFilesHandler,
+}
 
 #[merge_opt]
 struct Opt {
-    server: ServerOpt,
+    startup: StartupOpt,
     compression: CompressionOpt,
+    static_files: StaticFilesOpt,
 }
 
 #[merge_conf]
 struct Conf {
-    server: ServerConf,
-    compression: CompressionConf,
+    startup: StartupConf,
+    handler: <Handler as RequestFilter>::Conf,
 }
 
 let opt = Opt::from_args();
-let mut conf = opt
-    .server
-    .conf
-    .as_ref()
-    .and_then(|path| Conf::load_from_yaml(path).ok())
-    .unwrap_or_default();
-conf.compression.merge_with_opt(opt.compression);
+let mut conf = Conf::load_from_files(opt.startup.conf.as_deref().unwrap_or(&[])).unwrap();
+conf.handler.compression.merge_with_opt(opt.compression);
+conf.handler.static_files.merge_with_opt(opt.static_files);
 
-let mut server = Server::new_with_opt_and_conf(opt.server, conf.server);
-server.bootstrap();
+let app = DefaultApp::<Handler>::from_conf(conf.handler).unwrap();
+let server = conf.startup.into_server(app, Some(opt.startup));
 
-let compression_handler: CompressionHandler = conf.compression.try_into().unwrap();
+// Do something with the server here, e.g. call server.run_forever()
 ```
 
-You can then use that handler in your server implementation:
-
-```rust
-use async_trait::async_trait;
-use compression_module::CompressionHandler;
-use module_utils::RequestFilter;
-use pingora_core::Error;
-use pingora_core::upstreams::peer::HttpPeer;
-use pingora_proxy::{ProxyHttp, Session};
-
-pub struct MyServer {
-    compression_handler: CompressionHandler,
-}
-
-#[async_trait]
-impl ProxyHttp for MyServer {
-    type CTX = <CompressionHandler as RequestFilter>::CTX;
-    fn new_ctx(&self) -> Self::CTX {
-        CompressionHandler::new_ctx()
-    }
-
-    async fn request_filter(
-        &self,
-        session: &mut Session,
-        ctx: &mut Self::CTX,
-    ) -> Result<bool, Box<Error>> {
-        // Enable compression according to settings
-        self.compression_handler.handle(session, ctx).await
-    }
-
-    async fn upstream_peer(
-        &self,
-        _session: &mut Session,
-        _ctx: &mut Self::CTX,
-    ) -> Result<Box<HttpPeer>, Box<Error>> {
-        Ok(Box::new(HttpPeer::new(
-            "example.com:443",
-            true,
-            "example.com".to_owned(),
-        )))
-    }
-}
-```
-
-For complete and more realistic code, see [`single-static-root` example](https://github.com/palant/pingora-utils/tree/main/examples/single-static-root) in the repository.
+For more comprehensive examples see the [`examples` directory in the repository](https://github.com/palant/pingora-utils/tree/main/examples).

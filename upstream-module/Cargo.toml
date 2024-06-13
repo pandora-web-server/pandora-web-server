@@ -26,8 +26,7 @@ structopt.workspace = true
 
 [dev-dependencies]
 env_logger.workspace = true
-pingora-core.workspace = true
-pingora-proxy.workspace = true
+startup-module.workspace = true
 test-log.workspace = true
 tokio.workspace = true
 

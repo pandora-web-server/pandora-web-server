@@ -17,11 +17,9 @@ name = "startup_module"
 path = "src/lib.rs"
 
 [dependencies]
+async-trait.workspace = true
 module-utils.workspace = true
 structopt.workspace = true
-
-[dev-dependencies]
-async-trait.workspace = true
 
 [lints]
 workspace = true

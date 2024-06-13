@@ -84,16 +84,27 @@
 //! ## Code example
 //!
 //! You would normally combine the handler of this module with the handlers of other modules. The
-//! resulting configuration can then be merged with Pingora’s usual configuration:
+//! `module-utils` and `startup-modules` provide helpers to simplify merging of configuration and
+//! the command-line options of various handlers as well as creating a server instance from the
+//! configuration.
+//!
+//! Note that the handler needs to be called both during the `request_filter` phase (compile the
+//! headers to be added and add them to handler responses if any) and during the
+//! `upstream_response_filter` or `response_filter` phase (apply the headers to upstream
+//! responses). As such, it isn’t suitable for `DefaultApp` defined in `startup-module` but
+//! requires an explicit `ProxyHttp` implementation.
 //!
 //! ```rust
-//! use compression_module::CompressionHandler;
+//! use async_trait::async_trait;
+//! use compression_module::{CompressionHandler, CompressionOpt};
 //! use headers_module::HeadersHandler;
-//! use module_utils::{merge_conf, FromYaml, RequestFilter};
-//! use pingora_core::server::configuration::{Opt as ServerOpt, ServerConf};
-//! use pingora_core::server::Server;
+//! use module_utils::pingora::{Error, HttpPeer, ProxyHttp, ResponseHeader, Session};
+//! use module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
+//! use startup_module::{StartupConf, StartupOpt};
 //! use upstream_module::UpstreamHandler;
 //! use structopt::StructOpt;
+//!
+//! // Define handler and its configuration structures.
 //!
 //! #[derive(Debug, RequestFilter)]
 //! struct Handler {
@@ -104,42 +115,18 @@
 //!
 //! #[merge_conf]
 //! struct Conf {
-//!     server: ServerConf,
+//!     startup: StartupConf,
 //!     handler: <Handler as RequestFilter>::Conf,
 //! }
 //!
-//! let opt = ServerOpt::from_args();
-//! let conf = opt
-//!     .conf
-//!     .as_ref()
-//!     .and_then(|path| Some(Conf::load_from_yaml(path).unwrap()))
-//!     .unwrap_or_default();
+//! #[merge_opt]
+//! struct Opt {
+//!     startup: StartupOpt,
+//!     compression: CompressionOpt,
+//! }
 //!
-//! let mut server = Server::new_with_opt_and_conf(opt, conf.server);
-//! server.bootstrap();
+//! // Define server application
 //!
-//! let handler = Handler::new(conf.handler);
-//! ```
-//!
-//! You can then use that handler in your server implementation:
-//!
-//! ```rust
-//! use async_trait::async_trait;
-//! use module_utils::RequestFilter;
-//! use pingora_core::Error;
-//! use pingora_core::upstreams::peer::HttpPeer;
-//! use pingora_http::ResponseHeader;
-//! use pingora_proxy::{ProxyHttp, Session};
-//!
-//! # use compression_module::CompressionHandler;
-//! # use headers_module::HeadersHandler;
-//! # use upstream_module::UpstreamHandler;
-//! # #[derive(Debug, RequestFilter)]
-//! # struct Handler {
-//! #     compression: CompressionHandler,
-//! #     headers: HeadersHandler,
-//! #     upstream: UpstreamHandler,
-//! # }
 //! struct MyServer {
 //!     handler: Handler,
 //! }
@@ -176,14 +163,20 @@
 //!         self.handler.handle_response(session, upstream_response, ctx)
 //!     }
 //! }
+//!
+//! // Startup
+//!
+//! let opt = Opt::from_args();
+//! let mut conf = Conf::load_from_files(opt.startup.conf.as_deref().unwrap_or(&[])).unwrap();
+//! conf.handler.compression.merge_with_opt(opt.compression);
+//!
+//! let handler = Handler::try_from(conf.handler).unwrap();
+//! let server = conf.startup.into_server(MyServer { handler }, Some(opt.startup));
+//!
+//! // Do something with the server here, e.g. call server.run_forever()
 //! ```
 //!
-//! Note that the handler needs to be called both during the `request_filter` phase (compile the
-//! headers to be added and add them to handler responses if any) and during the
-//! `upstream_response_filter` or `response_filter` phase (apply the headers to upstream
-//! responses).
-//!
-//! For complete code see `single-static-root` and `virtual-hosts` examples in the repository.
+//! For more comprehensive examples see the `examples` directory in the repository.
 
 pub mod configuration;
 mod handler;

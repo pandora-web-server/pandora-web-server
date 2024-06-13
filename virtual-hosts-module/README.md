@@ -54,78 +54,34 @@ example above to compensate. Upstream responses might have to be corrected via P
 ## Code example
 
 Usually, the virtual hosts configuration will be read from a configuration file and used to
-instantiate the corresponding handler. This is how it would be done:
+instantiate the corresponding handler, pass it to the server app which in turn is used to
+create a server. The `module-utils` and `startup-modules` provide helpers to simplify merging
+of configuration options as well as creating a server instance from the configuration:
 
 ```rust
-use pingora_core::server::configuration::{Opt, ServerConf};
-use module_utils::{FromYaml, merge_conf};
+use module_utils::{merge_conf, FromYaml};
+use startup_module::{DefaultApp, StartupConf, StartupOpt};
 use static_files_module::{StaticFilesConf, StaticFilesHandler};
 use structopt::StructOpt;
 use virtual_hosts_module::{VirtualHostsConf, VirtualHostsHandler};
 
-// Combine Pingora server configuration with virtual hosts wrapping static files configuration.
+// Combine statup configuration with virtual hosts wrapping static files configuration.
 #[merge_conf]
 struct Conf {
-    server: ServerConf,
+    startup: StartupConf,
     virtual_hosts: VirtualHostsConf<StaticFilesConf>,
 }
 
 // Read command line options and configuration file.
-let opt = Opt::from_args();
-let conf = opt
-    .conf
-    .as_ref()
-    .and_then(|path| Conf::load_from_yaml(path).ok())
-    .unwrap_or_default();
+let opt = StartupOpt::from_args();
+let conf = Conf::load_from_files(opt.conf.as_deref().unwrap_or(&[])).unwrap();
 
-// Create handler from configuration
-let handler: VirtualHostsHandler<StaticFilesHandler> = conf.virtual_hosts.try_into().unwrap();
-```
+// Create a server from the configuration
+let app = DefaultApp::<VirtualHostsHandler<StaticFilesHandler>>::from_conf(conf.virtual_hosts)
+    .unwrap();
+let server = conf.startup.into_server(app, Some(opt));
 
-You can then use that handler in your server implementation:
-
-```rust
-use async_trait::async_trait;
-use pingora_core::upstreams::peer::HttpPeer;
-use pingora_core::Error;
-use pingora_proxy::{ProxyHttp, Session};
-use module_utils::RequestFilter;
-use static_files_module::StaticFilesHandler;
-use virtual_hosts_module::VirtualHostsHandler;
-
-pub struct MyServer {
-    handler: VirtualHostsHandler<StaticFilesHandler>,
-}
-
-#[async_trait]
-impl ProxyHttp for MyServer {
-    type CTX = <VirtualHostsHandler<StaticFilesHandler> as RequestFilter>::CTX;
-    fn new_ctx(&self) -> Self::CTX {
-        VirtualHostsHandler::<StaticFilesHandler>::new_ctx()
-    }
-
-    async fn request_filter(
-        &self,
-        session: &mut Session,
-        ctx: &mut Self::CTX,
-    ) -> Result<bool, Box<Error>> {
-        self.handler.handle(session, ctx).await
-    }
-
-    async fn upstream_peer(
-        &self,
-        _session: &mut Session,
-        _ctx: &mut Self::CTX,
-    ) -> Result<Box<HttpPeer>, Box<Error>> {
-        // Virtual hosts handler didn't handle the request, meaning no matching virtual host in
-        // configuration. Delegate to upstream peer.
-        Ok(Box::new(HttpPeer::new(
-            "example.com:443",
-            true,
-            "example.com".to_owned(),
-        )))
-    }
-}
+// Do something with the server here, e.g. call server.run_forever()
 ```
 
 For complete and more comprehensive code see [virtual-hosts example](https://github.com/palant/pingora-utils/tree/main/examples/virtual-hosts) in the repository.

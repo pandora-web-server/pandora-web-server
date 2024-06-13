@@ -24,20 +24,40 @@
 //! Supported URL schemes are `http://` and `https://`. Other than the scheme, only host name and
 //! port are considered. Other parts of the URL are ignored if present.
 //!
-//! The `UpstreamHandler` type has to be called in both `request_filter` and `upstream_peer`
-//! Pingora Proxy phases. The former selects an upstream peer and modifies the request by adding
-//! the appropriate `Host` header. The latter retrieves the previously selected upstream peer.
+//! ## Code example
+//!
+//! `UpstreamHandler` has to be called in both `request_filter` and `upstream_peer` phases. The
+//! former selects an upstream peer and modifies the request by adding the appropriate `Host`
+//! header. The latter retrieves the previously selected upstream peer. As such, this handler isn’t
+//! suitable for `DefaultApp` defined in `startup-module` but requires an explicit `ProxyHttp`
+//! implementation.
 //!
 //! ```rust
 //! use async_trait::async_trait;
-//! use upstream_module::UpstreamHandler;
-//! use module_utils::RequestFilter;
-//! use pingora_core::Error;
-//! use pingora_core::upstreams::peer::HttpPeer;
-//! use pingora_proxy::{ProxyHttp, Session};
+//! use module_utils::pingora::{Error, HttpPeer, ProxyHttp, Session};
+//! use module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
+//! use startup_module::{StartupConf, StartupOpt};
+//! use structopt::StructOpt;
+//! use upstream_module::{UpstreamConf, UpstreamHandler, UpstreamOpt};
+//!
+//! // Define configuration structures.
+//!
+//! #[merge_conf]
+//! struct Conf {
+//!     startup: StartupConf,
+//!     upstream: UpstreamConf,
+//! }
+//!
+//! #[merge_opt]
+//! struct Opt {
+//!     startup: StartupOpt,
+//!     upstream: UpstreamOpt,
+//! }
+//!
+//! // Define server application
 //!
 //! pub struct MyServer {
-//!     upstream_handler: UpstreamHandler,
+//!     handler: UpstreamHandler,
 //! }
 //!
 //! #[async_trait]
@@ -54,7 +74,7 @@
 //!     ) -> Result<bool, Box<Error>> {
 //!         // Select upstream peer according to configuration. This could be called based on some
 //!         // conditions.
-//!         self.upstream_handler.handle(session, ctx).await
+//!         self.handler.handle(session, ctx).await
 //!     }
 //!
 //!     async fn upstream_peer(
@@ -66,47 +86,20 @@
 //!         UpstreamHandler::upstream_peer(session, ctx).await
 //!     }
 //! }
-//! ```
 //!
-//! To create a handler, you will typically read its configuration from a configuration file,
-//! optionally combined with command line options. The following code will extend Pingora's usual
-//! configuration file and command line options accordingly.
-//!
-//! ```rust
-//! use upstream_module::{UpstreamConf, UpstreamHandler, UpstreamOpt};
-//! use module_utils::{merge_conf, merge_opt, FromYaml};
-//! use pingora_core::server::Server;
-//! use pingora_core::server::configuration::{Opt as ServerOpt, ServerConf};
-//! use structopt::StructOpt;
-//!
-//! #[merge_opt]
-//! struct Opt {
-//!     server: ServerOpt,
-//!     upstream: UpstreamOpt,
-//! }
-//!
-//! #[merge_conf]
-//! struct Conf {
-//!     server: ServerConf,
-//!     upstream: UpstreamConf,
-//! }
+//! // Startup
 //!
 //! let opt = Opt::from_args();
-//! let mut conf = opt
-//!     .server
-//!     .conf
-//!     .as_ref()
-//!     .and_then(|path| Conf::load_from_yaml(path).ok())
-//!     .unwrap_or_default();
+//! let mut conf = Conf::load_from_files(opt.startup.conf.as_deref().unwrap_or(&[])).unwrap();
 //! conf.upstream.merge_with_opt(opt.upstream);
 //!
-//! let mut server = Server::new_with_opt_and_conf(opt.server, conf.server);
-//! server.bootstrap();
+//! let handler = UpstreamHandler::try_from(conf.upstream).unwrap();
+//! let server = conf.startup.into_server(MyServer { handler }, Some(opt.startup));
 //!
-//! let upstream_handler: UpstreamHandler = conf.upstream.try_into().unwrap();
+//! // Do something with the server here, e.g. call server.run_forever()
 //! ```
 //!
-//! For complete and more realistic code see `virtual-hosts` example in the repository.
+//! For more realistic code see `virtual-hosts` example in the repository.
 
 use async_trait::async_trait;
 use http::header;
@@ -288,7 +281,6 @@ mod tests {
     use http::HeaderValue;
     use module_utils::pingora::{RequestHeader, TestSession};
     use module_utils::FromYaml;
-    use pingora_core::upstreams::peer::Scheme;
     use test_log::test;
 
     fn make_handler(configured: bool) -> UpstreamHandler {
@@ -338,7 +330,7 @@ mod tests {
         let peer = UpstreamHandler::upstream_peer(&mut session, &mut ctx)
             .await
             .unwrap();
-        assert_eq!(peer.scheme, Scheme::HTTPS);
+        assert_eq!(peer.scheme.to_string(), "HTTPS".to_owned());
         assert_eq!(peer.sni, "example.com");
         assert_eq!(
             session.req_header().headers.get("Host"),

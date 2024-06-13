@@ -66,4 +66,63 @@
 
 mod configuration;
 
+use async_trait::async_trait;
 pub use configuration::{StartupConf, StartupOpt};
+use module_utils::pingora::{Error, ErrorType, HttpPeer, ProxyHttp, Session};
+use module_utils::RequestFilter;
+
+/// A trivial Pingora app implementation, to be passed to [`StartupConf::into_server`]
+///
+/// This app will only handle the `request_filter` phase. If the `upstream_peer` phase is reached,
+/// it will always produce a 404 Not Found error. This makes it unsuitable for any handlers that
+/// require phases beyond `request_filter` to be handled.
+#[derive(Debug)]
+pub struct DefaultApp<H> {
+    handler: H,
+}
+
+impl<H> DefaultApp<H> {
+    /// Creates a new app from a [`RequestFilter`] instance.
+    pub fn new(handler: H) -> Self {
+        Self { handler }
+    }
+
+    /// Creates a new app from a [`RequestFilter`] configuration.
+    ///
+    /// Any errors occurring when converting configuration to handler will be passed on.
+    pub fn from_conf<C>(conf: C) -> Result<Self, Box<Error>>
+    where
+        H: RequestFilter<Conf = C> + TryFrom<C, Error = Box<Error>>,
+    {
+        Ok(Self::new(conf.try_into()?))
+    }
+}
+
+#[async_trait]
+impl<H> ProxyHttp for DefaultApp<H>
+where
+    H: RequestFilter + Sync,
+    H::CTX: Send,
+{
+    type CTX = <H as RequestFilter>::CTX;
+
+    fn new_ctx(&self) -> Self::CTX {
+        H::new_ctx()
+    }
+
+    async fn request_filter(
+        &self,
+        session: &mut Session,
+        ctx: &mut Self::CTX,
+    ) -> Result<bool, Box<Error>> {
+        self.handler.handle(session, ctx).await
+    }
+
+    async fn upstream_peer(
+        &self,
+        _session: &mut Session,
+        _ctx: &mut Self::CTX,
+    ) -> Result<Box<HttpPeer>, Box<Error>> {
+        Err(Error::new(ErrorType::HTTPStatus(404)))
+    }
+}

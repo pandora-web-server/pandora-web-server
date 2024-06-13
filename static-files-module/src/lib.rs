@@ -39,155 +39,83 @@
 //!
 //! ## Code example
 //!
-//! You will typically create a [`StaticFilesHandler`] instance and call it during the
-//! `request_filter` stage. If configured and called unconditionally it will handle all requests
+//! You will typically create a [`StaticFilesHandler`] instance and make your server call it during
+//! the `request_filter` stage. If configured and called unconditionally it will handle all requests
 //! so that subsequent stages won’t be reached at all.
 //!
+//! The `module-utils` and `startup-modules` provide helpers to simplify merging of configuration
+//! and the command-line options of various handlers as well as creating a server instance from the
+//! configuration:
+//!
 //! ```rust
-//! use async_trait::async_trait;
-//! use pingora_core::Result;
-//! use pingora_core::upstreams::peer::HttpPeer;
-//! use pingora_proxy::{ProxyHttp, Session};
-//! use module_utils::RequestFilter;
-//! use static_files_module::StaticFilesHandler;
-//!
-//! pub struct MyServer {
-//!     static_files_handler: StaticFilesHandler,
-//! }
-//!
-//! #[async_trait]
-//! impl ProxyHttp for MyServer {
-//!     type CTX = <StaticFilesHandler as RequestFilter>::CTX;
-//!     fn new_ctx(&self) -> Self::CTX {
-//!         StaticFilesHandler::new_ctx()
-//!     }
-//!
-//!     async fn request_filter(
-//!         &self,
-//!         session: &mut Session,
-//!         ctx: &mut Self::CTX
-//!     ) -> Result<bool> {
-//!         self.static_files_handler.handle(session, ctx).await
-//!     }
-//!
-//!     async fn upstream_peer(
-//!         &self,
-//!         _session: &mut Session,
-//!         _ctx: &mut Self::CTX,
-//!     ) -> Result<Box<HttpPeer>> {
-//!         panic!("Unexpected, upstream_peer stage reached");
-//!     }
-//! }
-//! ```
-//!
-//! You can create a `StaticFilesHandler` instance by specifying its configuration directly:
-//!
-//! ```rust,no_run
-//! use static_files_module::{StaticFilesConf, StaticFilesHandler};
-//!
-//! let conf = StaticFilesConf {
-//!     root: Some("/var/www/html".into()),
-//!     ..Default::default()
-//! };
-//! let static_files_handler: StaticFilesHandler = conf.try_into().unwrap();
-//! ```
-//! It is also possible to create a configuration from command line options and a configuration
-//! file, extending the default Pingora data structures. The macros
-//! [`module_utils::merge_opt`] and [`module_utils::merge_conf`] help merging command
-//! line options and configuration structures respectively, and [`module_utils::FromYaml`]
-//! trait helps reading the configuration file.
-//!
-//! ```rust,no_run
-//! use pingora_core::server::configuration::{Opt as ServerOpt, ServerConf};
-//! use pingora_core::server::Server;
-//! use module_utils::{FromYaml, merge_opt, merge_conf};
+//! use module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
+//! use startup_module::{DefaultApp, StartupConf, StartupOpt};
 //! use static_files_module::{StaticFilesConf, StaticFilesHandler, StaticFilesOpt};
 //! use structopt::StructOpt;
 //!
-//! // The command line flags from both structures are merged, so that the user doesn't need to
-//! // care which structure they belong to.
-//! #[merge_opt]
-//! struct MyServerOpt {
-//!     server: ServerOpt,
-//!     static_files: StaticFilesOpt,
-//! }
-//!
-//! // The configuration settings from both structures are merged, so that the user doesn't need to
-//! // care which structure they belong to.
 //! #[merge_conf]
-//! struct MyServerConf {
-//!     server: ServerConf,
+//! struct Conf {
+//!     startup: StartupConf,
 //!     static_files: StaticFilesConf,
 //! }
 //!
-//! let opt = MyServerOpt::from_args();
-//! let conf = opt
-//!     .server
-//!     .conf
-//!     .as_ref()
-//!     .and_then(|path| MyServerConf::load_from_yaml(path).ok())
-//!     .unwrap_or_default();
+//! #[merge_opt]
+//! struct Opt {
+//!     startup: StartupOpt,
+//!     static_files: StaticFilesOpt,
+//! }
 //!
-//! let mut server = Server::new_with_opt_and_conf(opt.server, conf.server);
-//! server.bootstrap();
+//! let opt = Opt::from_args();
+//! let mut conf = Conf::load_from_files(opt.startup.conf.as_deref().unwrap_or(&[])).unwrap();
+//! conf.static_files.merge_with_opt(opt.static_files);
 //!
-//! let mut static_files_conf = conf.static_files;
-//! static_files_conf.merge_with_opt(opt.static_files);
-//! let static_files_handler: StaticFilesHandler = static_files_conf.try_into().unwrap();
+//! let app = DefaultApp::<StaticFilesHandler>::from_conf(conf.static_files).unwrap();
+//! let server = conf.startup.into_server(app, Some(opt.startup));
+//!
+//! // Do something with the server here, e.g. call server.run_forever()
 //! ```
 //!
-//! For complete and more comprehensive code see `single-static-root` example in the repository.
+//! For more comprehensive examples see the `examples` directory in the repository.
 //!
 //! ## Compression support
 //!
-//! You can activate support for selected compression algorithms via the `precompressed` configuration setting:
+//! You can activate support for selected compression algorithms via the `precompressed`
+//! configuration setting, e.g. with this configuration file:
 //!
-//! ```rust
-//! use static_files_module::{CompressionAlgorithm, StaticFilesConf};
-//!
-//! let conf = StaticFilesConf {
-//!     root: Some("/var/www/html".into()),
-//!     precompressed: vec![CompressionAlgorithm::Gzip, CompressionAlgorithm::Brotli],
-//!     ..Default::default()
-//! };
+//! ```yaml
+//! root: /var/www/html
+//! precompressed:
+//! - gz
+//! - br
 //! ```
 //!
-//! This will make `StaticFilesHandler` look for gzip (`.gz`) and Brotli (`.br`) versions of the requested files and serve these pre-compressed files if supported by the client. For example, a client requesting `file.txt` and sending HTTP header `Accept-Encoding: br, gzip` will receive `file.txt.br` file or, if not found, `file.txt.gz` file. The order in which `StaticFilesHandler` will look for pre-compressed files is determined by the client’s compression algorithm preferences.
+//! This will make `StaticFilesHandler` look for gzip (`.gz`) and Brotli (`.br`) versions of the
+//! requested files and serve these pre-compressed files if supported by the client. For example,
+//! a client requesting `file.txt` and sending HTTP header `Accept-Encoding: br, gzip` will receive
+//! `file.txt.br` file or, if not found, `file.txt.gz` file. The order in which
+//! `StaticFilesHandler` will look for pre-compressed files is determined by the client’s
+//! compression algorithm preferences.
 //!
-//! It is also possible to compress files dynamically on the fly via Pingora’s downstream compression. For that, activate compression for the session before calling `StaticFilesHandler`:
+//! It is also possible to compress files dynamically on the fly via Pingora’s downstream
+//! compression. For that, activate compression for the session before calling
+//! `StaticFilesHandler`. The easiest way to achieve this is combining `StaticFilesHandler` with
+//! `CompressionHandler` from `compression-module`. The latter will allow activating dynamic
+//! compression via configuration file settings.
 //!
 //! ```rust
-//! # use async_trait::async_trait;
-//! # use pingora_core::Result;
-//! # use pingora_core::upstreams::peer::HttpPeer;
-//! # use pingora_proxy::{ProxyHttp, Session};
-//! # use module_utils::RequestFilter;
-//! # use static_files_module::StaticFilesHandler;
-//! # pub struct MyServer {
-//! #     static_files_handler: StaticFilesHandler,
-//! # }
-//! # #[async_trait]
-//! # impl ProxyHttp for MyServer {
-//! #     type CTX = <StaticFilesHandler as RequestFilter>::CTX;
-//! #     fn new_ctx(&self) -> Self::CTX {
-//! #         StaticFilesHandler::new_ctx()
-//! #     }
-//! async fn request_filter(
-//!     &self,
-//!     session: &mut Session,
-//!     ctx: &mut Self::CTX
-//! ) -> Result<bool> {
-//!     session.downstream_compression.adjust_level(3);
-//!     self.static_files_handler.handle(session, ctx).await
+//! use compression_module::CompressionHandler;
+//! use module_utils::RequestFilter;
+//! use startup_module::DefaultApp;
+//! use static_files_module::StaticFilesHandler;
+//!
+//! #[derive(Debug, RequestFilter)]
+//! struct Handler {
+//!     compression: CompressionHandler,
+//!     static_files: StaticFilesHandler,
 //! }
-//! #     async fn upstream_peer(
-//! #         &self,
-//! #         session: &mut Session,
-//! #         _ctx: &mut Self::CTX,
-//! #     ) -> Result<Box<HttpPeer>> {
-//! #         panic!("Unexpected, upstream_peer stage reached");
-//! #     }
-//! # }
+//!
+//! let conf = <Handler as RequestFilter>::Conf::default();
+//! let app = DefaultApp::<Handler>::from_conf(conf).unwrap();
 //! ```
 
 mod compression;
