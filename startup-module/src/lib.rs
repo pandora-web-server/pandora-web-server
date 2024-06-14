@@ -24,10 +24,34 @@
 //! The Startup Module currently exposes all of the
 //! [Pingora configuration options](module_utils::pingora::ServerConf). In addition, it provides
 //! a `listen` configuration option, a list of IP address/port combinations that the server should
-//! listen on.
+//! listen on:
 //!
-//! The `listen` configuration option is also available as `--listen` command line option. Other
-//! command line options are: `--conf` (configuration file or configuration files to load),
+//! ```yaml
+//! listen:
+//! - 127.0.0.1:8080
+//! - "[::1]:8080"
+//! ```
+//!
+//! On many Unix and Linux systems, listening on `::` (all IPv6 addresses) has a special behavior:
+//! it will also accept IPv4 connections on the same port. There is system-wide configuration for
+//! this behavior, e.g. `/proc/sys/net/ipv6/bindv6only` file on Linux.
+//!
+//! If you do not want the default system behavior, you can specify the `ipv6_only` flag
+//! explicitly:
+//!
+//! ```yaml
+//! listen:
+//! - { addr: "[::]:8080", ipv6_only: true }
+//! ```
+//!
+//! With the configuration above the server will still listen on all IPv6 addresses, yet IPv4
+//! connections will only be accepted if configured explicitly.
+//!
+//! The `listen` configuration option is also available as `--listen` command line option. Flags
+//! cannot be specified via the command line, only the address to listen on. This command line
+//! option can be specified multiple times to make the server listen on multiple addresses or ports.
+//!
+//! Other command line options are: `--conf` (configuration file or configuration files to load),
 //! `--daemon` (run process in background) and `--test` (test configuration and exit).
 //!
 //! ## Code example
@@ -67,7 +91,7 @@
 mod configuration;
 
 use async_trait::async_trait;
-pub use configuration::{StartupConf, StartupOpt};
+pub use configuration::{ListenAddr, StartupConf, StartupOpt};
 use module_utils::pingora::{Error, HttpPeer, ProxyHttp, ResponseHeader, Session};
 use module_utils::RequestFilter;
 

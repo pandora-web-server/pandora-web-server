@@ -2330,6 +2330,7 @@ version = "0.2.0"
 dependencies = [
  "async-trait",
  "module-utils",
+ "serde",
  "structopt",
 ]
 

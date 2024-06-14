@@ -19,6 +19,7 @@ path = "src/lib.rs"
 [dependencies]
 async-trait.workspace = true
 module-utils.workspace = true
+serde.workspace = true
 structopt.workspace = true
 
 [lints]
