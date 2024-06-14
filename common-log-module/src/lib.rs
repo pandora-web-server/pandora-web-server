@@ -88,7 +88,7 @@
 //! conf.handler.log.merge_with_opt(opt.log);
 //!
 //! let app = DefaultApp::<Handler>::from_conf(conf.handler).unwrap();
-//! let server = conf.startup.into_server(app, Some(opt.startup));
+//! let server = conf.startup.into_server(app, Some(opt.startup)).unwrap();
 //!
 //! // Do something with the server here, e.g. call server.run_forever()
 //! ```

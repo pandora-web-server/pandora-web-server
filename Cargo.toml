@@ -50,6 +50,7 @@ maud = "0.26.0"
 module-utils = { path = "module-utils", version = "0.2.0" }
 module-utils-macros = { path = "module-utils-macros", version = "0.2.0" }
 percent-encoding = "2.1"
+pingora = "0.2.0"
 pingora-core = "0.2.0"
 pingora-http = "0.2.0"
 pingora-limits = "0.2.0"

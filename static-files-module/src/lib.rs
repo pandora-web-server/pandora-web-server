@@ -70,7 +70,7 @@
 //! conf.static_files.merge_with_opt(opt.static_files);
 //!
 //! let app = DefaultApp::<StaticFilesHandler>::from_conf(conf.static_files).unwrap();
-//! let server = conf.startup.into_server(app, Some(opt.startup));
+//! let server = conf.startup.into_server(app, Some(opt.startup)).unwrap();
 //!
 //! // Do something with the server here, e.g. call server.run_forever()
 //! ```

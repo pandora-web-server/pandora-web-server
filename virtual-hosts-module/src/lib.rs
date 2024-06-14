@@ -93,7 +93,7 @@
 //! // Create a server from the configuration
 //! let app = DefaultApp::<VirtualHostsHandler<StaticFilesHandler>>::from_conf(conf.virtual_hosts)
 //!     .unwrap();
-//! let server = conf.startup.into_server(app, Some(opt));
+//! let server = conf.startup.into_server(app, Some(opt)).unwrap();
 //!
 //! // Do something with the server here, e.g. call server.run_forever()
 //! ```

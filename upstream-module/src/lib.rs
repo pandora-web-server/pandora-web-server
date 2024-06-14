@@ -53,7 +53,7 @@
 //! conf.upstream.merge_with_opt(opt.upstream);
 //!
 //! let app = DefaultApp::<UpstreamHandler>::from_conf(conf.upstream).unwrap();
-//! let server = conf.startup.into_server(app, Some(opt.startup));
+//! let server = conf.startup.into_server(app, Some(opt.startup)).unwrap();
 //!
 //! // Do something with the server here, e.g. call server.run_forever()
 //! ```

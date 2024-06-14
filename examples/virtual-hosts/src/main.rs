@@ -113,14 +113,15 @@ fn main() {
         }
     };
 
-    let app = match DefaultApp::<Handler>::from_conf(conf.handler) {
-        Ok(handler) => handler,
+    let server = match DefaultApp::<Handler>::from_conf(conf.handler)
+        .and_then(|app| conf.startup.into_server(app, Some(opt)))
+    {
+        Ok(server) => server,
         Err(err) => {
             error!("{err}");
             return;
         }
     };
 
-    let server = conf.startup.into_server(app, Some(opt));
     server.run_forever();
 }

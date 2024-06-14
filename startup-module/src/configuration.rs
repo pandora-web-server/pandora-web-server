@@ -12,12 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use async_trait::async_trait;
 use module_utils::pingora::{
-    http_proxy_service, ProxyHttp, Server, ServerConf, ServerOpt, TcpSocketOptions,
+    http_proxy_service, Error, ErrorType, ProxyHttp, Server, ServerConf, ServerOpt,
 };
 use module_utils::DeserializeMap;
+use pingora::listeners::{TcpSocketOptions, TlsAccept, TlsSettings};
+use pingora::tls::{
+    ext::{ssl_use_certificate, ssl_use_private_key},
+    pkey::{PKey, Private},
+    ssl::{NameType, SslRef},
+    x509::X509,
+};
 use serde::de::{Deserialize, Deserializer, MapAccess, Visitor};
+use std::collections::HashMap;
+use std::fs::read;
+use std::path::{Path, PathBuf};
 use structopt::StructOpt;
+
+const TLS_CONF_ERR: ErrorType = ErrorType::Custom("TLSConfigError");
 
 /// Run a web server
 #[derive(Debug, Default, StructOpt)]
@@ -44,6 +57,11 @@ pub struct ListenAddr {
     /// IP address and port combination, e.g. `127.0.0.1:8080` or `[::1]:8080`
     pub addr: String,
 
+    /// If `true`, TLS will be enabled for this address.
+    ///
+    /// This required TLS configuration to be present.
+    pub tls: bool,
+
     /// Determines whether listening on IPv6 [::] address should accept IPv4 connections as well.
     ///
     /// If set, the IPV6_V6ONLY flag will be set accordingly for the socket. Otherwise the system
@@ -51,12 +69,19 @@ pub struct ListenAddr {
     pub ipv6_only: Option<bool>,
 }
 
-impl From<&str> for ListenAddr {
-    fn from(value: &str) -> Self {
+impl From<String> for ListenAddr {
+    fn from(value: String) -> Self {
         Self {
-            addr: value.to_owned(),
+            addr: value,
+            tls: false,
             ipv6_only: None,
         }
+    }
+}
+
+impl From<&str> for ListenAddr {
+    fn from(value: &str) -> Self {
+        value.to_owned().into()
     }
 }
 
@@ -92,10 +117,7 @@ impl<'de> Deserialize<'de> for ListenAddr {
             where
                 E: serde::de::Error,
             {
-                Ok(Self::Value {
-                    addr: v,
-                    ipv6_only: None,
-                })
+                Ok(v.into())
             }
 
             fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
@@ -106,8 +128,10 @@ impl<'de> Deserialize<'de> for ListenAddr {
 
                 const ADDR_FIELD: &str = "addr";
                 const IPV6_ONLY_FIELD: &str = "ipv6_only";
+                const TLS_FIELD: &str = "tls";
 
                 let mut addr = None;
+                let mut tls = None;
                 let mut ipv6_only = None;
                 while let Some(key) = map.next_key::<String>()? {
                     match key.as_str() {
@@ -123,17 +147,28 @@ impl<'de> Deserialize<'de> for ListenAddr {
                             }
                             ipv6_only = Some(map.next_value()?);
                         }
+                        TLS_FIELD => {
+                            if tls.is_some() {
+                                return Err(A::Error::duplicate_field(TLS_FIELD));
+                            }
+                            tls = Some(map.next_value()?);
+                        }
                         other => {
                             return Err(A::Error::unknown_field(
                                 other,
-                                &[ADDR_FIELD, IPV6_ONLY_FIELD],
+                                &[ADDR_FIELD, IPV6_ONLY_FIELD, TLS_FIELD],
                             ))
                         }
                     }
                 }
 
                 if let Some(addr) = addr {
-                    Ok(Self::Value { addr, ipv6_only })
+                    let tls = tls.unwrap_or(false);
+                    Ok(Self::Value {
+                        addr,
+                        ipv6_only,
+                        tls,
+                    })
                 } else {
                     Err(A::Error::missing_field(ADDR_FIELD))
                 }
@@ -145,11 +180,110 @@ impl<'de> Deserialize<'de> for ListenAddr {
     }
 }
 
+/// Certificate/key combination for a single server name
+#[derive(Debug, Default, DeserializeMap)]
+pub struct CertKeyConf {
+    /// Path to the certificate file
+    pub cert_path: Option<PathBuf>,
+
+    /// Path to the private key file
+    pub key_path: Option<PathBuf>,
+}
+
+impl CertKeyConf {
+    fn read_file<P: AsRef<Path>>(path: P) -> Result<Vec<u8>, Box<Error>> {
+        let path = path.as_ref();
+        read(path).map_err(|err| {
+            Error::because(
+                TLS_CONF_ERR,
+                format!("failed reading file {}", path.display()),
+                err,
+            )
+        })
+    }
+
+    fn into_certificate(self) -> Result<(X509, PKey<Private>), Box<Error>> {
+        if let (Some(cert_path), Some(key_path)) = (self.cert_path, self.key_path) {
+            let cert = X509::from_pem(&Self::read_file(cert_path)?)
+                .map_err(|err| Error::because(TLS_CONF_ERR, "failed parsing certificate", err))?;
+            let key = PKey::private_key_from_pem(&Self::read_file(key_path)?)
+                .map_err(|err| Error::because(TLS_CONF_ERR, "failed parsing private key", err))?;
+            Ok((cert, key))
+        } else {
+            Err(Error::explain(
+                TLS_CONF_ERR,
+                "both `cert_path` and `key_path` settings must be present",
+            ))
+        }
+    }
+}
+
+/// TLS configuration for the server
+#[derive(Debug, Default, DeserializeMap)]
+pub struct TlsConf {
+    /// Default certificate/key combination
+    #[module_utils(flatten)]
+    pub default: CertKeyConf,
+
+    /// Certificate/key combinations for particular server names
+    pub server_names: HashMap<String, CertKeyConf>,
+}
+
+impl TlsConf {
+    fn into_accept_callbacks(self) -> Result<TlsAcceptCallbacks, Box<Error>> {
+        let mut certificates = HashMap::with_capacity(self.server_names.len() + 1);
+        for (name, conf) in self.server_names.into_iter() {
+            let cert = conf.into_certificate().map_err(|err| {
+                Error::because(
+                    TLS_CONF_ERR,
+                    format!("failed setting up certificate/key for server name {name}"),
+                    err,
+                )
+            })?;
+            certificates.insert(name, cert);
+        }
+        let cert = self.default.into_certificate().map_err(|err| {
+            Error::because(
+                TLS_CONF_ERR,
+                "failed setting up default certificate/key",
+                err,
+            )
+        })?;
+        certificates.insert(String::new(), cert);
+        Ok(TlsAcceptCallbacks { certificates })
+    }
+}
+
+#[derive(Debug, Clone)]
+struct TlsAcceptCallbacks {
+    certificates: HashMap<String, (X509, PKey<Private>)>,
+}
+
+#[async_trait]
+impl TlsAccept for TlsAcceptCallbacks {
+    async fn certificate_callback(&self, ssl: &mut SslRef) {
+        let cert = ssl
+            .servername(NameType::HOST_NAME)
+            .and_then(|name| self.certificates.get(name))
+            .or_else(|| self.certificates.get(""));
+        if let Some((cert, key)) = cert {
+            // Errors are unexpected here, these should only occur if a certificate has been set
+            // already or private key and certificate don’t match. Ok to panic then.
+            ssl_use_certificate(ssl, cert).unwrap();
+            ssl_use_private_key(ssl, key).unwrap();
+        }
+    }
+}
+
 /// Configuration settings of the startup module
 #[derive(Debug, Default, DeserializeMap)]
 pub struct StartupConf {
-    /// List of address/port combinations to listen on, e.g. "127.0.0.1:8080".
+    /// List of address/port combinations to listen on, e.g. "127.0.0.1:8080"
     pub listen: Vec<ListenAddr>,
+
+    /// TLS configuration for the server
+    pub tls: TlsConf,
+
     /// Pingora’s default server configuration options
     #[module_utils(flatten)]
     pub server: ServerConf,
@@ -157,7 +291,7 @@ pub struct StartupConf {
 
 impl StartupConf {
     /// Sets up a server with the given configuration and command line options
-    pub fn into_server<SV>(self, app: SV, opt: Option<StartupOpt>) -> Server
+    pub fn into_server<SV>(self, app: SV, opt: Option<StartupOpt>) -> Result<Server, Box<Error>>
     where
         SV: ProxyHttp + Send + Sync + 'static,
         <SV as ProxyHttp>::CTX: Send + Sync,
@@ -183,16 +317,32 @@ impl StartupConf {
         );
         server.bootstrap();
 
+        let tls_callbacks = self.tls.into_accept_callbacks();
         let mut proxy = http_proxy_service(&server.configuration, app);
         for addr in listen {
-            if let Some(ipv6_only) = addr.ipv6_only {
-                proxy.add_tcp_with_settings(&addr.addr, TcpSocketOptions { ipv6_only });
+            let socket_options = addr
+                .ipv6_only
+                .map(|ipv6_only| TcpSocketOptions { ipv6_only });
+
+            if addr.tls {
+                let callbacks = if let Ok(callbacks) = &tls_callbacks {
+                    callbacks
+                } else {
+                    return Err(tls_callbacks.unwrap_err());
+                };
+                proxy.add_tls_with_settings(
+                    &addr.addr,
+                    socket_options,
+                    TlsSettings::with_callbacks(Box::new(callbacks.clone()))?,
+                );
+            } else if let Some(socket_options) = socket_options {
+                proxy.add_tcp_with_settings(&addr.addr, socket_options);
             } else {
                 proxy.add_tcp(&addr.addr);
             }
         }
         server.add_service(proxy);
 
-        server
+        Ok(server)
     }
 }

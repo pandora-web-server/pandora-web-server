@@ -111,7 +111,7 @@ let mut conf = Conf::load_from_files(opt.startup.conf.as_deref().unwrap_or(&[]))
 conf.handler.compression.merge_with_opt(opt.compression);
 
 let app = DefaultApp::<Handler>::from_conf(conf.handler).unwrap();
-let server = conf.startup.into_server(app, Some(opt.startup));
+let server = conf.startup.into_server(app, Some(opt.startup)).unwrap();
 
 // Do something with the server here, e.g. call server.run_forever()
 ```

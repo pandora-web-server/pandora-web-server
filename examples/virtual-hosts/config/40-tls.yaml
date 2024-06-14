@@ -1,0 +1,7 @@
+tls:
+  cert_path: config/cert_example.com.pem
+  key_path: config/key_example.com.pem
+  server_names:
+    localhost:
+      cert_path: config/cert_localhost.pem
+      key_path: config/key_localhost.pem

@@ -1,8 +1,8 @@
 listen:
 - 127.0.0.1:8080
 - "[::1]:8080"
-- 127.0.0.1:8081
-- "[::1]:8081"
+- {addr: 127.0.0.1:8081, tls: true}
+- {addr: "[::1]:8081", tls: true}
 anonymization_enabled: true
 custom_headers:
 - headers:
