@@ -15,7 +15,7 @@
 //! Deserialization helpers allowing efficient merging of multiple structs without the downsides of
 //! #[serde(flatten)]
 
-use pingora_core::server::configuration::ServerConf;
+use pingora::server::configuration::ServerConf;
 use serde::{
     de::{Deserializer, Error},
     Deserialize,

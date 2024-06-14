@@ -24,9 +24,7 @@ http.workspace = true
 log.workspace = true
 maud.workspace = true
 module-utils-macros.workspace = true
-pingora-core.workspace = true
-pingora-http.workspace = true
-pingora-proxy.workspace = true
+pingora = { workspace = true, features = ["proxy"] }
 serde.workspace = true
 serde_yaml = "0.8"
 structopt.workspace = true

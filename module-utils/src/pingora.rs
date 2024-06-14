@@ -18,14 +18,14 @@
 use async_trait::async_trait;
 use bytes::{Bytes, BytesMut};
 use http::{header, Extensions};
-pub use pingora_core::protocols::http::HttpTask;
-pub use pingora_core::protocols::l4::socket::SocketAddr;
-pub use pingora_core::server::configuration::{Opt as ServerOpt, ServerConf};
-pub use pingora_core::server::Server;
-pub use pingora_core::upstreams::peer::HttpPeer;
-pub use pingora_core::{Error, ErrorType};
-pub use pingora_http::{IntoCaseHeaderName, RequestHeader, ResponseHeader};
-pub use pingora_proxy::{http_proxy_service, ProxyHttp, Session};
+pub use pingora::http::{IntoCaseHeaderName, RequestHeader, ResponseHeader};
+pub use pingora::protocols::http::HttpTask;
+pub use pingora::protocols::l4::socket::SocketAddr;
+pub use pingora::proxy::{http_proxy_service, ProxyHttp, Session};
+pub use pingora::server::configuration::{Opt as ServerOpt, ServerConf};
+pub use pingora::server::Server;
+pub use pingora::upstreams::peer::HttpPeer;
+pub use pingora::{Error, ErrorType};
 use std::borrow::Cow;
 use std::io::{Cursor, Seek, SeekFrom, Write};
 use std::ops::{Deref, DerefMut};
@@ -92,22 +92,22 @@ pub trait SessionWrapper: Send + Deref<Target = Session> + DerefMut {
     /// or `CTX` data, they don’t survive across Pingora phases.
     fn extensions_mut(&mut self) -> &mut Extensions;
 
-    /// See [`Session::write_response_header`](pingora_core::protocols::http::server::Session::write_response_header)
+    /// See [`Session::write_response_header`](pingora::protocols::http::server::Session::write_response_header)
     async fn write_response_header(&mut self, resp: Box<ResponseHeader>) -> Result<(), Box<Error>> {
         self.deref_mut().write_response_header(resp).await
     }
 
-    /// See [`Session::write_response_header_ref`](pingora_core::protocols::http::server::Session::write_response_header_ref)
+    /// See [`Session::write_response_header_ref`](pingora::protocols::http::server::Session::write_response_header_ref)
     async fn write_response_header_ref(&mut self, resp: &ResponseHeader) -> Result<(), Box<Error>> {
         self.deref_mut().write_response_header_ref(resp).await
     }
 
-    /// See [`Session::response_written`](pingora_core::protocols::http::server::Session::response_written)
+    /// See [`Session::response_written`](pingora::protocols::http::server::Session::response_written)
     fn response_written(&self) -> Option<&ResponseHeader> {
         self.deref().response_written()
     }
 
-    /// See [`Session::write_response_body`](pingora_core::protocols::http::server::Session::write_response_body)
+    /// See [`Session::write_response_body`](pingora::protocols::http::server::Session::write_response_body)
     async fn write_response_body(&mut self, data: Bytes) -> Result<(), Box<Error>> {
         self.deref_mut().write_response_body(data).await
     }

@@ -51,10 +51,7 @@ module-utils = { path = "module-utils", version = "0.2.0" }
 module-utils-macros = { path = "module-utils-macros", version = "0.2.0" }
 percent-encoding = "2.1"
 pingora = "0.2.0"
-pingora-core = "0.2.0"
-pingora-http = "0.2.0"
 pingora-limits = "0.2.0"
-pingora-proxy = "0.2.0"
 rewrite-module = { path = "rewrite-module", version = "0.2.0" }
 serde = { version = "1.0", features = ["derive"] }
 startup-module = { path = "startup-module", version = "0.2.0" }

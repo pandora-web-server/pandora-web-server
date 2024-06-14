@@ -8,7 +8,7 @@ used to get a Pingora server instance.
 ## General configuration
 
 The Startup Module currently exposes all of the
-[Pingora configuration options](https://docs.rs/pingora-core/0.2.0/pingora_core/server/configuration/struct.ServerConf.html). In addition, it provides
+[Pingora configuration options](https://docs.rs/pingora/0.2.0/pingora/server/configuration/struct.ServerConf.html). In addition, it provides
 a `listen` configuration option, a list of IP address/port combinations that the server should
 listen on:
 
