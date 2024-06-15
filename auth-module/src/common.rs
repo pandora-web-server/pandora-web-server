@@ -13,17 +13,13 @@
 // limitations under the License.
 
 use bcrypt::{hash, verify, DEFAULT_COST};
-use lazy_static::lazy_static;
 use log::{error, info, trace};
 use module_utils::pingora::{SessionWrapper, SocketAddr};
+use once_cell::sync::Lazy;
 use pingora_limits::rate::Rate;
 use std::{net::Ipv4Addr, sync::Mutex, time::Duration};
 
 use crate::{AuthConf, AuthRateLimits};
-
-lazy_static! {
-    static ref RATE_LIMITER: Mutex<Rate> = Mutex::new(Rate::new(Duration::new(1, 0)));
-}
 
 pub(crate) fn is_rate_limited(
     session: &impl SessionWrapper,
@@ -34,6 +30,8 @@ pub(crate) fn is_rate_limited(
         return false;
     }
 
+    static RATE_LIMITER: Lazy<Mutex<Rate>> =
+        Lazy::new(|| Mutex::new(Rate::new(Duration::new(1, 0))));
     let rate_limiter = match RATE_LIMITER.lock() {
         Ok(rate_limiter) => rate_limiter,
         Err(err) => {
