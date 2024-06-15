@@ -16,10 +16,10 @@
 
 use async_trait::async_trait;
 use http::header;
-use lazy_static::lazy_static;
 use log::error;
 use module_utils::pingora::{Error, ErrorType, SessionWrapper};
 use module_utils::{RequestFilter, RequestFilterResult};
+use once_cell::sync::Lazy;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -94,19 +94,6 @@ impl TryFrom<CommonLogConf> for CommonLogHandler {
 pub struct RequestCtx {
     time: SystemTime,
     tokens: Vec<LogToken>,
-}
-
-lazy_static! {
-    static ref LOG_SENDER: Arc<Sender<WriterMessage>> = {
-        let (sender, receiver) = channel(100);
-
-        tokio::spawn(async move { log_writer(receiver).await });
-
-        #[cfg(unix)]
-        crate::signal::listen(&sender);
-
-        Arc::new(sender)
-    };
 }
 
 #[async_trait]
@@ -235,6 +222,17 @@ impl RequestFilter for CommonLogHandler {
                 }
             });
         }
+
+        static LOG_SENDER: Lazy<Arc<Sender<WriterMessage>>> = Lazy::new(|| {
+            let (sender, receiver) = channel(100);
+
+            tokio::spawn(async move { log_writer(receiver).await });
+
+            #[cfg(unix)]
+            crate::signal::listen(&sender);
+
+            Arc::new(sender)
+        });
 
         let message = WriterMessage::log_data(ctx.time, &self.conf.log_file, tokens);
         if let Err(err) = Arc::make_mut(&mut (*LOG_SENDER).clone())
