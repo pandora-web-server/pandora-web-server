@@ -148,7 +148,7 @@ pub trait RequestFilter: Sized {
     /// Creates a new state object, see [`pingora_proxy::ProxyHttp::new_ctx`]
     fn new_ctx() -> Self::CTX;
 
-    /// Handler to run during Pingora’s `request_filter` pharse, see
+    /// Handler to run during Pingora’s `request_filter` phase, see
     /// [`pingora_proxy::ProxyHttp::request_filter`]. This uses a different return type to account
     /// for the existence of multiple chained handlers.
     async fn request_filter(
