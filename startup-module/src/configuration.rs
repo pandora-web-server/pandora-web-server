@@ -19,12 +19,14 @@ use module_utils::pingora::{
 use module_utils::DeserializeMap;
 use pingora::listeners::{TcpSocketOptions, TlsAccept, TlsSettings};
 use pingora::services::Service;
+use pingora::tls::ext::ssl_add_chain_cert;
 use pingora::tls::{
     ext::{ssl_use_certificate, ssl_use_private_key},
-    pkey::{PKey, Private},
+    pkey::PKey,
     ssl::{NameType, SslRef},
     x509::X509,
 };
+use pingora::utils::CertKey;
 use serde::de::{Deserialize, Deserializer, MapAccess, Visitor};
 use std::collections::HashMap;
 use std::fs::read;
@@ -213,13 +215,39 @@ impl CertKeyConf {
         })
     }
 
-    fn into_certificate(self) -> Result<(X509, PKey<Private>), Box<Error>> {
+    fn into_certificate(self) -> Result<CertKey, Box<Error>> {
         if let (Some(cert_path), Some(key_path)) = (self.cert_path, self.key_path) {
-            let cert = X509::from_pem(&Self::read_file(cert_path)?)
-                .map_err(|err| Error::because(TLS_CONF_ERR, "failed parsing certificate", err))?;
+            const END_MARKER: &[u8] = b"-----END CERTIFICATE-----";
+            let mut certs = Vec::new();
+            let cert_data = Self::read_file(cert_path)?;
+            let mut start = 0;
+            while start != cert_data.len() {
+                if cert_data[start..].iter().all(|b| b.is_ascii_whitespace()) {
+                    break;
+                }
+
+                let end = cert_data[start..]
+                    .windows(END_MARKER.len())
+                    .position(|window| window == END_MARKER)
+                    .map(|pos| start + pos + END_MARKER.len())
+                    .unwrap_or(cert_data.len());
+                certs.push(X509::from_pem(&cert_data[start..end]).map_err(|err| {
+                    Error::because(TLS_CONF_ERR, "failed parsing certificate", err)
+                })?);
+                start = end;
+            }
+
+            if certs.is_empty() {
+                return Err(Error::explain(
+                    TLS_CONF_ERR,
+                    "certificate chain shouldn't be empty",
+                ));
+            }
+
             let key = PKey::private_key_from_pem(&Self::read_file(key_path)?)
                 .map_err(|err| Error::because(TLS_CONF_ERR, "failed parsing private key", err))?;
-            Ok((cert, key))
+
+            Ok(CertKey::new(certs, key))
         } else {
             Err(Error::explain(
                 TLS_CONF_ERR,
@@ -304,7 +332,7 @@ impl TlsConf {
 
 #[derive(Debug, Clone)]
 struct TlsAcceptCallbacks {
-    certificates: HashMap<String, (X509, PKey<Private>)>,
+    certificates: HashMap<String, CertKey>,
 }
 
 #[async_trait]
@@ -314,11 +342,14 @@ impl TlsAccept for TlsAcceptCallbacks {
             .servername(NameType::HOST_NAME)
             .and_then(|name| self.certificates.get(name))
             .or_else(|| self.certificates.get(""));
-        if let Some((cert, key)) = cert {
+        if let Some(cert) = cert {
             // Errors are unexpected here, these should only occur if a certificate has been set
             // already or private key and certificate don’t match. Ok to panic then.
-            ssl_use_certificate(ssl, cert).unwrap();
-            ssl_use_private_key(ssl, key).unwrap();
+            ssl_use_certificate(ssl, cert.leaf()).unwrap();
+            for intermediate in cert.intermediates() {
+                ssl_add_chain_cert(ssl, intermediate).unwrap();
+            }
+            ssl_use_private_key(ssl, cert.key()).unwrap();
         }
     }
 }
