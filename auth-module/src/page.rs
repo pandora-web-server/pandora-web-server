@@ -262,10 +262,19 @@ pub(crate) async fn page_auth(
     if path.is_empty() {
         path = "/";
     }
+
+    let secure = conf.auth_page_session.secure_cookie.unwrap_or_else(|| {
+        session
+            .digest()
+            .and_then(|digest| digest.ssl_digest.as_ref())
+            .is_some()
+    });
+
     let cookie = format!(
-        "{}={token}; Path={path}; Max-Age={}; HttpOnly",
+        "{}={token}; Path={path}; Max-Age={}; HttpOnly{}",
         conf.auth_page_session.cookie_name,
-        conf.auth_page_session.session_expiration.as_secs()
+        conf.auth_page_session.session_expiration.as_secs(),
+        if secure { "; Secure" } else { "" }
     );
     redirect_response_with_cookie(session, StatusCode::FOUND, &redirect_target, &cookie).await?;
 
@@ -547,10 +556,13 @@ auth_page_session:
         let mut path = None;
         let mut exp = None;
         let mut http_only = false;
+        let mut secure = false;
         for param in cookie.split(';') {
             let param = param.trim();
             if param.to_ascii_lowercase() == "httponly" {
                 http_only = true;
+            } else if param.to_ascii_lowercase() == "secure" {
+                secure = true;
             } else {
                 let (param, value) = param.split_once('=').unwrap();
                 match param.to_ascii_lowercase().as_str() {
@@ -564,6 +576,7 @@ auth_page_session:
         assert_eq!(path, Some("/".to_owned()));
         assert_eq!(exp, Some(2 * 60 * 60));
         assert!(http_only);
+        assert!(!secure);
 
         if let Some(token) = token {
             // Test whether this cookie is valid

@@ -61,6 +61,8 @@ In `page` mode several additional settings apply:
     restart will always invalidate all previously issued tokens, requiring users to log in
     again.
   * `cookie_name`: The cookie used to store the token issued upon successful login.
+  * `secure_cookie`: If set, determines explicitly whether the `Secure` attribute should be
+    used for the login cookie. Default behavior is to set this attribute for HTTPS sessions.
   * `session_expiration`: The time interval after which a login session will expire, requiring
     the user to log in again. This interval can be specified in hours (e.g. `2h`) or days (e.g.
     `7d`). *Note*: Changing this setting will have no effect on already issued tokens.

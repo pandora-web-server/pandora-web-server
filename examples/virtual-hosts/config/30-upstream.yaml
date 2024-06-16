@@ -2,7 +2,7 @@ listen:
 - {addr: 127.0.0.1:8443, tls: true}
 - {addr: "[::1]:8443", tls: true}
 vhosts:
-  localhost:8081:
+  localhost:8443:
     aliases:
       - 127.0.0.1:8443
       - "[::1]:8443"

@@ -75,6 +75,8 @@
 //!     restart will always invalidate all previously issued tokens, requiring users to log in
 //!     again.
 //!   * `cookie_name`: The cookie used to store the token issued upon successful login.
+//!   * `secure_cookie`: If set, determines explicitly whether the `Secure` attribute should be
+//!     used for the login cookie. Default behavior is to set this attribute for HTTPS sessions.
 //!   * `session_expiration`: The time interval after which a login session will expire, requiring
 //!     the user to log in again. This interval can be specified in hours (e.g. `2h`) or days (e.g.
 //!     `7d`). *Note*: Changing this setting will have no effect on already issued tokens.
@@ -354,6 +356,12 @@ pub struct AuthPageSession {
     /// Name of the cookie to store the JWT token
     pub cookie_name: String,
 
+    /// Determines whether the `Secure` attribute should be set for the cookie, allowing it to be
+    /// only sent via HTTPS protocol.
+    ///
+    /// By default, the attribute will be set if the server connection was an HTTPS connection.
+    pub secure_cookie: Option<bool>,
+
     /// Authentication expiration interval
     ///
     /// In the configuration file this can be specified in days or in hours: `7d` (7 days), `2h`
@@ -368,6 +376,7 @@ impl Default for AuthPageSession {
             login_page: None,
             token_secret: None,
             cookie_name: "token".to_owned(),
+            secure_cookie: None,
             session_expiration: Duration::from_secs(7 * 24 * 60 * 60),
         }
     }
