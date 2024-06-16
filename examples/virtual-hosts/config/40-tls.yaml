@@ -5,3 +5,11 @@ tls:
     localhost:
       cert_path: config/cert_localhost.pem
       key_path: config/key_localhost.pem
+  redirector:
+    listen:
+    - 127.0.0.1:8081
+    - "[::1]:8081"
+    redirect_to: localhost:8443
+    redirect_by_name:
+      example.com: example.com:8443
+      example.net: example.net:8443

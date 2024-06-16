@@ -94,6 +94,54 @@
 //! the corresponding certificate will be used. Otherwise the default certificate will be used as
 //! fallback.
 //!
+//! ## TLS Redirector configuration
+//!
+//! In order to simplify TLS setup, automatic redirection of non-HTTPS ports to TLS is supported.
+//! The basic configuration for a localhost server looks like this:
+//!
+//! ```yaml
+//! tls:
+//!     redirector:
+//!         listen:
+//!         - 127.0.0.1:80
+//!         - "[::1]:80"
+//!         redirect_to: localhost
+//! ```
+//!
+//! The `listen` setting works the same as the top-level setting of the same name, except that the
+//! `tls` flag isn’t allowed. Here, any requests coming in on port 80 will be automatically
+//! redirected to `https://localhost` while keeping the request path.
+//!
+//! In scenarios where multiple host names are handled by the server, the `redirect_by_name`
+//! setting can be used:
+//!
+//! ```yaml
+//! tls:
+//!     redirector:
+//!         listen:
+//!         - 127.0.0.1:80
+//!         - "[::1]:80"
+//!         redirect_to: localhost
+//!         redirect_by_name:
+//!             example.com: example.com
+//!             example.net: example.net
+//! ```
+//!
+//! Requests for `example.com` (note: exact host name match) will be redirected to
+//! `https://example.com`, requests for `example.net` to `https://example.com` and all other
+//! requests will be subject to the `redirect_to` setting and redirect to `https://localhost`.
+//!
+//! If you use an HTTPS port other than 443, you can specify the port in the redirect settings:
+//!
+//! ```yaml
+//!         redirect_to: localhost:8443
+//!         redirect_by_name:
+//!             example.com: example.com:8443
+//!             example.net: example.net:8443
+//! ```
+//!
+//! The incoming server name in the `redirect_by_name` setting does not depend on the port.
+//!
 //! ## Code example
 //!
 //! ```rust
@@ -129,9 +177,12 @@
 //! For more comprehensive examples see the `examples` directory in the repository.
 
 mod configuration;
+mod redirector;
 
 use async_trait::async_trait;
-pub use configuration::{CertKeyConf, ListenAddr, StartupConf, StartupOpt, TlsConf};
+pub use configuration::{
+    CertKeyConf, ListenAddr, StartupConf, StartupOpt, TlsConf, TlsRedirectorConf,
+};
 use module_utils::pingora::{Error, HttpPeer, ProxyHttp, ResponseHeader, Session};
 use module_utils::RequestFilter;
 

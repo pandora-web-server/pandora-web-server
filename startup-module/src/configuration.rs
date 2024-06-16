@@ -18,6 +18,7 @@ use module_utils::pingora::{
 };
 use module_utils::DeserializeMap;
 use pingora::listeners::{TcpSocketOptions, TlsAccept, TlsSettings};
+use pingora::services::Service;
 use pingora::tls::{
     ext::{ssl_use_certificate, ssl_use_private_key},
     pkey::{PKey, Private},
@@ -28,9 +29,12 @@ use serde::de::{Deserialize, Deserializer, MapAccess, Visitor};
 use std::collections::HashMap;
 use std::fs::read;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use structopt::StructOpt;
 
-const TLS_CONF_ERR: ErrorType = ErrorType::Custom("TLSConfigError");
+use crate::redirector::create_redirector;
+
+pub(crate) const TLS_CONF_ERR: ErrorType = ErrorType::Custom("TLSConfigError");
 
 /// Run a web server
 #[derive(Debug, Default, StructOpt)]
@@ -67,6 +71,13 @@ pub struct ListenAddr {
     /// If set, the IPV6_V6ONLY flag will be set accordingly for the socket. Otherwise the system
     /// default will be used.
     pub ipv6_only: Option<bool>,
+}
+
+impl ListenAddr {
+    pub(crate) fn to_socket_options(&self) -> Option<TcpSocketOptions> {
+        self.ipv6_only
+            .map(|ipv6_only| TcpSocketOptions { ipv6_only })
+    }
 }
 
 impl From<String> for ListenAddr {
@@ -218,6 +229,40 @@ impl CertKeyConf {
     }
 }
 
+/// Certificate/key combination for a single server name
+#[derive(Debug, Default, DeserializeMap)]
+pub struct TlsRedirectorConf {
+    /// List of address/port combinations to listen on, e.g. "127.0.0.1:8080"
+    pub listen: Vec<ListenAddr>,
+
+    /// Default redirect target
+    ///
+    /// This can be a host name, e.g. `example.com` to redirect requests to `https://example.com/`
+    /// or a host name an port combination, e.g. `example.com:8433` to redirect to
+    /// `https://example.com:8433/`. No path should be specified, it will be copied from the
+    /// original request.
+    pub redirect_to: String,
+
+    /// Server names mapped to their respective redirect target
+    ///
+    /// If the requested name is not found in the list or the request didn’t contain a server name,
+    /// the default redirect target will be used.
+    pub redirect_by_name: HashMap<String, String>,
+}
+
+impl TlsRedirectorConf {
+    fn to_redirector(
+        &self,
+        server_conf: &Arc<ServerConf>,
+    ) -> Result<Option<impl Service + 'static>, Box<Error>> {
+        if self.listen.is_empty() {
+            Ok(None)
+        } else {
+            create_redirector(self, server_conf).map(Some)
+        }
+    }
+}
+
 /// TLS configuration for the server
 #[derive(Debug, Default, DeserializeMap)]
 pub struct TlsConf {
@@ -227,10 +272,13 @@ pub struct TlsConf {
 
     /// Certificate/key combinations for particular server names
     pub server_names: HashMap<String, CertKeyConf>,
+
+    /// HTTP to HTTPS redirector settings
+    pub redirector: TlsRedirectorConf,
 }
 
 impl TlsConf {
-    fn into_accept_callbacks(self) -> Result<TlsAcceptCallbacks, Box<Error>> {
+    fn into_callbacks(self) -> Result<TlsAcceptCallbacks, Box<Error>> {
         let mut certificates = HashMap::with_capacity(self.server_names.len() + 1);
         for (name, conf) in self.server_names.into_iter() {
             let cert = conf.into_certificate().map_err(|err| {
@@ -317,31 +365,38 @@ impl StartupConf {
         );
         server.bootstrap();
 
-        let tls_callbacks = self.tls.into_accept_callbacks();
-        let mut proxy = http_proxy_service(&server.configuration, app);
-        for addr in listen {
-            let socket_options = addr
-                .ipv6_only
-                .map(|ipv6_only| TcpSocketOptions { ipv6_only });
-
+        let mut service = http_proxy_service(&server.configuration, app);
+        for addr in &listen {
             if addr.tls {
-                let callbacks = if let Ok(callbacks) = &tls_callbacks {
-                    callbacks
-                } else {
-                    return Err(tls_callbacks.unwrap_err());
-                };
-                proxy.add_tls_with_settings(
-                    &addr.addr,
-                    socket_options,
-                    TlsSettings::with_callbacks(Box::new(callbacks.clone()))?,
-                );
-            } else if let Some(socket_options) = socket_options {
-                proxy.add_tcp_with_settings(&addr.addr, socket_options);
+                continue;
+            }
+
+            if let Some(socket_options) = addr.to_socket_options() {
+                service.add_tcp_with_settings(&addr.addr, socket_options);
             } else {
-                proxy.add_tcp(&addr.addr);
+                service.add_tcp(&addr.addr);
             }
         }
-        server.add_service(proxy);
+
+        if listen.iter().any(|addr| addr.tls) {
+            if let Some(redirector) = self.tls.redirector.to_redirector(&server.configuration)? {
+                server.add_service(redirector);
+            }
+
+            let tls_callbacks = self.tls.into_callbacks()?;
+            for addr in &listen {
+                if !addr.tls {
+                    continue;
+                }
+
+                service.add_tls_with_settings(
+                    &addr.addr,
+                    addr.to_socket_options(),
+                    TlsSettings::with_callbacks(Box::new(tls_callbacks.clone()))?,
+                );
+            }
+        }
+        server.add_service(service);
 
         Ok(server)
     }

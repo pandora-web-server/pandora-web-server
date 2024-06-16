@@ -18,6 +18,7 @@ path = "src/lib.rs"
 
 [dependencies]
 async-trait.workspace = true
+http.workspace = true
 module-utils.workspace = true
 pingora.workspace = true
 serde.workspace = true
