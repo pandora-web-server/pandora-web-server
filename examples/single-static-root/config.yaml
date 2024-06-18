@@ -30,8 +30,8 @@ rewrite_rules:
   from_regex: "\\.jpg$"
   to: https://example.com${tail}
   type: redirect
-custom_headers:
-- headers:
-    Cache-Control: "max-age=604800"
-  include: [/*]
-  exclude: [/large.txt]
+response_headers:
+  custom:
+  - Cache-Control: "max-age=604800"
+    include: [/*]
+    exclude: [/large.txt]

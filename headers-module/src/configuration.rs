@@ -17,15 +17,19 @@
 // https://github.com/rust-lang/rust-clippy/issues/9776
 #![allow(clippy::mutable_key_type)]
 
-use http::header::{HeaderName, HeaderValue};
-use module_utils::{merge_conf, DeserializeMap};
-use serde::{
-    de::{Deserializer, Error},
-    Deserialize,
+use http::{
+    header,
+    header::{HeaderName, HeaderValue},
 };
+use module_utils::DeserializeMap;
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt::Debug;
+
+use crate::deserialize::{
+    deserialize_custom_headers, deserialize_match_rule_list, deserialize_with_match_rules,
+};
 
 /// A single match rule within `match_rules.include` or `match_rules.exclude`
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -71,66 +75,6 @@ impl MatchRule {
     }
 }
 
-/// Normalizes a path by removing leading and trailing slashes as well as collapsing multiple
-/// separating slashes into one.
-fn normalize_path(path: &str) -> String {
-    let mut had_slash = true;
-    let mut path: String = path
-        .chars()
-        .filter(|c| {
-            if *c == '/' {
-                if had_slash {
-                    false
-                } else {
-                    had_slash = true;
-                    true
-                }
-            } else {
-                had_slash = false;
-                true
-            }
-        })
-        .collect();
-
-    if path.ends_with('/') {
-        path.pop();
-    }
-
-    path
-}
-
-impl<T: AsRef<str>> From<T> for MatchRule {
-    fn from(value: T) -> Self {
-        let mut rule = value.as_ref().trim();
-        let prefix = if let Some(r) = rule.strip_suffix("/*") {
-            rule = r;
-            true
-        } else {
-            !rule.contains('/')
-        };
-
-        let (host, path) = if rule.starts_with('/') {
-            ("", rule)
-        } else if let Some((host, path)) = rule.split_once('/') {
-            (host, path)
-        } else {
-            (rule, "")
-        };
-
-        Self {
-            host: host.to_owned(),
-            path: normalize_path(path),
-            prefix,
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for MatchRule {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Ok(String::deserialize(deserializer)?.into())
-    }
-}
-
 impl PartialOrd for MatchRule {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
@@ -171,8 +115,10 @@ impl Ord for MatchRule {
 #[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
 pub struct MatchRules {
     /// Rules determining the locations where the configuration entry should apply
+    #[module_utils(deserialize_with_seed = "deserialize_match_rule_list")]
     pub include: Vec<MatchRule>,
     /// Rules determining the locations where the configuration entry should not apply
+    #[module_utils(deserialize_with_seed = "deserialize_match_rule_list")]
     pub exclude: Vec<MatchRule>,
 }
 
@@ -253,9 +199,8 @@ pub(crate) trait IntoHeaders {
 
 /// Combines a given configuration with match rules determining what host/path combinations it
 /// should apply to.
-#[derive(PartialEq, Eq)]
-#[merge_conf]
-pub struct WithMatchRules<C: Default + PartialEq + Eq> {
+#[derive(Debug, PartialEq, Eq)]
+pub struct WithMatchRules<C: PartialEq + Eq> {
     /// The match rules
     pub match_rules: MatchRules,
 
@@ -263,66 +208,162 @@ pub struct WithMatchRules<C: Default + PartialEq + Eq> {
     pub conf: C,
 }
 
-/// Deserializes a `HeaderName`/`HeaderValue` map.
-fn deserialize_headers<'de, D>(
-    deserializer: D,
-) -> Result<HashMap<HeaderName, HeaderValue>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let map = HashMap::<String, String>::deserialize(deserializer)?;
-    map.into_iter()
-        .map(|(name, value)| -> Result<Header, D::Error> {
-            Ok((
-                HeaderName::try_from(name).map_err(|_| D::Error::custom("Invalid header name"))?,
-                HeaderValue::try_from(value)
-                    .map_err(|_| D::Error::custom("Invalid header value"))?,
-            ))
-        })
-        .collect()
-}
-
-/// Configuration for custom headers
+/// Configuration for the Cache-Control header
 #[derive(Debug, Default, PartialEq, Eq, Clone, DeserializeMap)]
-pub struct CustomHeadersConf {
-    /// Map of header names to their respective values
-    #[module_utils(deserialize_with = "deserialize_headers")]
-    pub headers: HashMap<HeaderName, HeaderValue>,
+pub struct CacheControlConf {
+    /// If set, max-age option will be sent
+    #[module_utils(rename = "max-age")]
+    max_age: Option<usize>,
+    /// If set, s-max-age option will be sent
+    #[module_utils(rename = "s-maxage")]
+    s_maxage: Option<usize>,
+    /// If `true`, no-cache flag will be sent
+    #[module_utils(rename = "no-cache")]
+    no_cache: bool,
+    /// If `true`, no-storage flag will be sent
+    #[module_utils(rename = "no-storage")]
+    no_storage: bool,
+    /// If `true`, no-transform flag will be sent
+    #[module_utils(rename = "no-transform")]
+    no_transform: bool,
+    /// If `true`, must-revalidate flag will be sent
+    #[module_utils(rename = "must-revalidate")]
+    must_revalidate: bool,
+    /// If `true`, proxy-revalidate flag will be sent
+    #[module_utils(rename = "proxy-revalidate")]
+    proxy_revalidate: bool,
+    /// If `true`, must-understand flag will be sent
+    #[module_utils(rename = "must-understand")]
+    must_understand: bool,
+    /// If `true`, private flag will be sent
+    private: bool,
+    /// If `true`, public flag will be sent
+    public: bool,
+    /// If `true`, immutable flag will be sent
+    immutable: bool,
+    /// If set, stale-while-revalidate option will be sent
+    #[module_utils(rename = "stale-while-revalidate")]
+    stale_while_revalidate: Option<usize>,
+    /// If set, stale-if-error option will be sent
+    #[module_utils(rename = "stale-if-error")]
+    stale_if_error: Option<usize>,
 }
 
-impl Mergeable for CustomHeadersConf {
+impl Mergeable for CacheControlConf {
     fn merge_with(&mut self, other: Self) {
-        self.headers.extend(other.headers);
+        macro_rules! merge_option {
+            ($name: ident) => {
+                if other.$name.is_some() {
+                    self.$name = other.$name;
+                }
+            };
+        }
+        macro_rules! merge_bool {
+            ($name: ident) => {
+                if other.$name {
+                    self.$name = other.$name;
+                }
+            };
+        }
+
+        merge_option!(max_age);
+        merge_option!(s_maxage);
+        merge_bool!(no_cache);
+        merge_bool!(no_storage);
+        merge_bool!(no_transform);
+        merge_bool!(must_revalidate);
+        merge_bool!(proxy_revalidate);
+        merge_bool!(must_understand);
+        merge_bool!(private);
+        merge_bool!(public);
+        merge_bool!(immutable);
+        merge_option!(stale_while_revalidate);
+        merge_option!(stale_if_error);
     }
 }
 
-impl IntoHeaders for CustomHeadersConf {
+impl IntoHeaders for CacheControlConf {
     fn into_headers(self) -> Vec<Header> {
-        self.headers.into_iter().collect()
+        let mut entries: Vec<Cow<'_, str>> = Vec::new();
+        if let Some(max_age) = self.max_age {
+            entries.push(format!("max-age={max_age}").into());
+        }
+        if let Some(s_maxage) = self.s_maxage {
+            entries.push(format!("s-maxage={s_maxage}").into());
+        }
+        if self.no_cache {
+            entries.push("no-cache".into());
+        }
+        if self.no_storage {
+            entries.push("no-storage".into());
+        }
+        if self.no_transform {
+            entries.push("no-transform".into());
+        }
+        if self.must_revalidate {
+            entries.push("must-revalidate".into());
+        }
+        if self.proxy_revalidate {
+            entries.push("proxy-revalidate".into());
+        }
+        if self.must_understand {
+            entries.push("must-understand".into());
+        }
+        if self.private {
+            entries.push("private".into());
+        }
+        if self.public {
+            entries.push("public".into());
+        }
+        if self.immutable {
+            entries.push("immutable".into());
+        }
+
+        if entries.is_empty() {
+            Vec::new()
+        } else {
+            vec![(
+                header::CACHE_CONTROL,
+                HeaderValue::from_str(&entries.join(", ")).unwrap(),
+            )]
+        }
     }
+}
+
+impl Mergeable for HashMap<HeaderName, HeaderValue> {
+    fn merge_with(&mut self, other: Self) {
+        self.extend(other);
+    }
+}
+
+impl IntoHeaders for HashMap<HeaderName, HeaderValue> {
+    fn into_headers(self) -> Vec<Header> {
+        self.into_iter().collect()
+    }
+}
+
+/// Various settings to configure HTTP response headers
+#[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
+pub struct HeadersInnerConf {
+    /// Cache-Control header
+    #[module_utils(deserialize_with_seed = "deserialize_with_match_rules")]
+    pub cache_control: Vec<WithMatchRules<CacheControlConf>>,
+
+    /// Custom headers, headers configures as name => value map here
+    #[module_utils(deserialize_with_seed = "deserialize_custom_headers")]
+    pub custom: Vec<WithMatchRules<HashMap<HeaderName, HeaderValue>>>,
 }
 
 /// Configuration file settings of the headers module
 #[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
 pub struct HeadersConf {
-    /// Custom headers, headers configures as name => value map here
-    pub custom_headers: Vec<WithMatchRules<CustomHeadersConf>>,
+    /// Various settings to configure HTTP response headers
+    pub response_headers: HeadersInnerConf,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn path_normalization() {
-        assert_eq!(normalize_path(""), "");
-        assert_eq!(normalize_path("/"), "");
-        assert_eq!(normalize_path("///"), "");
-        assert_eq!(normalize_path("abc"), "abc");
-        assert_eq!(normalize_path("//abc//"), "abc");
-        assert_eq!(normalize_path("abc/def"), "abc/def");
-        assert_eq!(normalize_path("//abc//def//"), "abc/def");
-    }
 
     #[test]
     fn match_rule_parsing() {

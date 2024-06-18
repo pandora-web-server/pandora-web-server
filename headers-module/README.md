@@ -1,12 +1,13 @@
 # Headers Module for Pingora
 
-This crate allows defining additional HTTP headers to be sent for requests. It should be called
-as request filter before other handlers such as `static-files-module` or `virtual-hosts-module`
-to add headers to their responses. In order to add headers to upstream responses as well, the
-handler’s `handle_response` method needs to be called during Pingora’s
-`upstream_response_filter` or `response_filter` phase.
+This crate allows defining additional HTTP headers to be sent with responses. It should be
+called before other handlers such as `static-files-module` or `virtual-hosts-module` to add
+headers to their responses. In order to add headers to upstream responses as well, the
+handler’s `call_response_filter` method needs to be called during Pingora’s
+`upstream_response_filter` or `response_filter` phase. `DefaultApp` in `startup-module` handles
+that automatically.
 
-Each set of HTTP headers is paired with rules determining which host names and paths it applies
+Each set of header rules is paired with rules determining which host names and paths it applies
 to. This is similar to how `virtual-hosts-module` works. This module is meant to be called
 outside virtual hosts configuration and use its own rules however, to help set up a consistent
 set of HTTP headers across the entire webspace.
@@ -14,30 +15,38 @@ set of HTTP headers across the entire webspace.
 A configuration could look like this:
 
 ```yaml
-custom_headers:
-- headers:
-    Cache-Control: "max-age=604800"
-    X-Custom-Header: "something"
-  include: [example.com, example.net]
-  exclude: [example.com/exception.txt]
-- headers:
-    Cache-Control: "max-age=3600"
-    X-Another-Header: "something else"
-  include: [example.com/dir/*]
+response_headers:
+    cache_control:
+    -
+        no-storage: true
+        include: example.com/caching_forbidden/*
+    -
+        max-age: 604800
+        include: [example.com, example.net]
+        exclude: example.com/caching_forbidden/*
+    -
+        max-age: 3600
+        include: example.com/short_lived/*
+    custom:
+        X-Custom-Header: "something"
+        include: [example.com, example.net]
+        exclude: example.com/exception.txt
 ```
 
-This defines two sets of headers, the first applying to all of `example.com` and `example.net`
-with the exception of the `example.com/exception.txt` file. The second set of headers applies
-only to a single subdirectory.
+This defines four sets of header rules, each applying to different sections of `example.com`
+and `example.net` websites. While the `cache_control` section allows composing `Cache-Control`
+header in a structured way, the `custom` section defines header name and value combinations
+as they should be sent to the client.
 
-Note that both sets include the `Cache-Control` header and both apply within the
-`example.com/dir` subdirectory. In such cases the more specific rule is respected, here it is
-the one applying to the specific subdirectory. This means that the shorter caching interval
-will be used.
+Note that two sets of rules define the `max-age` parameter for the `Cache-Control` header and
+both apply within the `example.com/short_lived` subdirectory. In such cases the more specific
+rule is respected, here it is the one applying to the specific subdirectory. This means that
+the shorter caching interval will be used.
 
 ## Include/exclude rule format
 
-The include and exclude rules can have the following format:
+The include and exclude rules can contain either a single rule (a string) or a list with
+multiple rules. The individual rules have the following format:
 
 * `""` (empty string): This rule applies to everything. Putting this into the `include` list is
   equivalent to omitting it, applying to everything is the default behavior.
@@ -55,8 +64,8 @@ The include and exclude rules can have the following format:
 
 Rule specificity becomes relevant whenever more than one rule applies to a particular host/path
 combination. That’s for example the case when both an `include` and an `exclude` rule match a
-location. The other relevant scenario is when the same HTTP header is configured multiple times
-with different values.
+location. The other relevant scenario is when the same HTTP header setting is configured
+multiple times with different values.
 
 In such cases the more specific rule wins. A rule is considered more specific if:
 
@@ -66,6 +75,38 @@ In such cases the more specific rule wins. A rule is considered more specific if
    matches everything within the path as well.
 4. Everything is identical but the rule is an `exclude` rule whereas the other is an `include`
    rule.
+
+## `cache_control` section
+
+The `cache_control` section can contain the following boolean values: `no-cache`, `no-storage`,
+`no-transform`, `must-revalidate`, `proxy-revalidate`, `must-understand`, `private`, `public`,
+`immutable`. These should be set to `true` to be added to the `Cache-Control` header.
+
+The following numeric settings are supported: `max-age`, `s-maxage`, `stale-while-revalidate`,
+`stale-if-error`. These will be added to the `Cache-Control` header with the value configured.
+
+## `custom` section
+
+The `custom` section maps header names to header values. These headers will be sent to the
+client verbatim.
+
+In the unlikely scenario that you might need to send a header named `include` or `exclude`, you
+can put two entries with that name into the configuration file. The first entry will be
+interpreted as include/exclude rule, the second as a header.
+
+## A note on duplicate header values
+
+This module does not support duplicate values for the same header name. Existing headers with
+the same name produced by previous handlers (e.g. received by from upstream server) will be
+overwritten. Rule processing within the `custom` section also makes sure that only the most
+specific rule producing a particular header applies.
+
+If multiple sections produce the same header name (e.g. `cache_control` section present and
+`custom` section also defining a `Cache-Control` header), the values are combined as defined in
+[RFC 7230 section 3.2.2](https://datatracker.ietf.org/doc/html/rfc7230#section-3.2.2).
+
+The only header where this limitation might become problematic is `Set-Cookie`, and this module
+isn’t the right tool for handling cookies.
 
 ## Code example
 

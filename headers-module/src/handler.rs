@@ -34,7 +34,9 @@ impl TryFrom<HeadersConf> for HeadersHandler {
     fn try_from(value: HeadersConf) -> Result<Self, Self::Error> {
         debug!("Headers configuration received: {value:#?}");
 
-        let merged = value.custom_headers.into_merged();
+        let merged_cache_control = value.response_headers.cache_control.into_merged();
+        let merged_custom = value.response_headers.custom.into_merged();
+        let merged = (merged_cache_control, merged_custom).into_merged();
         trace!("Merged headers configuration into: {merged:#?}");
 
         let mut builder = Router::builder();
@@ -193,21 +195,36 @@ mod tests {
         <Handler as RequestFilter>::Conf::from_yaml(format!(
             r#"
                 send_response: {send_response}
-                custom_headers:
-                -
-                    headers:
+                response_headers:
+                    cache_control:
+                    -
+                        max-age: 200
+                        public: true
+                        include: example.com/subdir/*
+                        exclude: example.com/subdir/subsub/*
+                    -
+                        max-age: 300
+                        include: example.com/subdir/file.txt
+                    -
+                        no-storage: true
+                        include: example.net
+                    -
+                        no-cache: true
+                        include:
+                        - example.info/subdir/*
+                        - localhost/subdir2/
+                    custom:
+                    -
+                        include:
+                        - localhost
+                        - localhost:8080
+                        exclude: localhost/subdir/*
                         X-Me: localhost
                         Cache-Control: max-age=604800
-                    include: [localhost, localhost:8080]
-                    exclude:
-                    - localhost/subdir/*
-                -
-                    headers:
+                    -
+                        include: example.com
                         X-Me: example.com
-                    include:
-                    - example.com
-                -
-                    headers:
+                    -
                         Server: My very own web server
             "#,
         ))
@@ -290,7 +307,70 @@ mod tests {
             ],
         );
 
+        let mut session = make_session("https://localhost/subdir2").await;
+        assert!(
+            handler
+                .call_request_filter(session.deref_mut(), &mut Handler::new_ctx())
+                .await?
+        );
+        assert_headers(
+            session.deref().response_written().unwrap(),
+            vec![
+                ("X-Me", "localhost"),
+                ("Cache-Control", "no-cache, max-age=604800"),
+                ("X-Test", "unchanged"),
+                ("Server", "My very own web server"),
+            ],
+        );
+
         let mut session = make_session("https://example.com/whatever").await;
+        assert!(
+            handler
+                .call_request_filter(session.deref_mut(), &mut Handler::new_ctx())
+                .await?
+        );
+        assert_headers(
+            session.deref().response_written().unwrap(),
+            vec![
+                ("X-Me", "example.com"),
+                ("X-Test", "unchanged"),
+                ("Server", "My very own web server"),
+            ],
+        );
+
+        let mut session = make_session("https://example.com/subdir/whatever").await;
+        assert!(
+            handler
+                .call_request_filter(session.deref_mut(), &mut Handler::new_ctx())
+                .await?
+        );
+        assert_headers(
+            session.deref().response_written().unwrap(),
+            vec![
+                ("X-Me", "example.com"),
+                ("X-Test", "unchanged"),
+                ("Server", "My very own web server"),
+                ("Cache-Control", "max-age=200, public"),
+            ],
+        );
+
+        let mut session = make_session("https://example.com/subdir/file.txt").await;
+        assert!(
+            handler
+                .call_request_filter(session.deref_mut(), &mut Handler::new_ctx())
+                .await?
+        );
+        assert_headers(
+            session.deref().response_written().unwrap(),
+            vec![
+                ("X-Me", "example.com"),
+                ("X-Test", "unchanged"),
+                ("Server", "My very own web server"),
+                ("Cache-Control", "max-age=300, public"),
+            ],
+        );
+
+        let mut session = make_session("https://example.com/subdir/subsub/file.txt").await;
         assert!(
             handler
                 .call_request_filter(session.deref_mut(), &mut Handler::new_ctx())
@@ -317,6 +397,38 @@ mod tests {
                 ("X-Me", "none"),
                 ("X-Test", "unchanged"),
                 ("Server", "My very own web server"),
+                ("Cache-Control", "no-storage"),
+            ],
+        );
+
+        let mut session = make_session("https://example.info/whatever").await;
+        assert!(
+            handler
+                .call_request_filter(session.deref_mut(), &mut Handler::new_ctx())
+                .await?
+        );
+        assert_headers(
+            session.deref().response_written().unwrap(),
+            vec![
+                ("X-Me", "none"),
+                ("X-Test", "unchanged"),
+                ("Server", "My very own web server"),
+            ],
+        );
+
+        let mut session = make_session("https://example.info/subdir/whatever").await;
+        assert!(
+            handler
+                .call_request_filter(session.deref_mut(), &mut Handler::new_ctx())
+                .await?
+        );
+        assert_headers(
+            session.deref().response_written().unwrap(),
+            vec![
+                ("X-Me", "none"),
+                ("X-Test", "unchanged"),
+                ("Server", "My very own web server"),
+                ("Cache-Control", "no-cache"),
             ],
         );
 
@@ -364,7 +476,82 @@ mod tests {
             ],
         );
 
+        let mut session = make_session("https://localhost/subdir2").await;
+        let mut ctx = Handler::new_ctx();
+        assert!(
+            !handler
+                .call_request_filter(session.deref_mut(), &mut ctx)
+                .await?
+        );
+        let mut header = make_response_header().unwrap();
+        handler.call_response_filter(session.deref_mut(), &mut header, &mut ctx);
+        assert_headers(
+            &header,
+            vec![
+                ("X-Me", "localhost"),
+                ("Cache-Control", "no-cache, max-age=604800"),
+                ("X-Test", "unchanged"),
+                ("Server", "My very own web server"),
+            ],
+        );
+
         let mut session = make_session("https://example.com/whatever").await;
+        let mut ctx = Handler::new_ctx();
+        assert!(
+            !handler
+                .call_request_filter(session.deref_mut(), &mut ctx)
+                .await?
+        );
+        let mut header = make_response_header().unwrap();
+        handler.call_response_filter(session.deref_mut(), &mut header, &mut ctx);
+        assert_headers(
+            &header,
+            vec![
+                ("X-Me", "example.com"),
+                ("X-Test", "unchanged"),
+                ("Server", "My very own web server"),
+            ],
+        );
+
+        let mut session = make_session("https://example.com/subdir/whatever").await;
+        let mut ctx = Handler::new_ctx();
+        assert!(
+            !handler
+                .call_request_filter(session.deref_mut(), &mut ctx)
+                .await?
+        );
+        let mut header = make_response_header().unwrap();
+        handler.call_response_filter(session.deref_mut(), &mut header, &mut ctx);
+        assert_headers(
+            &header,
+            vec![
+                ("X-Me", "example.com"),
+                ("X-Test", "unchanged"),
+                ("Server", "My very own web server"),
+                ("Cache-Control", "max-age=200, public"),
+            ],
+        );
+
+        let mut session = make_session("https://example.com/subdir/file.txt").await;
+        let mut ctx = Handler::new_ctx();
+        assert!(
+            !handler
+                .call_request_filter(session.deref_mut(), &mut ctx)
+                .await?
+        );
+        let mut header = make_response_header().unwrap();
+        handler.call_response_filter(session.deref_mut(), &mut header, &mut ctx);
+        assert_headers(
+            &header,
+            vec![
+                ("X-Me", "example.com"),
+                ("X-Test", "unchanged"),
+                ("Server", "My very own web server"),
+                ("Cache-Control", "max-age=300, public"),
+            ],
+        );
+
+        let mut session = make_session("https://example.com/subdir/subsub/file.txt").await;
         let mut ctx = Handler::new_ctx();
         assert!(
             !handler
@@ -397,6 +584,44 @@ mod tests {
                 ("X-Me", "none"),
                 ("X-Test", "unchanged"),
                 ("Server", "My very own web server"),
+                ("Cache-Control", "no-storage"),
+            ],
+        );
+
+        let mut session = make_session("https://example.info/whatever").await;
+        let mut ctx = Handler::new_ctx();
+        assert!(
+            !handler
+                .call_request_filter(session.deref_mut(), &mut ctx)
+                .await?
+        );
+        let mut header = make_response_header().unwrap();
+        handler.call_response_filter(session.deref_mut(), &mut header, &mut ctx);
+        assert_headers(
+            &header,
+            vec![
+                ("X-Me", "none"),
+                ("X-Test", "unchanged"),
+                ("Server", "My very own web server"),
+            ],
+        );
+
+        let mut session = make_session("https://example.info/subdir/whatever").await;
+        let mut ctx = Handler::new_ctx();
+        assert!(
+            !handler
+                .call_request_filter(session.deref_mut(), &mut ctx)
+                .await?
+        );
+        let mut header = make_response_header().unwrap();
+        handler.call_response_filter(session.deref_mut(), &mut header, &mut ctx);
+        assert_headers(
+            &header,
+            vec![
+                ("X-Me", "none"),
+                ("X-Test", "unchanged"),
+                ("Server", "My very own web server"),
+                ("Cache-Control", "no-cache"),
             ],
         );
 
