@@ -14,6 +14,7 @@
 
 use async_trait::async_trait;
 use module_utils::pingora::{Error, RequestHeader, SessionWrapper, TestSession};
+use module_utils::serde::{Deserialize, Deserializer};
 use module_utils::{merge_conf, DeserializeMap, FromYaml, RequestFilter, RequestFilterResult};
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Debug;
@@ -284,6 +285,18 @@ fn from_yaml_seed() {
         assert_eq!(left, &right);
     }
 
+    fn custom_deserialize_seed<'de, D>(
+        mut seed: String,
+        deserializer: D,
+    ) -> Result<String, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let other = String::deserialize(deserializer)?;
+        seed.push_str(&other);
+        Ok(seed)
+    }
+
     #[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
     struct Conf1 {
         value1: HashMap<String, u32>,
@@ -293,6 +306,8 @@ fn from_yaml_seed() {
     #[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
     struct Conf2 {
         value3: Vec<bool>,
+        #[module_utils(deserialize_with_seed = "custom_deserialize_seed")]
+        value4: String,
     }
 
     let conf = Conf1::from_yaml(
@@ -332,11 +347,19 @@ fn from_yaml_seed() {
         assert_hash_eq(&conf.conf1.value1, vec![("hi", 1234)]);
         assert_eq!(conf.conf1.value2, 12);
         assert_eq!(conf.conf2.value3, Vec::new());
+        assert_eq!(conf.conf2.value4, String::new());
 
         let conf = conf.merge_from_yaml("value3: [true, false]").unwrap();
         assert_hash_eq(&conf.conf1.value1, vec![("hi", 1234)]);
         assert_eq!(conf.conf1.value2, 12);
         assert_eq!(conf.conf2.value3, vec![true, false]);
+        assert_eq!(conf.conf2.value4, String::new());
+
+        let conf = conf.merge_from_yaml("value4: hi").unwrap();
+        assert_hash_eq(&conf.conf1.value1, vec![("hi", 1234)]);
+        assert_eq!(conf.conf1.value2, 12);
+        assert_eq!(conf.conf2.value3, vec![true, false]);
+        assert_eq!(conf.conf2.value4, "hi".to_owned());
 
         let conf = conf
             .merge_from_yaml(
@@ -345,44 +368,51 @@ fn from_yaml_seed() {
                     hi: 4321
                 value2: 34
                 value3: [false]
+                value4: _addendum
             "#,
             )
             .unwrap();
         assert_hash_eq(&conf.conf1.value1, vec![("hi", 4321)]);
         assert_eq!(conf.conf1.value2, 34);
         assert_eq!(conf.conf2.value3, vec![true, false, false]);
+        assert_eq!(conf.conf2.value4, "hi_addendum".to_owned());
     }
 
     {
+        #[derive(Debug, Default, DeserializeMap, PartialEq, Eq)]
+        struct InnerConf {
+            value: Vec<bool>,
+        }
+
         #[derive(Debug, Default, DeserializeMap)]
         struct Conf {
-            map: HashMap<String, Conf2>,
+            map: HashMap<String, InnerConf>,
         }
 
         let conf = Conf::from_yaml(
             r#"
                 map:
                     hi:
-                        value3: [true]
+                        value: [true]
             "#,
         )
         .unwrap();
-        assert_hash_eq(&conf.map, vec![("hi", Conf2 { value3: vec![true] })]);
+        assert_hash_eq(&conf.map, vec![("hi", InnerConf { value: vec![true] })]);
 
         let conf = conf
             .merge_from_yaml(
                 r#"
                 map:
                     not hi:
-                        value3: []
+                        value: []
             "#,
             )
             .unwrap();
         assert_hash_eq(
             &conf.map,
             vec![
-                ("hi", Conf2 { value3: vec![true] }),
-                ("not hi", Conf2 { value3: Vec::new() }),
+                ("hi", InnerConf { value: vec![true] }),
+                ("not hi", InnerConf { value: Vec::new() }),
             ],
         );
 
@@ -391,9 +421,9 @@ fn from_yaml_seed() {
                 r#"
                 map:
                     hi:
-                        value3: [false]
+                        value: [false]
                     not hi:
-                        value3: [false]
+                        value: [false]
             "#,
             )
             .unwrap();
@@ -402,16 +432,11 @@ fn from_yaml_seed() {
             vec![
                 (
                     "hi",
-                    Conf2 {
-                        value3: vec![true, false],
+                    InnerConf {
+                        value: vec![true, false],
                     },
                 ),
-                (
-                    "not hi",
-                    Conf2 {
-                        value3: vec![false],
-                    },
-                ),
+                ("not hi", InnerConf { value: vec![false] }),
             ],
         );
     }
@@ -476,17 +501,17 @@ fn merge_across_maps() {
     let conf = conf
         .merge_from_yaml(
             r#"
-            map1:
-                hi:
-                    value2: 34
-                another:
-                    value2: 56
-            map2:
-                hi:
-                    value2: 34
-                another:
-                    value2: 56
-        "#,
+                map1:
+                    hi:
+                        value2: 34
+                    another:
+                        value2: 56
+                map2:
+                    hi:
+                        value2: 34
+                    another:
+                        value2: 56
+            "#,
         )
         .unwrap();
     assert_hashmap_eq(
@@ -531,13 +556,13 @@ fn merge_across_maps() {
     let conf = conf
         .merge_from_yaml(
             r#"
-            map1:
-                hi:
-                    value1: 78
-            map2:
-                hi:
-                    value1: 78
-        "#,
+                map1:
+                    hi:
+                        value1: 78
+                map2:
+                    hi:
+                        value1: 78
+            "#,
         )
         .unwrap();
     assert_hashmap_eq(

@@ -218,6 +218,11 @@ pub fn derive_request_filter(input: TokenStream) -> TokenStream {
 ///   `fn<'de, D>(D) -> Result<T, D::Error> where D: serde::Deserializer<'de>`, although it may
 ///   also be generic over `T`. Fields used with `deserialize_with` are not required to implement
 ///   `serde::Deserialize`.
+/// * `#[module_utils(deserialize_with_seed = "path")]`
+///
+///   This is similar to `deserialize_with` but meant for fields that support merging of values.
+///   The function receives an additional parameter before the deserializer, the previous value of
+///   this field. It can then proceed to deserialize the new value and to merge the two as desired.
 /// * `#[serde(with = "module")]`
 ///
 ///   Same as `deserialize_with` but `$module::deserialize` will be used as the `deserialize_with`

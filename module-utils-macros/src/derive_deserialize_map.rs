@@ -39,6 +39,13 @@ impl TryFrom<&Field> for FieldAttributes {
         let mut deserialize_with = None;
         let mut flatten = false;
 
+        let name = if let Some(name) = &field.ident {
+            name.clone()
+        } else {
+            skip = true;
+            Ident::new("", Span::call_site())
+        };
+
         for attr in &field.attrs {
             if !attr.path().is_ident("module_utils") {
                 continue;
@@ -74,7 +81,10 @@ impl TryFrom<&Field> for FieldAttributes {
                 } else if meta.path.is_ident("flatten") {
                     flatten = true;
                     Ok(())
-                } else if meta.path.is_ident("deserialize_with") || meta.path.is_ident("with") {
+                } else if meta.path.is_ident("deserialize_with")
+                    || meta.path.is_ident("deserialize_with_seed")
+                    || meta.path.is_ident("with")
+                {
                     if deserialize_with.is_some() {
                         return Err(Error::new_spanned(
                             meta.path,
@@ -83,12 +93,14 @@ impl TryFrom<&Field> for FieldAttributes {
                     }
                     let value = meta.value()?;
                     let s: LitStr = value.parse()?;
-                    let mut path = s.parse_with(Path::parse_mod_style)?;
-                    if meta.path.is_ident("with") {
-                        path.segments
-                            .push(Ident::new("deserialize", s.span()).into());
-                    }
-                    deserialize_with = Some(path);
+                    let path = s.parse_with(Path::parse_mod_style)?;
+                    deserialize_with = Some(if meta.path.is_ident("deserialize_with") {
+                        quote! {#path(deserializer)}
+                    } else if meta.path.is_ident("with") {
+                        quote! {#path::deserialize(deserializer)}
+                    } else {
+                        quote! {#path(self.#name, deserializer)}
+                    });
                     Ok(())
                 } else {
                     Err(Error::new_spanned(meta.path, "unexpected parameter"))
@@ -117,12 +129,6 @@ impl TryFrom<&Field> for FieldAttributes {
             }
         }
 
-        let name = if let Some(name) = &field.ident {
-            name.clone()
-        } else {
-            skip = true;
-            Ident::new("", Span::call_site())
-        };
         let ty = field.ty.clone();
         deserialize_name.insert(
             0,
@@ -132,16 +138,14 @@ impl TryFrom<&Field> for FieldAttributes {
             }),
         );
 
-        let deserialize = if let Some(deserialize_with) = deserialize_with {
-            quote! {#deserialize_with(deserializer)}
-        } else {
+        let deserialize = deserialize_with.unwrap_or_else(|| {
             quote! {
                 {
                     use ::module_utils::_private::DeserializeMerge;
                     (&&&&::std::marker::PhantomData::<#ty>).deserialize_merge(self.#name, deserializer)
                 }
             }
-        };
+        });
 
         Ok(Self {
             skip,
