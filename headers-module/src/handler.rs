@@ -19,13 +19,12 @@ use module_utils::router::Router;
 use module_utils::{RequestFilter, RequestFilterResult};
 
 use crate::configuration::{Header, HeadersConf};
-use crate::processing::{IntoMergedConf, MergedConf};
+use crate::processing::IntoMergedConf;
 
 /// Handler for Pingora’s `request_filter` phase
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HeadersHandler {
-    router: Router<MergedConf>,
-    fallback_router: Router<MergedConf>,
+    router: Router<Vec<Header>>,
 }
 
 impl TryFrom<HeadersConf> for HeadersHandler {
@@ -40,22 +39,12 @@ impl TryFrom<HeadersConf> for HeadersHandler {
         trace!("Merged headers configuration into: {merged:#?}");
 
         let mut builder = Router::builder();
-        let mut fallback_builder = Router::builder();
         for ((host, path), conf) in merged.into_iter() {
-            let prefix_conf = conf.clone();
-            if host.is_empty() {
-                fallback_builder.push(&host, &path, conf, Some(prefix_conf));
-            } else {
-                builder.push(&host, &path, conf, Some(prefix_conf));
-            }
+            builder.push(&host, &path, conf.exact, Some(conf.prefix));
         }
         let router = builder.build();
-        let fallback_router = fallback_builder.build();
 
-        Ok(Self {
-            router,
-            fallback_router,
-        })
+        Ok(Self { router })
     }
 }
 
@@ -84,15 +73,10 @@ impl RequestFilter for HeadersHandler {
             let match_ = session
                 .host()
                 .and_then(|host| self.router.lookup(host.as_ref(), path))
-                .or_else(|| self.fallback_router.lookup("", path));
+                .or_else(|| self.router.lookup("", path));
 
-            if let Some((conf, tail)) = match_ {
-                let tail = tail.as_ref().map(|t| t.as_ref()).unwrap_or(path.as_bytes());
-                if tail == b"/" {
-                    &conf.as_value().exact
-                } else {
-                    &conf.as_value().prefix
-                }
+            if let Some((conf, _)) = match_ {
+                conf.as_value()
             } else {
                 return Ok(RequestFilterResult::Unhandled);
             }
