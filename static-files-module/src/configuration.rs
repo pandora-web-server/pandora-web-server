@@ -48,7 +48,7 @@ pub struct StaticFilesOpt {
 }
 
 /// Configuration file settings of the static files module
-#[derive(Debug, PartialEq, Eq, DeserializeMap)]
+#[derive(Debug, Clone, PartialEq, Eq, DeserializeMap)]
 pub struct StaticFilesConf {
     /// The root directory.
     pub root: Option<PathBuf>,

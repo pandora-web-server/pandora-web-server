@@ -45,7 +45,7 @@ use static_files_module::{StaticFilesHandler, StaticFilesOpt};
 use structopt::StructOpt;
 
 /// Handler combining Compression and Static Files modules
-#[derive(Debug, PartialEq, Eq, RequestFilter)]
+#[derive(Debug, Clone, PartialEq, Eq, RequestFilter)]
 struct Handler {
     anonymization: IPAnonymizationHandler,
     log: CommonLogHandler,

@@ -65,8 +65,8 @@ pub fn merge_opt(_args: TokenStream, input: TokenStream) -> TokenStream {
 
 /// This attribute macro merges the configuration settings from all structs identified as field of
 /// the current struct. It’s essentially a shortcut for deriving `Debug`, `Default` and
-/// `DeserializeMap` traits, the latter with all fields flattened. All field types are
-/// required to implement `Debug`, `Default`, `PartialEq`, `Eq` and `DeserializeMap`.
+/// `DeserializeMap` traits, the latter with all fields flattened. All field types are required to
+/// implement `Debug`, `Default` and `DeserializeMap`.
 ///
 /// ```rust
 /// use module_utils::{merge_conf, DeserializeMap, FromYaml};
@@ -74,7 +74,7 @@ pub fn merge_opt(_args: TokenStream, input: TokenStream) -> TokenStream {
 /// use static_files_module::StaticFilesConf;
 /// use std::path::PathBuf;
 ///
-/// #[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
+/// #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
 /// struct MyAppConf {
 ///     /// If `true`, the server will roll over
 ///     roll_over: bool,
@@ -137,7 +137,7 @@ pub fn merge_conf(_attr: TokenStream, input: TokenStream) -> TokenStream {
 /// use compression_module::CompressionHandler;
 /// use static_files_module::StaticFilesHandler;
 ///
-/// #[derive(Debug, PartialEq, Eq, RequestFilter)]
+/// #[derive(Debug, Clone, PartialEq, Eq, RequestFilter)]
 /// struct Handler {
 ///     compression: CompressionHandler,
 ///     static_files: StaticFilesHandler,
@@ -160,7 +160,7 @@ pub fn merge_conf(_attr: TokenStream, input: TokenStream) -> TokenStream {
 /// use compression_module::CompressionHandler;
 /// use static_files_module::StaticFilesHandler;
 ///
-/// #[derive(Debug, PartialEq, Eq, RequestFilter)]
+/// #[derive(Debug, Clone, PartialEq, Eq, RequestFilter)]
 /// struct Handler {
 ///     compression: CompressionHandler,
 ///     static_files: StaticFilesHandler,
@@ -238,12 +238,12 @@ pub fn derive_request_filter(input: TokenStream) -> TokenStream {
 /// ```rust
 /// use module_utils::{DeserializeMap, FromYaml, merge_conf};
 ///
-/// #[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
+/// #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
 /// struct Conf1 {
 ///     value1: u32,
 /// }
 ///
-/// #[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
+/// #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
 /// struct Conf2 {
 ///     #[module_utils(rename = "Value2")]
 ///     value2: String,

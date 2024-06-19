@@ -58,7 +58,7 @@ pub struct StartupOpt {
 }
 
 /// Address for the server to listen on
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct ListenAddr {
     /// IP address and port combination, e.g. `127.0.0.1:8080` or `[::1]:8080`
     pub addr: String,
@@ -194,7 +194,7 @@ impl<'de> Deserialize<'de> for ListenAddr {
 }
 
 /// Certificate/key combination for a single server name
-#[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
 pub struct CertKeyConf {
     /// Path to the certificate file
     pub cert_path: Option<PathBuf>,
@@ -258,7 +258,7 @@ impl CertKeyConf {
 }
 
 /// Certificate/key combination for a single server name
-#[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
 pub struct TlsRedirectorConf {
     /// List of address/port combinations to listen on, e.g. "127.0.0.1:8080"
     pub listen: Vec<ListenAddr>,
@@ -292,7 +292,7 @@ impl TlsRedirectorConf {
 }
 
 /// TLS configuration for the server
-#[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
 pub struct TlsConf {
     /// Default certificate/key combination
     #[module_utils(flatten)]

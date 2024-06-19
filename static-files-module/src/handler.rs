@@ -30,7 +30,7 @@ use crate::path::{path_to_uri, resolve_uri};
 use crate::range::{extract_range, Range};
 
 /// Handler for Pingora’s `request_filter` phase
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StaticFilesHandler {
     conf: StaticFilesConf,
 }

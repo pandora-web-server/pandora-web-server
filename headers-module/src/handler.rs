@@ -22,7 +22,7 @@ use crate::configuration::{Header, HeadersConf};
 use crate::processing::{IntoMergedConf, MergedConf};
 
 /// Handler for Pingora’s `request_filter` phase
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HeadersHandler {
     router: Router<MergedConf>,
     fallback_router: Router<MergedConf>,
@@ -42,10 +42,11 @@ impl TryFrom<HeadersConf> for HeadersHandler {
         let mut builder = Router::builder();
         let mut fallback_builder = Router::builder();
         for ((host, path), conf) in merged.into_iter() {
+            let prefix_conf = conf.clone();
             if host.is_empty() {
-                fallback_builder.push(&host, &path, conf);
+                fallback_builder.push(&host, &path, conf, Some(prefix_conf));
             } else {
-                builder.push(&host, &path, conf);
+                builder.push(&host, &path, conf, Some(prefix_conf));
             }
         }
         let router = builder.build();
@@ -145,7 +146,7 @@ mod tests {
     use std::ops::{Deref, DerefMut};
     use test_log::test;
 
-    #[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
+    #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
     struct TestConf {
         send_response: bool,
     }

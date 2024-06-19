@@ -28,7 +28,7 @@ pub(crate) const SEPARATOR: u8 = b'/';
 
 /// Calculates the length of the longest common prefix of two labels. A common prefix is identical
 /// and ends at a boundary in both labels (either end of the label or a separator character).
-fn common_prefix_length(a: &[u8], b: &[u8]) -> usize {
+pub(crate) fn common_prefix_length(a: &[u8], b: &[u8]) -> usize {
     let mut length = 0;
     for i in 0..std::cmp::min(a.len(), b.len()) {
         if a[i] != b[i] {
@@ -63,7 +63,7 @@ fn common_prefix_length(a: &[u8], b: &[u8]) -> usize {
 /// Finally, the third vector stores the labels of the nodes, so that nodes don’t need separate
 /// allocations for their labels. Each nodes refers to its label within this vector via an index
 /// range.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Trie<Value> {
     nodes: Vec<Node>,
     values: Vec<Value>,
@@ -115,7 +115,7 @@ impl<Value> Deref for LookupResult<'_, Value> {
 /// Each child node represents a unique path further from this node. Multiple child node labels
 /// never start with the same segment: in such scenarios the builder inserts an intermediate node
 /// that serves as the common parent for all nodes reachable via that segment.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct Node {
     label: Range<usize>,
     value_exact: Option<usize>,
@@ -323,8 +323,8 @@ impl<Value: Eq> TrieBuilder<Value> {
     pub(crate) fn push(
         &mut self,
         mut label: Vec<u8>,
-        value_exact: Option<Value>,
-        value_prefix: Value,
+        value_exact: Value,
+        value_prefix: Option<Value>,
     ) -> bool {
         let node = Self::find_insertion_point(
             &mut self.root,
@@ -335,10 +335,9 @@ impl<Value: Eq> TrieBuilder<Value> {
 
         if label.is_empty() {
             // Exact match, replace the value for this node
-            node.value_exact = value_exact;
-
-            let had_value = node.value_prefix.is_some();
-            node.value_prefix = Some(value_prefix);
+            let had_value = node.value_exact.is_some();
+            node.value_exact = Some(value_exact);
+            node.value_prefix = value_prefix;
             had_value
         } else {
             // Insert new node as child of the current one
@@ -347,8 +346,8 @@ impl<Value: Eq> TrieBuilder<Value> {
             node.children.push(BuilderNode {
                 label,
                 children: Vec::new(),
-                value_exact,
-                value_prefix: Some(value_prefix),
+                value_exact: Some(value_exact),
+                value_prefix,
             });
             false
         }
@@ -477,9 +476,9 @@ mod tests {
             ("a/bc", 4, 14),
             ("a/bc/de/g", 5, 15),
         ] {
-            assert!(!builder.push(label.as_bytes().to_vec(), Some(value_exact), value_prefix));
+            assert!(!builder.push(label.as_bytes().to_vec(), value_exact, Some(value_prefix)));
         }
-        assert!(builder.push("a/bc".as_bytes().to_vec(), Some(6), 16));
+        assert!(builder.push("a/bc".as_bytes().to_vec(), 6, Some(16)));
         let trie = builder.build();
 
         assert_eq!(
@@ -546,9 +545,9 @@ mod tests {
             ("a/bc", 4, 14),
             ("a/bc/de/g", 5, 15),
         ] {
-            assert!(!builder.push(label.as_bytes().to_vec(), Some(value_exact), value_prefix));
+            assert!(!builder.push(label.as_bytes().to_vec(), value_exact, Some(value_prefix)));
         }
-        assert!(builder.push("a/bc".as_bytes().to_vec(), Some(6), 16));
+        assert!(builder.push("a/bc".as_bytes().to_vec(), 6, Some(16)));
         let trie = builder.build();
 
         assert_eq!(trie.lookup(make_key("")).map(|(v, i)| (*v, i)), None);
@@ -608,7 +607,7 @@ mod tests {
             ("a/bc", 123, 123),
             ("a/bc/de/g", 123, 123),
         ] {
-            assert!(!builder.push(label.as_bytes().to_vec(), Some(value_exact), value_prefix));
+            assert!(!builder.push(label.as_bytes().to_vec(), value_exact, Some(value_prefix)));
         }
         let trie = builder.build();
         assert_eq!(trie.values.len(), 2);

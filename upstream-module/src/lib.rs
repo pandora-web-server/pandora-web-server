@@ -92,7 +92,7 @@ where
 }
 
 /// Configuration settings of the compression module
-#[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
 pub struct UpstreamConf {
     /// http:// or https:// URL identifying the server that requests should be forwarded for.
     /// Path and query parts of the URL have no effect.
@@ -119,7 +119,7 @@ pub struct UpstreamContext {
 }
 
 /// Handler for Pingora’s `request_filter` phase
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UpstreamHandler {
     host_port: String,
     context: Option<UpstreamContext>,

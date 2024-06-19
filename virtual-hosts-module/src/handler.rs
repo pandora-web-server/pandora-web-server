@@ -62,7 +62,7 @@ impl<Ctx> DerefMut for VirtualHostsCtx<Ctx> {
 }
 
 /// Handler for Pingora’s `request_filter` phase
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VirtualHostsHandler<H: Debug> {
     handlers: Router<(bool, H)>,
     aliases: HashMap<String, String>,
@@ -209,7 +209,7 @@ where
 
 impl<C, H> TryFrom<VirtualHostsConf<C>> for VirtualHostsHandler<H>
 where
-    H: Debug + Eq,
+    H: Debug + Clone + Eq,
     C: TryInto<H, Error = Box<Error>> + Default,
 {
     type Error = Box<Error>;
@@ -229,10 +229,15 @@ where
                     default = Some(host.clone());
                 }
             }
-            handlers.push(&host, "", (false, host_conf.config.try_into()?));
+
+            let value_exact = (false, host_conf.config.try_into()?);
+            let value_prefix = value_exact.clone();
+            handlers.push(&host, "", value_exact, Some(value_prefix));
 
             for (path, conf) in host_conf.subdirs {
-                handlers.push(&host, path, (conf.strip_prefix, conf.config.try_into()?));
+                let value_exact = (conf.strip_prefix, conf.config.try_into()?);
+                let value_prefix = value_exact.clone();
+                handlers.push(&host, path, value_exact, Some(value_prefix));
             }
         }
         let handlers = handlers.build();
@@ -253,12 +258,12 @@ mod tests {
     use module_utils::{DeserializeMap, FromYaml};
     use test_log::test;
 
-    #[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
+    #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
     struct Conf {
         result: RequestFilterResult,
     }
 
-    #[derive(Debug, PartialEq, Eq)]
+    #[derive(Debug, Clone, PartialEq, Eq)]
     struct Handler {
         result: RequestFilterResult,
     }

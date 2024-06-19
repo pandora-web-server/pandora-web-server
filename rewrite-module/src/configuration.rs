@@ -25,7 +25,7 @@ use std::cmp::Ordering;
 use std::default::Default;
 
 /// A parsed representation of the `from` field of the rewrite rule
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PathMatch {
     /// The path to match
     ///
@@ -133,7 +133,7 @@ fn normalize_path(path: &str) -> String {
     path
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum VariableInterpolationPart {
     Literal(Vec<u8>),
     Variable(String),
@@ -141,7 +141,7 @@ enum VariableInterpolationPart {
 
 /// Parsed representation of a string with variable interpolation like the `to` field of the
 /// rewrite rule
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VariableInterpolation {
     parts: Vec<VariableInterpolationPart>,
 }
@@ -232,7 +232,7 @@ impl VariableInterpolation {
 }
 
 /// URI rewriting type
-#[derive(Debug, PartialEq, Eq, Deserialize, Copy, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum RewriteType {
     /// An internal rewrite, URI change for internal processing only
@@ -301,7 +301,7 @@ impl<'de> Deserialize<'de> for RegexMatch {
 }
 
 /// A rewrite rule resulting in either request URI change or redirect
-#[derive(Debug, PartialEq, Eq, DeserializeMap)]
+#[derive(Debug, Clone, PartialEq, Eq, DeserializeMap)]
 pub struct RewriteRule {
     /// Path or a set of paths to rewrite
     ///
@@ -359,7 +359,7 @@ impl Default for RewriteRule {
 }
 
 /// Configuration file settings of the rewrite module
-#[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
 pub struct RewriteConf {
     /// A list of rewrite rules
     pub rewrite_rules: Vec<RewriteRule>,

@@ -20,12 +20,12 @@ use std::collections::{BTreeMap, HashMap};
 use std::fmt::Debug;
 use test_log::test;
 
-#[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
 struct Handler1Conf {
     handle_request: bool,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct Handler1 {
     handle_request: bool,
 }
@@ -60,7 +60,7 @@ impl RequestFilter for Handler1 {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, DeserializeMap)]
+#[derive(Debug, Clone, PartialEq, Eq, DeserializeMap)]
 struct Handler2Conf<T: Default + Sync, U>
 where
     U: Default + Sync,
@@ -80,7 +80,7 @@ impl<T: Default + Sync, U: Default + Sync> Default for Handler2Conf<T, U> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct Handler2<T: Default + Sync, U: Default + Sync> {
     conf: Handler2Conf<T, U>,
 }
@@ -120,7 +120,7 @@ impl<T: Default + Sync, U: Default + Sync> RequestFilter for Handler2<T, U> {
     }
 }
 
-#[derive(PartialEq, Eq, RequestFilter)]
+#[derive(Debug, Clone, PartialEq, Eq, RequestFilter)]
 struct Handler<T: Default + Sync, U>
 where
     U: Default + Sync,
@@ -190,7 +190,7 @@ async fn handler() -> Result<(), Box<Error>> {
 fn field_attributes() {
     use module_utils::serde::{de::Deserializer, Deserialize};
 
-    #[derive(Debug, Default, PartialEq, Eq)]
+    #[derive(Debug, Clone, Default, PartialEq, Eq)]
     struct Blub {
         value: String,
     }
@@ -206,7 +206,7 @@ fn field_attributes() {
         }
     }
 
-    #[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
+    #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
     struct Blob {
         value: String,
     }
@@ -218,7 +218,7 @@ fn field_attributes() {
         Blub::deserialize(deserializer)
     }
 
-    #[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
+    #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
     struct Conf {
         #[module_utils(rename = "v1", alias = "hi1")]
         #[module_utils(alias = "another1")]
@@ -299,13 +299,13 @@ fn from_yaml_seed() {
         Ok(seed)
     }
 
-    #[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
+    #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
     struct Conf1 {
         value1: HashMap<String, u32>,
         value2: u32,
     }
 
-    #[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
+    #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
     struct Conf2 {
         value3: Vec<bool>,
         #[module_utils(deserialize_with_seed = "custom_deserialize_seed")]
@@ -381,12 +381,12 @@ fn from_yaml_seed() {
     }
 
     {
-        #[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
+        #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
         struct InnerConf {
             value: Vec<bool>,
         }
 
-        #[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
+        #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
         struct Conf {
             map: HashMap<String, InnerConf>,
         }
@@ -456,13 +456,13 @@ fn merge_across_maps() {
         assert_eq!(left, &right);
     }
 
-    #[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
+    #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
     struct ConfInner {
         value1: u32,
         value2: u32,
     }
 
-    #[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
+    #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
     struct Conf {
         map1: HashMap<String, ConfInner>,
         map2: BTreeMap<String, ConfInner>,

@@ -103,7 +103,7 @@ impl<'de> Deserialize<'de> for LogField {
 }
 
 /// Configuration settings of the common log module
-#[derive(Debug, PartialEq, Eq, DeserializeMap)]
+#[derive(Debug, Clone, PartialEq, Eq, DeserializeMap)]
 pub struct CommonLogConf {
     /// Access log file path
     ///

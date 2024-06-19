@@ -16,7 +16,7 @@ use module_utils::DeserializeMap;
 use std::collections::HashMap;
 
 /// Subdirectory configuration
-#[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
 pub struct SubDirConf<C: Default> {
     /// If `true`, subdirectory will be removed from the URI before passing it on to the handler.
     pub strip_prefix: bool,
@@ -29,7 +29,7 @@ pub struct SubDirConf<C: Default> {
 }
 
 /// Virtual host configuration
-#[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
 pub struct VirtualHostConf<C: Default> {
     /// List of additional names for the virtual host
     pub aliases: Vec<String>,
@@ -47,7 +47,7 @@ pub struct VirtualHostConf<C: Default> {
 }
 
 /// Virtual hosts configuration
-#[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
 pub struct VirtualHostsConf<C: Default> {
     /// Maps virtual host names to their configuration
     pub vhosts: HashMap<String, VirtualHostConf<C>>,

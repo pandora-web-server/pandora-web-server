@@ -94,7 +94,7 @@ pub struct IPAnonymizationOpt {
 }
 
 /// IP anonymization configuration
-#[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
 pub struct IPAnonymizationConf {
     /// If `true`, part of the client’s IP address will be removed, ensuring that logged addresses
     /// cannot be traced back to an individual user.
@@ -112,7 +112,7 @@ impl IPAnonymizationConf {
 }
 
 /// Handler for Pingora’s `request_filter` phase
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IPAnonymizationHandler {
     conf: IPAnonymizationConf,
 }

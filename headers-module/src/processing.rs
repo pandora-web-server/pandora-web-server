@@ -36,7 +36,7 @@ impl PathPrefixOf for str {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct MergedConf {
     pub(crate) exact: Vec<Header>,
     pub(crate) prefix: Vec<Header>,

@@ -32,7 +32,7 @@ use crate::deserialize::{
 };
 
 /// A single match rule within `match_rules.include` or `match_rules.exclude`
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatchRule {
     /// The host name to match
     ///
@@ -112,7 +112,7 @@ impl Ord for MatchRule {
 ///
 /// The configuration entry is only applied to a host/path configuration if there is a matching
 /// rule and that rule is an include rule.
-#[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
 pub struct MatchRules {
     /// Rules determining the locations where the configuration entry should apply
     #[module_utils(deserialize_with_seed = "deserialize_match_rule_list")]
@@ -199,8 +199,8 @@ pub(crate) trait IntoHeaders {
 
 /// Combines a given configuration with match rules determining what host/path combinations it
 /// should apply to.
-#[derive(Debug, PartialEq, Eq)]
-pub struct WithMatchRules<C: PartialEq + Eq> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WithMatchRules<C: Clone + PartialEq + Eq> {
     /// The match rules
     pub match_rules: MatchRules,
 
@@ -209,7 +209,7 @@ pub struct WithMatchRules<C: PartialEq + Eq> {
 }
 
 /// Configuration for the Cache-Control header
-#[derive(Debug, Default, PartialEq, Eq, Clone, DeserializeMap)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
 pub struct CacheControlConf {
     /// If set, max-age option will be sent
     #[module_utils(rename = "max-age")]
@@ -343,7 +343,7 @@ impl IntoHeaders for HashMap<HeaderName, HeaderValue> {
 }
 
 /// Various settings to configure HTTP response headers
-#[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
 pub struct HeadersInnerConf {
     /// Cache-Control header
     #[module_utils(deserialize_with_seed = "deserialize_with_match_rules")]
@@ -355,7 +355,7 @@ pub struct HeadersInnerConf {
 }
 
 /// Configuration file settings of the headers module
-#[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
 pub struct HeadersConf {
     /// Various settings to configure HTTP response headers
     pub response_headers: HeadersInnerConf,

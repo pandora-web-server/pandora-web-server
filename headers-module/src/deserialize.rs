@@ -149,7 +149,7 @@ pub(crate) fn deserialize_with_match_rules<'de, D, C>(
 ) -> Result<Vec<WithMatchRules<C>>, D::Error>
 where
     D: Deserializer<'de>,
-    C: Default + DeserializeMap<'de> + PartialEq + Eq,
+    C: Default + DeserializeMap<'de> + Clone + PartialEq + Eq,
 {
     deserialize_with_match_rules_custom(seed, deserializer, || C::default().visitor())
 }
@@ -162,7 +162,7 @@ fn deserialize_with_match_rules_custom<'de, D, V>(
 where
     D: Deserializer<'de>,
     V: MapVisitor<'de>,
-    V::Value: PartialEq + Eq,
+    V::Value: Clone + PartialEq + Eq,
 {
     struct MatchRulesVisitor<'de> {
         key: String,
@@ -185,7 +185,7 @@ where
     impl<'de, V> Visitor<'de> for EntryVisitor<V>
     where
         V: MapVisitor<'de>,
-        V::Value: PartialEq + Eq,
+        V::Value: Clone + PartialEq + Eq,
     {
         type Value = WithMatchRules<V::Value>;
 
@@ -254,7 +254,7 @@ where
     impl<'de, V> DeserializeSeed<'de> for EntryVisitor<V>
     where
         V: MapVisitor<'de>,
-        V::Value: PartialEq + Eq,
+        V::Value: Clone + PartialEq + Eq,
     {
         type Value = <Self as Visitor<'de>>::Value;
 
@@ -269,7 +269,7 @@ where
     struct ListVisitor<'de, Callback, V>
     where
         V: MapVisitor<'de>,
-        V::Value: PartialEq + Eq,
+        V::Value: Clone + PartialEq + Eq,
     {
         seed: Vec<WithMatchRules<V::Value>>,
         new_visitor: Callback,
@@ -278,7 +278,7 @@ where
     where
         Callback: Fn() -> V,
         V: MapVisitor<'de>,
-        V::Value: PartialEq + Eq,
+        V::Value: Clone + PartialEq + Eq,
     {
         type Value = Vec<WithMatchRules<V::Value>>;
 
@@ -384,7 +384,7 @@ mod tests {
 
     #[test]
     fn match_rule_deserialization() {
-        #[derive(Debug, Default, Eq, PartialEq, DeserializeMap)]
+        #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
         struct Conf {
             #[module_utils(deserialize_with_seed = "deserialize_match_rule_list")]
             rules: Vec<MatchRule>,
@@ -531,7 +531,7 @@ mod tests {
 
     #[test]
     fn match_rule_merge() {
-        #[derive(Debug, Default, Eq, PartialEq, DeserializeMap)]
+        #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
         struct Conf {
             #[module_utils(deserialize_with_seed = "deserialize_match_rule_list")]
             rules: Vec<MatchRule>,
@@ -593,12 +593,12 @@ mod tests {
 
     #[test]
     fn with_match_rules_deserialization() {
-        #[derive(Debug, Default, Eq, PartialEq, DeserializeMap)]
+        #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
         struct DummyInner {
             value: u32,
         }
 
-        #[derive(Debug, Default, Eq, PartialEq, DeserializeMap)]
+        #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
         struct DummyConf {
             #[module_utils(deserialize_with_seed = "deserialize_with_match_rules")]
             inner: Vec<WithMatchRules<DummyInner>>,
@@ -666,7 +666,7 @@ mod tests {
 
     #[test]
     fn custom_headers_deserialization() {
-        #[derive(Debug, Default, Eq, PartialEq, DeserializeMap)]
+        #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
         struct DummyConf {
             #[module_utils(deserialize_with_seed = "deserialize_custom_headers")]
             inner: Vec<WithMatchRules<HashMap<HeaderName, HeaderValue>>>,
@@ -781,12 +781,12 @@ mod tests {
 
     #[test]
     fn with_match_rules_deserialization_merging() {
-        #[derive(Debug, Default, Eq, PartialEq, DeserializeMap)]
+        #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
         struct DummyInner {
             value: u32,
         }
 
-        #[derive(Debug, Default, Eq, PartialEq, DeserializeMap)]
+        #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
         struct DummyConf {
             #[module_utils(deserialize_with_seed = "deserialize_with_match_rules")]
             inner: Vec<WithMatchRules<DummyInner>>,

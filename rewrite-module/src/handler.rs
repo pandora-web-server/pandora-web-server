@@ -27,7 +27,7 @@ use crate::configuration::{
     RegexMatch, RewriteConf, RewriteRule, RewriteType, VariableInterpolation,
 };
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct Rule {
     from_regex: Option<RegexMatch>,
     query_regex: Option<RegexMatch>,
@@ -36,7 +36,7 @@ struct Rule {
 }
 
 /// Handler for Pingora’s `request_filter` phase
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RewriteHandler {
     router: Router<(Vec<Rule>, Vec<Rule>)>,
 }
@@ -86,11 +86,9 @@ impl TryFrom<RewriteConf> for RewriteHandler {
 
         let mut builder = Router::builder();
         for (path, (list_exact, list_prefix)) in merged.into_iter() {
-            builder.push(
-                "",
-                &path,
-                (convert_list(list_exact), convert_list(list_prefix)),
-            );
+            let value_exact = (convert_list(list_exact), convert_list(list_prefix));
+            let value_prefix = value_exact.clone();
+            builder.push("", &path, value_exact, Some(value_prefix));
         }
 
         Ok(Self {
