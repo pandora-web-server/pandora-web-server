@@ -48,7 +48,7 @@ use crate::trie::{Trie, TrieBuilder, SEPARATOR};
 /// assert!(router.lookup("localhost", "/").is_some_and(|(value, _)| *value == "Localhost root"));
 /// assert!(router.lookup("example.com", "/dir/file").is_some_and(|(value, _)| *value == "Website subdirectory"));
 /// ```
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Router<Value> {
     trie: Trie<Value>,
 }
@@ -58,7 +58,10 @@ impl<Value> Router<Value> {
     ///
     /// Once set up, the router data structure is read-only and can be queried without any memory
     /// copying or allocations.
-    pub fn builder() -> RouterBuilder<Value> {
+    pub fn builder() -> RouterBuilder<Value>
+    where
+        Value: Eq,
+    {
         RouterBuilder {
             inner: Trie::builder(),
         }
@@ -153,7 +156,7 @@ pub struct RouterBuilder<Value> {
     inner: TrieBuilder<Value>,
 }
 
-impl<Value> RouterBuilder<Value> {
+impl<Value: Eq> RouterBuilder<Value> {
     /// Adds a host/path combination with the respective value to the routing table.
     ///
     /// While it is possible to use an empty host name, it is advisable to keep entries with an

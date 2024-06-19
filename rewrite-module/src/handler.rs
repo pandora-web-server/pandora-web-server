@@ -27,7 +27,7 @@ use crate::configuration::{
     RegexMatch, RewriteConf, RewriteRule, RewriteType, VariableInterpolation,
 };
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 struct Rule {
     from_regex: Option<RegexMatch>,
     query_regex: Option<RegexMatch>,
@@ -36,7 +36,7 @@ struct Rule {
 }
 
 /// Handler for Pingora’s `request_filter` phase
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct RewriteHandler {
     router: Router<(Vec<Rule>, Vec<Rule>)>,
 }

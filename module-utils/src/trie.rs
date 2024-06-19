@@ -63,7 +63,7 @@ fn common_prefix_length(a: &[u8], b: &[u8]) -> usize {
 /// Finally, the third vector stores the labels of the nodes, so that nodes don’t need separate
 /// allocations for their labels. Each nodes refers to its label within this vector via an index
 /// range.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) struct Trie<Value> {
     nodes: Vec<Node>,
     values: Vec<Value>,
@@ -115,7 +115,7 @@ impl<Value> Deref for LookupResult<'_, Value> {
 /// Each child node represents a unique path further from this node. Multiple child node labels
 /// never start with the same segment: in such scenarios the builder inserts an intermediate node
 /// that serves as the common parent for all nodes reachable via that segment.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 struct Node {
     label: Range<usize>,
     value_exact: Option<usize>,
@@ -128,7 +128,10 @@ impl<Value> Trie<Value> {
     const ROOT: usize = 0;
 
     /// Returns a builder instance that can be used to set up the trie.
-    pub(crate) fn builder() -> TrieBuilder<Value> {
+    pub(crate) fn builder() -> TrieBuilder<Value>
+    where
+        Value: Eq,
+    {
         TrieBuilder::<Value>::new()
     }
 
@@ -230,7 +233,6 @@ impl<Value> Trie<Value> {
 pub(crate) struct TrieBuilder<Value> {
     nodes: usize,
     labels: usize,
-    values: usize,
     root: BuilderNode<Value>,
 }
 
@@ -245,13 +247,12 @@ struct BuilderNode<Value> {
     value_prefix: Option<Value>,
 }
 
-impl<Value> TrieBuilder<Value> {
+impl<Value: Eq> TrieBuilder<Value> {
     /// Creates a new builder.
     fn new() -> Self {
         Self {
             nodes: 1,
             labels: 0,
-            values: 0,
             root: BuilderNode::<Value> {
                 label: Vec::new(),
                 children: Vec::new(),
@@ -334,28 +335,14 @@ impl<Value> TrieBuilder<Value> {
 
         if label.is_empty() {
             // Exact match, replace the value for this node
-            if node.value_exact.is_some() {
-                self.values -= 1;
-            }
             node.value_exact = value_exact;
-            if node.value_exact.is_some() {
-                self.values += 1;
-            }
 
             let had_value = node.value_prefix.is_some();
-            if !had_value {
-                self.values += 1;
-            }
             node.value_prefix = Some(value_prefix);
             had_value
         } else {
             // Insert new node as child of the current one
             self.nodes += 1;
-            if value_exact.is_some() {
-                self.values += 2;
-            } else {
-                self.values += 1;
-            }
             self.labels += label.len();
             node.children.push(BuilderNode {
                 label,
@@ -380,6 +367,18 @@ impl<Value> TrieBuilder<Value> {
         });
     }
 
+    /// Returns the index of an already existing value entry or adds a new entry to the collection
+    /// and returns its index.
+    fn add_value(value: Value, values: &mut Vec<Value>) -> usize {
+        if let Some(index) = values.iter().position(|v| v == &value) {
+            index
+        } else {
+            let index = values.len();
+            values.push(value);
+            index
+        }
+    }
+
     /// Sets up an entry in the nodes vector.
     ///
     /// This will transfer data from a builder node to the trie node identified via index. It will
@@ -395,12 +394,10 @@ impl<Value> TrieBuilder<Value> {
         labels.append(&mut current.label);
 
         if let Some(value) = current.value_exact {
-            nodes[index].value_exact = Some(values.len());
-            values.push(value);
+            nodes[index].value_exact = Some(Self::add_value(value, values));
         }
         if let Some(value) = current.value_prefix {
-            nodes[index].value_prefix = Some(values.len());
-            values.push(value);
+            nodes[index].value_prefix = Some(Self::add_value(value, values));
         }
 
         current.children.sort_by(|a, b| a.label.cmp(&b.label));
@@ -421,7 +418,7 @@ impl<Value> TrieBuilder<Value> {
     pub(crate) fn build(self) -> Trie<Value> {
         let mut nodes = Vec::with_capacity(self.nodes);
         let mut labels = Vec::with_capacity(self.labels);
-        let mut values = Vec::with_capacity(self.values);
+        let mut values = Vec::new();
 
         let index = nodes.len();
         Self::push_trie_node(&mut nodes);
@@ -429,7 +426,7 @@ impl<Value> TrieBuilder<Value> {
 
         assert_eq!(nodes.len(), self.nodes);
         assert_eq!(labels.len(), self.labels);
-        assert_eq!(values.len(), self.values);
+        values.shrink_to_fit();
 
         Trie {
             nodes,
@@ -599,5 +596,21 @@ mod tests {
             trie.lookup(make_key("a/bc/de/h")).map(|(v, i)| (*v, i)),
             Some((16, 2))
         );
+    }
+
+    #[test]
+    fn value_compacting() {
+        let mut builder = Trie::builder();
+        for (label, value_exact, value_prefix) in [
+            ("a", 123, 123),
+            ("bc", 123, 123),
+            ("a/bc/de/f", 123, 456),
+            ("a/bc", 123, 123),
+            ("a/bc/de/g", 123, 123),
+        ] {
+            assert!(!builder.push(label.as_bytes().to_vec(), Some(value_exact), value_prefix));
+        }
+        let trie = builder.build();
+        assert_eq!(trie.values.len(), 2);
     }
 }

@@ -62,7 +62,7 @@ impl<Ctx> DerefMut for VirtualHostsCtx<Ctx> {
 }
 
 /// Handler for Pingora’s `request_filter` phase
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct VirtualHostsHandler<H: Debug> {
     handlers: Router<(bool, H)>,
     aliases: HashMap<String, String>,
@@ -209,7 +209,7 @@ where
 
 impl<C, H> TryFrom<VirtualHostsConf<C>> for VirtualHostsHandler<H>
 where
-    H: Debug,
+    H: Debug + Eq,
     C: TryInto<H, Error = Box<Error>> + Default,
 {
     type Error = Box<Error>;
@@ -253,12 +253,12 @@ mod tests {
     use module_utils::{DeserializeMap, FromYaml};
     use test_log::test;
 
-    #[derive(Debug, Default, DeserializeMap)]
+    #[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
     struct Conf {
         result: RequestFilterResult,
     }
 
-    #[derive(Debug)]
+    #[derive(Debug, PartialEq, Eq)]
     struct Handler {
         result: RequestFilterResult,
     }

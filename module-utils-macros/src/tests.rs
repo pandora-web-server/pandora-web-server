@@ -20,11 +20,12 @@ use std::collections::{BTreeMap, HashMap};
 use std::fmt::Debug;
 use test_log::test;
 
-#[derive(Debug, Default, DeserializeMap)]
+#[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
 struct Handler1Conf {
     handle_request: bool,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 struct Handler1 {
     handle_request: bool,
 }
@@ -59,7 +60,7 @@ impl RequestFilter for Handler1 {
     }
 }
 
-#[derive(Debug, DeserializeMap)]
+#[derive(Debug, PartialEq, Eq, DeserializeMap)]
 struct Handler2Conf<T: Default + Sync, U>
 where
     U: Default + Sync,
@@ -79,6 +80,7 @@ impl<T: Default + Sync, U: Default + Sync> Default for Handler2Conf<T, U> {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
 struct Handler2<T: Default + Sync, U: Default + Sync> {
     conf: Handler2Conf<T, U>,
 }
@@ -118,7 +120,7 @@ impl<T: Default + Sync, U: Default + Sync> RequestFilter for Handler2<T, U> {
     }
 }
 
-#[derive(RequestFilter)]
+#[derive(PartialEq, Eq, RequestFilter)]
 struct Handler<T: Default + Sync, U>
 where
     U: Default + Sync,
@@ -188,7 +190,7 @@ async fn handler() -> Result<(), Box<Error>> {
 fn field_attributes() {
     use module_utils::serde::{de::Deserializer, Deserialize};
 
-    #[derive(Debug, Default)]
+    #[derive(Debug, Default, PartialEq, Eq)]
     struct Blub {
         value: String,
     }
@@ -204,7 +206,7 @@ fn field_attributes() {
         }
     }
 
-    #[derive(Debug, Default, DeserializeMap)]
+    #[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
     struct Blob {
         value: String,
     }
@@ -216,7 +218,7 @@ fn field_attributes() {
         Blub::deserialize(deserializer)
     }
 
-    #[derive(Debug, Default, DeserializeMap)]
+    #[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
     struct Conf {
         #[module_utils(rename = "v1", alias = "hi1")]
         #[module_utils(alias = "another1")]
@@ -379,12 +381,12 @@ fn from_yaml_seed() {
     }
 
     {
-        #[derive(Debug, Default, DeserializeMap, PartialEq, Eq)]
+        #[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
         struct InnerConf {
             value: Vec<bool>,
         }
 
-        #[derive(Debug, Default, DeserializeMap)]
+        #[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
         struct Conf {
             map: HashMap<String, InnerConf>,
         }

@@ -224,7 +224,7 @@ pub struct AuthOpt {
 }
 
 /// Login rate limits
-#[derive(Debug, DeserializeMap)]
+#[derive(Debug, PartialEq, Eq, DeserializeMap)]
 pub struct AuthRateLimits {
     /// Total number of requests allowed per second
     ///
@@ -251,7 +251,7 @@ impl Default for AuthRateLimits {
 }
 
 /// Texts used on the auth page
-#[derive(Debug, DeserializeMap)]
+#[derive(Debug, PartialEq, Eq, DeserializeMap)]
 pub struct AuthPageStrings {
     /// Title of the authentication page
     pub title: String,
@@ -340,7 +340,7 @@ where
 }
 
 /// Session settings (page mode only)
-#[derive(Debug, DeserializeMap)]
+#[derive(Debug, PartialEq, Eq, DeserializeMap)]
 pub struct AuthPageSession {
     /// URI path of the page to be used for logging in instead of the default login page.
     #[module_utils(deserialize_with = "deserialize_uri")]
@@ -383,7 +383,7 @@ impl Default for AuthPageSession {
 }
 
 /// Authentication configuration
-#[derive(Debug, DeserializeMap)]
+#[derive(Debug, PartialEq, Eq, DeserializeMap)]
 pub struct AuthConf {
     /// If `true`, the credentials of failed login attempts will be displayed on the resulting
     /// 401 Unauthorized page.
@@ -460,7 +460,7 @@ impl Default for AuthConf {
 }
 
 /// Handler for Pingora’s `request_filter` phase
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct AuthHandler {
     conf: AuthConf,
 }

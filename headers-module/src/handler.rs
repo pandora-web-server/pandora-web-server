@@ -22,7 +22,7 @@ use crate::configuration::{Header, HeadersConf};
 use crate::processing::{IntoMergedConf, MergedConf};
 
 /// Handler for Pingora’s `request_filter` phase
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct HeadersHandler {
     router: Router<MergedConf>,
     fallback_router: Router<MergedConf>,
@@ -145,7 +145,7 @@ mod tests {
     use std::ops::{Deref, DerefMut};
     use test_log::test;
 
-    #[derive(Debug, Default, DeserializeMap)]
+    #[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
     struct TestConf {
         send_response: bool,
     }

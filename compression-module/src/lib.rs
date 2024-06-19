@@ -88,7 +88,7 @@ pub struct CompressionOpt {
 }
 
 /// Configuration settings of the compression module
-#[derive(Debug, Default, DeserializeMap)]
+#[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
 pub struct CompressionConf {
     /// Compression level to be used for dynamic compression (omit to disable compression).
     pub compression_level: Option<u32>,
@@ -112,7 +112,7 @@ impl CompressionConf {
 }
 
 /// Handler for Pingora’s `request_filter` phase
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct CompressionHandler {
     conf: CompressionConf,
 }
@@ -156,7 +156,7 @@ mod tests {
     use module_utils::FromYaml;
     use test_log::test;
 
-    #[derive(Debug, DeserializeMap, Default)]
+    #[derive(Debug, PartialEq, Eq, DeserializeMap, Default)]
     struct TestConf {}
 
     #[derive(Debug)]

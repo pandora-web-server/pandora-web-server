@@ -31,7 +31,7 @@
 //! retrieves the previously selected upstream peer.
 //!
 //! ```rust
-//! use module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
+//! use module_utils::{merge_conf, merge_opt, FromYaml};
 //! use startup_module::{DefaultApp, StartupConf, StartupOpt};
 //! use structopt::StructOpt;
 //! use upstream_module::{UpstreamConf, UpstreamHandler, UpstreamOpt};
@@ -92,7 +92,7 @@ where
 }
 
 /// Configuration settings of the compression module
-#[derive(Debug, Default, DeserializeMap)]
+#[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
 pub struct UpstreamConf {
     /// http:// or https:// URL identifying the server that requests should be forwarded for.
     /// Path and query parts of the URL have no effect.
@@ -111,7 +111,7 @@ impl UpstreamConf {
 }
 
 /// Context data of the handler
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UpstreamContext {
     addr: SocketAddr,
     tls: bool,
@@ -119,7 +119,7 @@ pub struct UpstreamContext {
 }
 
 /// Handler for Pingora’s `request_filter` phase
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct UpstreamHandler {
     host_port: String,
     context: Option<UpstreamContext>,

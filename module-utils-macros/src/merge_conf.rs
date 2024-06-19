@@ -24,7 +24,11 @@ pub(crate) fn merge_conf(input: TokenStream) -> Result<TokenStream, Error> {
 
     // Derive Debug, Default and DeserializeMap
     let attributes = quote! {
-        #[derive(::std::fmt::Debug, ::std::default::Default, ::module_utils::DeserializeMap)]
+        #[derive(
+            ::std::fmt::Debug,
+            ::std::default::Default,
+            ::module_utils::DeserializeMap
+        )]
     };
     let attributes = Attribute::parse_outer.parse2(attributes)?;
     input.attrs.extend(attributes);

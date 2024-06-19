@@ -77,14 +77,14 @@ use structopt::StructOpt;
 use upstream_module::UpstreamHandler;
 use virtual_hosts_module::VirtualHostsHandler;
 
-#[derive(Debug, RequestFilter)]
+#[derive(Debug, PartialEq, Eq, RequestFilter)]
 struct Handler {
     anonymization: IPAnonymizationHandler,
     headers: HeadersHandler,
     virtual_hosts: VirtualHostsHandler<HostHandler>,
 }
 
-#[derive(Debug, RequestFilter)]
+#[derive(Debug, PartialEq, Eq, RequestFilter)]
 struct HostHandler {
     log: CommonLogHandler,
     compression: CompressionHandler,

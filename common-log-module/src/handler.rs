@@ -58,7 +58,7 @@ fn normalize_path(path: PathBuf) -> Result<PathBuf, Box<Error>> {
 }
 
 /// Handler for Pingora’s `request_filter` phase
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct CommonLogHandler {
     conf: CommonLogConf,
 }

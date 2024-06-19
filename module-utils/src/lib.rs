@@ -45,7 +45,7 @@ pub use serde_yaml;
 pub use structopt;
 
 /// Request filter result indicating how the current request should be processed further
-#[derive(Debug, Copy, Clone, PartialEq, Default, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default, Deserialize)]
 pub enum RequestFilterResult {
     /// Response has been sent, no further processing should happen. Other Pingora phases should
     /// not be triggered.
