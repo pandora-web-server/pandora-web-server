@@ -19,6 +19,7 @@
 //! * Efficient lookup
 //! * The labels are segmented with a separator character (forward slash) and only full segment
 //!   matches are accepted.
+//! * Different value returned for exact and prefix matches
 
 use std::ops::{Deref, Range};
 
@@ -117,7 +118,8 @@ impl<Value> Deref for LookupResult<'_, Value> {
 #[derive(Debug)]
 struct Node {
     label: Range<usize>,
-    value: Option<usize>,
+    value_exact: Option<usize>,
+    value_prefix: Option<usize>,
     children: Range<usize>,
 }
 
@@ -128,6 +130,16 @@ impl<Value> Trie<Value> {
     /// Returns a builder instance that can be used to set up the trie.
     pub(crate) fn builder() -> TrieBuilder<Value> {
         TrieBuilder::<Value>::new()
+    }
+
+    /// Converts a value index into a lookup result
+    fn to_lookup_result(
+        &self,
+        result: Option<(usize, usize)>,
+    ) -> Option<(LookupResult<'_, Value>, usize)> {
+        result
+            .and_then(|(index, segment)| Some((self.values.get(index)?, index, segment)))
+            .map(|(value, index, segment)| (LookupResult::new(value, index), segment))
     }
 
     /// Looks up a particular label in the trie.
@@ -141,23 +153,22 @@ impl<Value> Trie<Value> {
     where
         L: Iterator<Item = &'a [u8]>,
     {
-        let mut result = None;
+        let mut result_exact;
+        let mut result_prefix = None;
         let mut current = self.nodes.get(Self::ROOT)?;
         let mut current_segment = 0;
         loop {
-            if let Some(value) = current.value {
-                result = Some((
-                    LookupResult::new(self.values.get(value)?, value),
-                    current_segment,
-                ));
+            result_exact = current.value_exact.map(|value| (value, current_segment));
+            if let Some(value) = current.value_prefix {
+                result_prefix = Some((value, current_segment));
             }
 
             let segment = if let Some(segment) = label.next() {
                 current_segment += 1;
                 segment
             } else {
-                // End of label, return whatever we’ve got
-                return result;
+                // End of label, return either exact or prefix result
+                return self.to_lookup_result(result_exact.or(result_prefix));
             };
 
             // TODO: Binary search might be more efficient here
@@ -180,7 +191,7 @@ impl<Value> Trie<Value> {
                             segment
                         } else {
                             // End of label, return whatever we’ve got
-                            return result;
+                            return self.to_lookup_result(result_prefix);
                         };
 
                         let length =
@@ -189,7 +200,7 @@ impl<Value> Trie<Value> {
                             label_start += length;
                         } else {
                             // Got only a partial match
-                            return result;
+                            return self.to_lookup_result(result_prefix);
                         }
                     }
 
@@ -200,7 +211,7 @@ impl<Value> Trie<Value> {
             }
 
             if !found_match {
-                return result;
+                return self.to_lookup_result(result_prefix);
             }
         }
     }
@@ -230,7 +241,8 @@ pub(crate) struct TrieBuilder<Value> {
 struct BuilderNode<Value> {
     label: Vec<u8>,
     children: Vec<BuilderNode<Value>>,
-    value: Option<Value>,
+    value_exact: Option<Value>,
+    value_prefix: Option<Value>,
 }
 
 impl<Value> TrieBuilder<Value> {
@@ -243,7 +255,8 @@ impl<Value> TrieBuilder<Value> {
             root: BuilderNode::<Value> {
                 label: Vec::new(),
                 children: Vec::new(),
-                value: None,
+                value_exact: None,
+                value_prefix: None,
             },
         }
     }
@@ -283,7 +296,8 @@ impl<Value> TrieBuilder<Value> {
                     let mut new_node = BuilderNode {
                         label: head,
                         children: Vec::new(),
-                        value: None,
+                        value_exact: None,
+                        value_prefix: None,
                     };
 
                     std::mem::swap(node, &mut new_node);
@@ -305,7 +319,12 @@ impl<Value> TrieBuilder<Value> {
     ///
     /// The label is expected to be normalized: no separator characters at the beginning or end, and
     /// always only one separator character used to separate segments.
-    pub(crate) fn push(&mut self, mut label: Vec<u8>, value: Value) -> bool {
+    pub(crate) fn push(
+        &mut self,
+        mut label: Vec<u8>,
+        value_exact: Option<Value>,
+        value_prefix: Value,
+    ) -> bool {
         let node = Self::find_insertion_point(
             &mut self.root,
             &mut self.nodes,
@@ -315,21 +334,34 @@ impl<Value> TrieBuilder<Value> {
 
         if label.is_empty() {
             // Exact match, replace the value for this node
-            let had_value = node.value.is_some();
+            if node.value_exact.is_some() {
+                self.values -= 1;
+            }
+            node.value_exact = value_exact;
+            if node.value_exact.is_some() {
+                self.values += 1;
+            }
+
+            let had_value = node.value_prefix.is_some();
             if !had_value {
                 self.values += 1;
             }
-            node.value = Some(value);
+            node.value_prefix = Some(value_prefix);
             had_value
         } else {
             // Insert new node as child of the current one
             self.nodes += 1;
-            self.values += 1;
+            if value_exact.is_some() {
+                self.values += 2;
+            } else {
+                self.values += 1;
+            }
             self.labels += label.len();
             node.children.push(BuilderNode {
                 label,
                 children: Vec::new(),
-                value: Some(value),
+                value_exact,
+                value_prefix: Some(value_prefix),
             });
             false
         }
@@ -342,7 +374,8 @@ impl<Value> TrieBuilder<Value> {
     fn push_trie_node(nodes: &mut Vec<Node>) {
         nodes.push(Node {
             label: 0..0,
-            value: None,
+            value_exact: None,
+            value_prefix: None,
             children: 0..0,
         });
     }
@@ -361,8 +394,12 @@ impl<Value> TrieBuilder<Value> {
         nodes[index].label = labels.len()..labels.len() + current.label.len();
         labels.append(&mut current.label);
 
-        if let Some(value) = current.value {
-            nodes[index].value = Some(values.len());
+        if let Some(value) = current.value_exact {
+            nodes[index].value_exact = Some(values.len());
+            values.push(value);
+        }
+        if let Some(value) = current.value_prefix {
+            nodes[index].value_prefix = Some(values.len());
             values.push(value);
         }
 
@@ -435,17 +472,17 @@ mod tests {
     #[test]
     fn lookup_with_root_value() {
         let mut builder = Trie::builder();
-        for (label, value) in [
-            ("", 1),
-            ("a", 2),
-            ("bc", 7),
-            ("a/bc/de/f", 3),
-            ("a/bc", 4),
-            ("a/bc/de/g", 5),
+        for (label, value_exact, value_prefix) in [
+            ("", 1, 11),
+            ("a", 2, 12),
+            ("bc", 7, 17),
+            ("a/bc/de/f", 3, 13),
+            ("a/bc", 4, 14),
+            ("a/bc/de/g", 5, 15),
         ] {
-            assert!(!builder.push(label.as_bytes().to_vec(), value));
+            assert!(!builder.push(label.as_bytes().to_vec(), Some(value_exact), value_prefix));
         }
-        assert!(builder.push("a/bc".as_bytes().to_vec(), 6));
+        assert!(builder.push("a/bc".as_bytes().to_vec(), Some(6), 16));
         let trie = builder.build();
 
         assert_eq!(
@@ -458,7 +495,7 @@ mod tests {
         );
         assert_eq!(
             trie.lookup(make_key("x")).map(|(v, i)| (*v, i)),
-            Some((1, 0))
+            Some((11, 0))
         );
         assert_eq!(
             trie.lookup(make_key("bc")).map(|(v, i)| (*v, i)),
@@ -466,7 +503,7 @@ mod tests {
         );
         assert_eq!(
             trie.lookup(make_key("x/y")).map(|(v, i)| (*v, i)),
-            Some((1, 0))
+            Some((11, 0))
         );
         assert_eq!(
             trie.lookup(make_key("a/bc")).map(|(v, i)| (*v, i)),
@@ -474,15 +511,15 @@ mod tests {
         );
         assert_eq!(
             trie.lookup(make_key("a/b")).map(|(v, i)| (*v, i)),
-            Some((2, 1))
+            Some((12, 1))
         );
         assert_eq!(
             trie.lookup(make_key("a/bcde")).map(|(v, i)| (*v, i)),
-            Some((2, 1))
+            Some((12, 1))
         );
         assert_eq!(
             trie.lookup(make_key("a/bc/de")).map(|(v, i)| (*v, i)),
-            Some((6, 2))
+            Some((16, 2))
         );
         assert_eq!(
             trie.lookup(make_key("a/bc/de/f")).map(|(v, i)| (*v, i)),
@@ -490,7 +527,7 @@ mod tests {
         );
         assert_eq!(
             trie.lookup(make_key("a/bc/de/fh")).map(|(v, i)| (*v, i)),
-            Some((6, 2))
+            Some((16, 2))
         );
         assert_eq!(
             trie.lookup(make_key("a/bc/de/g")).map(|(v, i)| (*v, i)),
@@ -498,23 +535,23 @@ mod tests {
         );
         assert_eq!(
             trie.lookup(make_key("a/bc/de/h")).map(|(v, i)| (*v, i)),
-            Some((6, 2))
+            Some((16, 2))
         );
     }
 
     #[test]
     fn lookup_without_root_value() {
         let mut builder = Trie::builder();
-        for (label, value) in [
-            ("a", 2),
-            ("bc", 7),
-            ("a/bc/de/f", 3),
-            ("a/bc", 4),
-            ("a/bc/de/g", 5),
+        for (label, value_exact, value_prefix) in [
+            ("a", 2, 12),
+            ("bc", 7, 17),
+            ("a/bc/de/f", 3, 13),
+            ("a/bc", 4, 14),
+            ("a/bc/de/g", 5, 15),
         ] {
-            assert!(!builder.push(label.as_bytes().to_vec(), value));
+            assert!(!builder.push(label.as_bytes().to_vec(), Some(value_exact), value_prefix));
         }
-        assert!(builder.push("a/bc".as_bytes().to_vec(), 6));
+        assert!(builder.push("a/bc".as_bytes().to_vec(), Some(6), 16));
         let trie = builder.build();
 
         assert_eq!(trie.lookup(make_key("")).map(|(v, i)| (*v, i)), None);
@@ -536,15 +573,15 @@ mod tests {
         );
         assert_eq!(
             trie.lookup(make_key("a/b")).map(|(v, i)| (*v, i)),
-            Some((2, 1))
+            Some((12, 1))
         );
         assert_eq!(
             trie.lookup(make_key("a/bcde")).map(|(v, i)| (*v, i)),
-            Some((2, 1))
+            Some((12, 1))
         );
         assert_eq!(
             trie.lookup(make_key("a/bc/de")).map(|(v, i)| (*v, i)),
-            Some((6, 2))
+            Some((16, 2))
         );
         assert_eq!(
             trie.lookup(make_key("a/bc/de/f")).map(|(v, i)| (*v, i)),
@@ -552,7 +589,7 @@ mod tests {
         );
         assert_eq!(
             trie.lookup(make_key("a/bc/de/fh")).map(|(v, i)| (*v, i)),
-            Some((6, 2))
+            Some((16, 2))
         );
         assert_eq!(
             trie.lookup(make_key("a/bc/de/g")).map(|(v, i)| (*v, i)),
@@ -560,7 +597,7 @@ mod tests {
         );
         assert_eq!(
             trie.lookup(make_key("a/bc/de/h")).map(|(v, i)| (*v, i)),
-            Some((6, 2))
+            Some((16, 2))
         );
     }
 }

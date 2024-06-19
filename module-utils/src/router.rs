@@ -49,11 +49,11 @@ use crate::trie::{Trie, TrieBuilder, SEPARATOR};
 /// assert!(router.lookup("example.com", "/dir/file").is_some_and(|(value, _)| *value == "Website subdirectory"));
 /// ```
 #[derive(Debug)]
-pub struct Router<Value: Debug> {
+pub struct Router<Value> {
     trie: Trie<Value>,
 }
 
-impl<Value: Debug> Router<Value> {
+impl<Value> Router<Value> {
     /// Returns a builder instance that can be used to set up a router.
     ///
     /// Once set up, the router data structure is read-only and can be queried without any memory
@@ -149,17 +149,20 @@ impl<'a> AsRef<[u8]> for PathTail<'a> {
 
 /// The router builder used to set up a [`Router`] instance
 #[derive(Debug)]
-pub struct RouterBuilder<Value: Debug> {
+pub struct RouterBuilder<Value> {
     inner: TrieBuilder<Value>,
 }
 
-impl<Value: Debug> RouterBuilder<Value> {
+impl<Value> RouterBuilder<Value> {
     /// Adds a host/path combination with the respective value to the routing table.
     ///
     /// While it is possible to use an empty host name, it is advisable to keep entries with an
     /// empty host name and those with non-empty host names in separate routers. Otherwise lookup
     /// might confuse host names and first segments of the path name.
-    pub fn push(&mut self, host: impl AsRef<[u8]>, path: impl AsRef<[u8]>, value: Value) {
+    pub fn push(&mut self, host: impl AsRef<[u8]>, path: impl AsRef<[u8]>, value: Value)
+    where
+        Value: Debug,
+    {
         let key = make_key(&host, &path).fold(Vec::new(), |mut result, segment| {
             if !result.is_empty() {
                 result.push(SEPARATOR);
@@ -167,7 +170,7 @@ impl<Value: Debug> RouterBuilder<Value> {
             result.extend_from_slice(segment);
             result
         });
-        if self.inner.push(key, value) {
+        if self.inner.push(key, None, value) {
             warn!(
                 "Multiple routing entries for host {} and path {}, only considering one",
                 String::from_utf8_lossy(host.as_ref()),
