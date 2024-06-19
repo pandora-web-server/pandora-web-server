@@ -53,7 +53,7 @@ impl ProxyHttp for RedirectorApp {
 
         let mut header = ResponseHeader::build(status, Some(4))?;
         header.append_header(header::CONTENT_LENGTH, text.len().to_string())?;
-        header.append_header(header::CONTENT_TYPE, "text/html")?;
+        header.append_header(header::CONTENT_TYPE, "text/html; charset=utf-8")?;
         header.append_header(
             header::LOCATION,
             format!(

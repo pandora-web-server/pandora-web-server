@@ -193,7 +193,7 @@ async fn dir_index() -> Result<(), Box<Error>> {
         &session,
         vec![
             ("Content-Length", &text.len().to_string()),
-            ("Content-Type", "text/html"),
+            ("Content-Type", "text/html; charset=utf-8"),
         ],
     );
     assert_body(&session, &text);
@@ -216,7 +216,7 @@ async fn no_trailing_slash() -> Result<(), Box<Error>> {
         &session,
         vec![
             ("Content-Length", &text.len().to_string()),
-            ("Content-Type", "text/html"),
+            ("Content-Type", "text/html; charset=utf-8"),
             ("location", "/subdir/?xyz"),
         ],
     );
@@ -235,7 +235,7 @@ async fn no_trailing_slash() -> Result<(), Box<Error>> {
         &session,
         vec![
             ("Content-Length", &text.len().to_string()),
-            ("Content-Type", "text/html"),
+            ("Content-Type", "text/html; charset=utf-8"),
             ("location", "/static/subdir/?xyz"),
         ],
     );
@@ -256,7 +256,7 @@ async fn no_trailing_slash() -> Result<(), Box<Error>> {
         &session,
         vec![
             ("Content-Length", &text.len().to_string()),
-            ("Content-Type", "text/html"),
+            ("Content-Type", "text/html; charset=utf-8"),
         ],
     );
     assert_body(&session, &text);
@@ -279,7 +279,7 @@ async fn unnecessary_percent_encoding() -> Result<(), Box<Error>> {
         &session,
         vec![
             ("Content-Length", &text.len().to_string()),
-            ("Content-Type", "text/html"),
+            ("Content-Type", "text/html; charset=utf-8"),
             ("location", "/file.txt"),
         ],
     );
@@ -303,7 +303,7 @@ async fn complex_path() -> Result<(), Box<Error>> {
         &session,
         vec![
             ("Content-Length", &text.len().to_string()),
-            ("Content-Type", "text/html"),
+            ("Content-Type", "text/html; charset=utf-8"),
             ("location", "/file.txt?file%2Etxt"),
         ],
     );
@@ -357,7 +357,7 @@ async fn no_file() -> Result<(), Box<Error>> {
         &session,
         vec![
             ("Content-Length", &text.len().to_string()),
-            ("Content-Type", "text/html"),
+            ("Content-Type", "text/html; charset=utf-8"),
         ],
     );
     assert_body(&session, &text);
@@ -407,7 +407,7 @@ async fn no_index() -> Result<(), Box<Error>> {
         &session,
         vec![
             ("Content-Length", &text.len().to_string()),
-            ("Content-Type", "text/html"),
+            ("Content-Type", "text/html; charset=utf-8"),
         ],
     );
     assert_body(&session, &text);
@@ -430,7 +430,7 @@ async fn wrong_method() -> Result<(), Box<Error>> {
         &session,
         vec![
             ("Content-Length", &text.len().to_string()),
-            ("Content-Type", "text/html"),
+            ("Content-Type", "text/html; charset=utf-8"),
         ],
     );
     assert_body(&session, &text);
@@ -453,7 +453,7 @@ async fn wrong_method_no_file() -> Result<(), Box<Error>> {
         &session,
         vec![
             ("Content-Length", &text.len().to_string()),
-            ("Content-Type", "text/html"),
+            ("Content-Type", "text/html; charset=utf-8"),
         ],
     );
     assert_body(&session, &text);
@@ -495,7 +495,7 @@ async fn head_request() -> Result<(), Box<Error>> {
         &session,
         vec![
             ("Content-Length", &text.len().to_string()),
-            ("Content-Type", "text/html"),
+            ("Content-Type", "text/html; charset=utf-8"),
         ],
     );
     assert_body(&session, "");
@@ -511,7 +511,7 @@ async fn head_request() -> Result<(), Box<Error>> {
         &session,
         vec![
             ("Content-Length", &text.len().to_string()),
-            ("Content-Type", "text/html"),
+            ("Content-Type", "text/html; charset=utf-8"),
             ("location", "/subdir/"),
         ],
     );
@@ -535,7 +535,7 @@ async fn bad_request() -> Result<(), Box<Error>> {
         &session,
         vec![
             ("Content-Length", &text.len().to_string()),
-            ("Content-Type", "text/html"),
+            ("Content-Type", "text/html; charset=utf-8"),
         ],
     );
     assert_body(&session, &text);
@@ -550,7 +550,7 @@ async fn bad_request() -> Result<(), Box<Error>> {
         &session,
         vec![
             ("Content-Length", &text.len().to_string()),
-            ("Content-Type", "text/html"),
+            ("Content-Type", "text/html; charset=utf-8"),
         ],
     );
     assert_body(&session, &text);
