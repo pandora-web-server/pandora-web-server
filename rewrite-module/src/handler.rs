@@ -18,14 +18,11 @@ use async_trait::async_trait;
 use http::{HeaderValue, StatusCode};
 use log::{debug, error, trace};
 use module_utils::pingora::{Error, SessionWrapper};
-use module_utils::router::Router;
+use module_utils::router::{Router, RouterBuilder};
 use module_utils::standard_response::redirect_response;
 use module_utils::{RequestFilter, RequestFilterResult};
-use std::collections::HashMap;
 
-use crate::configuration::{
-    RegexMatch, RewriteConf, RewriteRule, RewriteType, VariableInterpolation,
-};
+use crate::configuration::{RegexMatch, RewriteConf, RewriteType, VariableInterpolation};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Rule {
@@ -35,60 +32,48 @@ struct Rule {
     r#type: RewriteType,
 }
 
+struct RuleMerger;
+impl module_utils::router::Merge<Vec<Rule>> for RuleMerger {
+    fn merge(current: &mut Vec<Rule>, new: Vec<Rule>) {
+        current.extend(new);
+    }
+}
+
 /// Handler for Pingora’s `request_filter` phase
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RewriteHandler {
-    router: Router<(Vec<Rule>, Vec<Rule>)>,
+    router: Router<Vec<Rule>>,
 }
 
 impl TryFrom<RewriteConf> for RewriteHandler {
     type Error = Box<Error>;
 
-    fn try_from(value: RewriteConf) -> Result<Self, Self::Error> {
-        debug!("Rewrite configuration received: {value:#?}");
+    fn try_from(mut conf: RewriteConf) -> Result<Self, Self::Error> {
+        debug!("Rewrite configuration received: {conf:#?}");
 
-        let mut merged = HashMap::new();
+        let mut builder = RouterBuilder::<Vec<Rule>, RuleMerger>::default();
 
-        // Add all configured paths
-        for rule in &value.rewrite_rules {
-            merged.insert(
-                rule.from.path.to_owned(),
-                (Vec::<&RewriteRule>::new(), Vec::<&RewriteRule>::new()),
-            );
-        }
+        // Add in reverse order, so that the first rule listed in configuration takes precedence.
+        conf.rewrite_rules.reverse();
 
-        // Add all rules matching respective paths
-        for rule in &value.rewrite_rules {
-            for (path, (list_exact, list_prefix)) in merged.iter_mut() {
-                if rule.from.matches(path) {
-                    list_exact.push(rule);
-                    if rule.from.prefix {
-                        list_prefix.push(rule);
-                    }
-                }
+        // Add exact rules last, making sure they take precedence over prefix rules with the same
+        // path.
+        conf.rewrite_rules.sort_by_key(|rule| !rule.from.prefix);
+
+        for rule in conf.rewrite_rules {
+            let from = rule.from;
+            let rule = Rule {
+                from_regex: rule.from_regex,
+                query_regex: rule.query_regex,
+                to: rule.to,
+                r#type: rule.r#type,
+            };
+
+            if from.prefix {
+                builder.push("", from.path, vec![rule.clone()], Some(vec![rule]));
+            } else {
+                builder.push("", from.path, vec![rule], None);
             }
-        }
-
-        trace!("Merged rewrite configuration into: {merged:#?}");
-
-        fn convert_list(mut list: Vec<&RewriteRule>) -> Vec<Rule> {
-            // Make sure more specific rules go first
-            list.sort_by(|rule1, rule2| rule2.from.cmp(&rule1.from));
-            list.into_iter()
-                .map(|rule| Rule {
-                    from_regex: rule.from_regex.clone(),
-                    query_regex: rule.query_regex.clone(),
-                    to: rule.to.clone(),
-                    r#type: rule.r#type,
-                })
-                .collect()
-        }
-
-        let mut builder = Router::builder();
-        for (path, (list_exact, list_prefix)) in merged.into_iter() {
-            let value_exact = (convert_list(list_exact), convert_list(list_prefix));
-            let value_prefix = value_exact.clone();
-            builder.push("", &path, value_exact, Some(value_prefix));
         }
 
         Ok(Self {
@@ -114,31 +99,26 @@ impl RequestFilter for RewriteHandler {
             let path = session.req_header().uri.path();
             trace!("Determining rewrite rules for path {path}");
 
-            let ((list_exact, list_prefix), tail) =
-                if let Some(match_) = self.router.lookup("", path) {
-                    (match_.0.as_value(), match_.1)
-                } else {
-                    trace!("No match for the path");
-                    return Ok(RequestFilterResult::Unhandled);
-                };
+            let (list, tail) = if let Some(match_) = self.router.lookup("", path) {
+                (match_.0.as_value(), match_.1)
+            } else {
+                trace!("No match for the path");
+                return Ok(RequestFilterResult::Unhandled);
+            };
 
             let tail = tail
                 .as_ref()
                 .map(|t| t.as_ref())
                 .unwrap_or(path.as_bytes())
                 .to_vec();
-            let list = if tail == b"/" {
-                list_exact
-            } else {
-                list_prefix
-            };
             (list, tail)
         };
 
         trace!("Applying rewrite rules: {list:?}");
         trace!("Tail is: {tail:?}");
 
-        for rule in list {
+        // Iterate in reverse order, merging puts rules in reverse order of precedence.
+        for rule in list.iter().rev() {
             if let Some(from_regex) = &rule.from_regex {
                 if !from_regex.matches(session.req_header().uri.path()) {
                     continue;

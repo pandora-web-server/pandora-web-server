@@ -39,23 +39,6 @@ pub struct PathMatch {
     pub prefix: bool,
 }
 
-impl PathMatch {
-    /// Checks whether a particular path is matched
-    ///
-    /// Note: The `path` parameter should be a *normalized* path, without leading or trailing
-    /// slashes and with exactly one slash character used as separator.
-    pub(crate) fn matches(&self, path: &str) -> bool {
-        if self.prefix {
-            path.starts_with(&self.path)
-                && (path.len() == self.path.len()
-                    || self.path.is_empty()
-                    || path.as_bytes()[self.path.len()] == b'/')
-        } else {
-            self.path == path
-        }
-    }
-}
-
 impl<'a> From<Cow<'a, str>> for PathMatch {
     fn from(value: Cow<'a, str>) -> Self {
         let (path, prefix) = if let Some(path) = value.strip_suffix("/*") {
@@ -370,25 +353,6 @@ mod tests {
     use super::*;
 
     use test_log::test;
-
-    #[test]
-    fn path_match() {
-        let path_match = PathMatch::from("/abc");
-        assert!(path_match.matches("abc"));
-        assert!(!path_match.matches("abcdef"));
-        assert!(!path_match.matches("abc/xyz"));
-
-        let path_match = PathMatch::from("/abc/*");
-        assert!(path_match.matches("abc"));
-        assert!(!path_match.matches("abcdef"));
-        assert!(path_match.matches("abc/xyz"));
-        assert!(path_match.matches("abc/xyz/file.txt"));
-
-        let path_match = PathMatch::from("//abc//xyz//*");
-        assert!(path_match.matches("abc/xyz"));
-        assert!(!path_match.matches("abcd/xyz"));
-        assert!(path_match.matches("abc/xyz/file.txt"));
-    }
 
     #[test]
     fn variable_interpolation() {
