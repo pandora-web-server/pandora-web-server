@@ -20,6 +20,7 @@
 //! * The labels are segmented with a separator character (forward slash) and only full segment
 //!   matches are accepted.
 //! * Different value returned for exact and prefix matches
+//! * When the same value is used multiple times, only one copy is stored
 
 use std::ops::{Deref, Range};
 
@@ -118,8 +119,8 @@ impl<Value> Deref for LookupResult<'_, Value> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Node {
     label: Range<usize>,
-    value_exact: Option<usize>,
-    value_prefix: Option<usize>,
+    value_exact: Option<(usize, usize)>,
+    value_prefix: Option<(usize, usize)>,
     children: Range<usize>,
 }
 
@@ -159,15 +160,13 @@ impl<Value> Trie<Value> {
         let mut result_exact;
         let mut result_prefix = None;
         let mut current = self.nodes.get(Self::ROOT)?;
-        let mut current_segment = 0;
         loop {
-            result_exact = current.value_exact.map(|value| (value, current_segment));
-            if let Some(value) = current.value_prefix {
-                result_prefix = Some((value, current_segment));
+            result_exact = current.value_exact;
+            if current.value_prefix.is_some() {
+                result_prefix = current.value_prefix;
             }
 
             let segment = if let Some(segment) = label.next() {
-                current_segment += 1;
                 segment
             } else {
                 // End of label, return either exact or prefix result
@@ -190,7 +189,6 @@ impl<Value> Trie<Value> {
                         label_start += 1;
 
                         let segment = if let Some(segment) = label.next() {
-                            current_segment += 1;
                             segment
                         } else {
                             // End of label, return whatever we’ve got
@@ -243,8 +241,8 @@ pub(crate) struct TrieBuilder<Value> {
 struct BuilderNode<Value> {
     label: Vec<u8>,
     children: Vec<BuilderNode<Value>>,
-    value_exact: Option<Value>,
-    value_prefix: Option<Value>,
+    value_exact: Option<(Value, usize)>,
+    value_prefix: Option<(Value, usize)>,
 }
 
 impl<Value: Eq> TrieBuilder<Value> {
@@ -318,13 +316,20 @@ impl<Value: Eq> TrieBuilder<Value> {
 
     /// Adds a value for the given label. Will return `true` if an existing value was overwritten.
     ///
+    /// `value_exact` will only be returned for exact matches. If present, `value_prefix` will be
+    /// returned for any paths starting with the given label.
+    ///
+    /// The values contain a “context” number as a second tuple element. This is used to store the
+    /// number of label segments associated with the value and will be returned by `Trie::lookup`
+    /// along with the matching value.
+    ///
     /// The label is expected to be normalized: no separator characters at the beginning or end, and
     /// always only one separator character used to separate segments.
     pub(crate) fn push(
         &mut self,
         mut label: Vec<u8>,
-        value_exact: Value,
-        value_prefix: Option<Value>,
+        value_exact: (Value, usize),
+        value_prefix: Option<(Value, usize)>,
     ) -> bool {
         let node = Self::find_insertion_point(
             &mut self.root,
@@ -392,11 +397,11 @@ impl<Value: Eq> TrieBuilder<Value> {
         nodes[index].label = labels.len()..labels.len() + current.label.len();
         labels.append(&mut current.label);
 
-        if let Some(value) = current.value_exact {
-            nodes[index].value_exact = Some(Self::add_value(value, values));
+        if let Some((value, context)) = current.value_exact {
+            nodes[index].value_exact = Some((Self::add_value(value, values), context));
         }
-        if let Some(value) = current.value_prefix {
-            nodes[index].value_prefix = Some(Self::add_value(value, values));
+        if let Some((value, context)) = current.value_prefix {
+            nodes[index].value_prefix = Some((Self::add_value(value, values), context));
         }
 
         current.children.sort_by(|a, b| a.label.cmp(&b.label));
@@ -447,6 +452,14 @@ mod tests {
         )
     }
 
+    fn num_segments(path: &str) -> usize {
+        if path.is_empty() {
+            0
+        } else {
+            path.as_bytes().iter().filter(|b| **b == SEPARATOR).count() + 1
+        }
+    }
+
     #[test]
     fn common_prefix() {
         assert_eq!(common_prefix_length(b"", b""), 0);
@@ -476,9 +489,13 @@ mod tests {
             ("a/bc", 4, 14),
             ("a/bc/de/g", 5, 15),
         ] {
-            assert!(!builder.push(label.as_bytes().to_vec(), value_exact, Some(value_prefix)));
+            assert!(!builder.push(
+                label.as_bytes().to_vec(),
+                (value_exact, num_segments(label)),
+                Some((value_prefix, num_segments(label)))
+            ));
         }
-        assert!(builder.push("a/bc".as_bytes().to_vec(), 6, Some(16)));
+        assert!(builder.push("a/bc".as_bytes().to_vec(), (6, 2), Some((16, 2))));
         let trie = builder.build();
 
         assert_eq!(
@@ -545,9 +562,13 @@ mod tests {
             ("a/bc", 4, 14),
             ("a/bc/de/g", 5, 15),
         ] {
-            assert!(!builder.push(label.as_bytes().to_vec(), value_exact, Some(value_prefix)));
+            assert!(!builder.push(
+                label.as_bytes().to_vec(),
+                (value_exact, num_segments(label)),
+                Some((value_prefix, num_segments(label)))
+            ));
         }
-        assert!(builder.push("a/bc".as_bytes().to_vec(), 6, Some(16)));
+        assert!(builder.push("a/bc".as_bytes().to_vec(), (6, 2), Some((16, 2))));
         let trie = builder.build();
 
         assert_eq!(trie.lookup(make_key("")).map(|(v, i)| (*v, i)), None);
@@ -607,7 +628,11 @@ mod tests {
             ("a/bc", 123, 123),
             ("a/bc/de/g", 123, 123),
         ] {
-            assert!(!builder.push(label.as_bytes().to_vec(), value_exact, Some(value_prefix)));
+            assert!(!builder.push(
+                label.as_bytes().to_vec(),
+                (value_exact, 0),
+                Some((value_prefix, 0))
+            ));
         }
         let trie = builder.build();
         assert_eq!(trie.values.len(), 2);

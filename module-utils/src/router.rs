@@ -89,15 +89,15 @@ impl<Value> Router<Value> {
     ) -> Option<(LookupResult<'_, Value>, Option<impl AsRef<[u8]> + 'a>)> {
         let key = make_key(host, path);
         let path = path.as_ref();
-        let ((value, matched_segments), host_segments) = if host.as_ref().is_empty() {
-            (self.fallback.lookup(key)?, 0)
+        let (value, matched_segments) = if host.as_ref().is_empty() {
+            self.fallback.lookup(key)?
         } else {
-            (self.trie.lookup(key)?, 1)
+            self.trie.lookup(key)?
         };
-        let tail = if matched_segments > host_segments {
+        let tail = if matched_segments > 0 {
             Some(PathTail {
                 path,
-                skip_segments: matched_segments - host_segments,
+                skip_segments: matched_segments,
             })
         } else {
             None
@@ -195,8 +195,8 @@ fn normalize_path(path: impl AsRef<[u8]>) -> Vec<u8> {
 #[derive(Debug)]
 struct RouterEntry<Value> {
     path: Vec<u8>,
-    value_exact: Value,
-    value_prefix: Option<Value>,
+    value_exact: (Value, usize),
+    value_prefix: Option<(Value, usize)>,
 }
 
 /// Trait allowing to merge two router values
@@ -233,23 +233,34 @@ impl<Value, Merger: Merge<Value>> Default for RouterBuilder<Value, Merger> {
 }
 
 impl<Value: Clone + Eq, Merger: Merge<Value>> RouterBuilder<Value, Merger> {
+    fn num_segments(path: impl AsRef<[u8]>) -> usize {
+        let path = path.as_ref();
+        if path.is_empty() {
+            0
+        } else {
+            path.iter().filter(|b| **b == SEPARATOR).count() + 1
+        }
+    }
+
     fn merge_into(
         current: &mut RouterEntry<Value>,
-        mut new_exact: Value,
-        new_prefix: Option<Value>,
+        mut new_exact: (Value, usize),
+        new_prefix: Option<(Value, usize)>,
         prefer_existing: bool,
     ) {
         if prefer_existing {
             std::mem::swap(&mut current.value_exact, &mut new_exact);
         }
-        Merger::merge(&mut current.value_exact, new_exact);
+        Merger::merge(&mut current.value_exact.0, new_exact.0);
+        current.value_exact.1 = new_exact.1;
 
         if let Some(mut new_prefix) = new_prefix {
             if let Some(ref mut value_prefix) = &mut current.value_prefix {
                 if prefer_existing {
                     std::mem::swap(value_prefix, &mut new_prefix);
                 }
-                Merger::merge(value_prefix, new_prefix);
+                Merger::merge(&mut value_prefix.0, new_prefix.0);
+                value_prefix.1 = new_prefix.1;
             } else {
                 current.value_prefix = Some(new_prefix);
             }
@@ -257,23 +268,25 @@ impl<Value: Clone + Eq, Merger: Merge<Value>> RouterBuilder<Value, Merger> {
     }
 
     fn merge_from(
-        current_prefix: &Value,
-        new_exact: &mut Value,
-        mut new_prefix: &mut Option<Value>,
+        current_prefix: &(Value, usize),
+        new_exact: &mut (Value, usize),
+        new_prefix: &mut Option<(Value, usize)>,
         prefer_existing: bool,
     ) {
         let mut current = current_prefix.clone();
         if !prefer_existing {
             std::mem::swap(new_exact, &mut current);
         }
-        Merger::merge(new_exact, current);
+        Merger::merge(&mut new_exact.0, current.0);
+        new_exact.1 = current.1;
 
         let mut current = current_prefix.clone();
-        if let Some(new_prefix) = &mut new_prefix {
+        if let Some(new_prefix) = new_prefix {
             if !prefer_existing {
                 std::mem::swap(new_prefix, &mut current);
             }
-            Merger::merge(new_prefix, current);
+            Merger::merge(&mut new_prefix.0, current.0);
+            new_prefix.1 = current.1;
         } else {
             *new_prefix = Some(current);
         }
@@ -281,12 +294,11 @@ impl<Value: Clone + Eq, Merger: Merge<Value>> RouterBuilder<Value, Merger> {
 
     fn merge_value(
         existing: &mut Vec<RouterEntry<Value>>,
-        path: impl AsRef<[u8]>,
-        mut value_exact: Value,
-        mut value_prefix: Option<Value>,
+        path: Vec<u8>,
+        mut value_exact: (Value, usize),
+        mut value_prefix: Option<(Value, usize)>,
         prefer_existing: bool,
     ) {
-        let path = normalize_path(path);
         match existing.binary_search_by_key(&path.as_slice(), |entry| entry.path.as_slice()) {
             Ok(index) => {
                 // Matching entry already exists, merge with it.
@@ -355,12 +367,22 @@ impl<Value: Clone + Eq, Merger: Merge<Value>> RouterBuilder<Value, Merger> {
         value_exact: Value,
         value_prefix: Option<Value>,
     ) {
+        let path = normalize_path(path);
+        let context = Self::num_segments(&path);
+
         let existing = if host.as_ref().is_empty() {
             &mut self.fallbacks
         } else {
             self.entries.entry(host.as_ref().to_vec()).or_default()
         };
-        Self::merge_value(existing, path, value_exact, value_prefix, false);
+
+        Self::merge_value(
+            existing,
+            path,
+            (value_exact, context),
+            value_prefix.map(|v| (v, context)),
+            false,
+        );
     }
 
     /// Translates all rules into a router instance while also merging values if multiple apply to
@@ -371,7 +393,7 @@ impl<Value: Clone + Eq, Merger: Merge<Value>> RouterBuilder<Value, Merger> {
             for entries in self.entries.values_mut() {
                 Self::merge_value(
                     entries,
-                    &fallback_entry.path,
+                    fallback_entry.path.clone(),
                     fallback_entry.value_exact.clone(),
                     fallback_entry.value_prefix.clone(),
                     true,
@@ -565,7 +587,8 @@ mod tests {
 
         assert_eq!(
             lookup(&router, "localhost", "/abc/def"),
-            Some(("ga".to_owned(), "/def".to_owned()))
+            // localhost/* takes priority over /abc/* here, so tail refers to it
+            Some(("ga".to_owned(), "/abc/def".to_owned()))
         );
 
         assert_eq!(
@@ -578,12 +601,9 @@ mod tests {
             Some(("ge".to_owned(), "/".to_owned()))
         );
 
-        // TODO: Tail path isn’t really correct here: path /abc/def exists but it doesn’t actually
-        // apply. Counting matched segments no longer works, we should remember the level that the
-        // value came from.
         assert_eq!(
             lookup(&router, "example.com", "/abc/def/g"),
-            Some(("g".to_owned(), "/g".to_owned()))
+            Some(("g".to_owned(), "/def/g".to_owned()))
         );
     }
 }

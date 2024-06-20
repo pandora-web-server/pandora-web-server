@@ -588,7 +588,6 @@ mod tests {
         Ok(())
     }
 
-    #[ignore]
     #[test(tokio::test)]
     async fn subpath_exact_match_with_suffix() -> Result<(), Box<Error>> {
         let (handler, mut ctx) = handler(true);
@@ -598,7 +597,10 @@ mod tests {
             RequestFilterResult::Unhandled
         );
         assert_eq!(session.req_header().uri, "/file.txt/xyz");
-        assert_eq!(session.extensions().get::<Uri>().unwrap(), "/file.txt/xyz");
+        assert_eq!(
+            session.extensions().get::<Uri>().unwrap(),
+            "/subdir/file.txt/xyz"
+        );
         Ok(())
     }
 }
