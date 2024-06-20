@@ -18,7 +18,6 @@ use log::warn;
 use module_utils::pingora::{Error, HttpPeer, ResponseHeader, SessionWrapper};
 use module_utils::router::Router;
 use module_utils::{RequestFilter, RequestFilterResult};
-use std::collections::HashMap;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
@@ -65,8 +64,6 @@ impl<Ctx> DerefMut for VirtualHostsCtx<Ctx> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VirtualHostsHandler<H: Debug> {
     handlers: Router<(bool, H)>,
-    aliases: HashMap<String, String>,
-    default: Option<String>,
 }
 
 impl<H: Debug> VirtualHostsHandler<H> {
@@ -129,20 +126,8 @@ where
         let path = session.req_header().uri.path();
         let handler = session
             .host()
-            .and_then(|host| {
-                if let Some(handler) = self.best_match(host.as_ref(), path) {
-                    Some(handler)
-                } else if let Some(alias) = self.aliases.get(host.as_ref()) {
-                    self.best_match(alias, path)
-                } else {
-                    None
-                }
-            })
-            .or_else(|| {
-                self.default
-                    .as_ref()
-                    .and_then(|default| self.best_match(default, path))
-            });
+            .and_then(|host| self.best_match(host.as_ref(), path))
+            .or_else(|| self.best_match("", path));
 
         if let Some((handler, index, new_path)) = handler {
             ctx.index = Some(index);
@@ -216,23 +201,41 @@ where
 
     fn try_from(conf: VirtualHostsConf<C>) -> Result<Self, Box<Error>> {
         let mut handlers = Router::builder();
-        let mut aliases = HashMap::new();
         let mut default = None;
         for (host, host_conf) in conf.vhosts.into_iter() {
+            if host.is_empty() {
+                warn!("ignoring empty host name in virtual hosts configuration, please use `default` setting instead");
+                continue;
+            }
+
+            let handler = host_conf.config.try_into()?;
             for alias in host_conf.aliases.into_iter() {
-                aliases.insert(alias, host.clone());
+                if alias.is_empty() {
+                    warn!("ignoring empty alias for host name {host}, please use `default` setting instead");
+                    continue;
+                }
+                handlers.push(
+                    alias,
+                    "",
+                    (false, handler.clone()),
+                    Some((false, handler.clone())),
+                );
             }
             if host_conf.default {
                 if let Some(previous) = &default {
                     warn!("both {previous} and {host} are marked as default virtual host, ignoring the latter");
                 } else {
                     default = Some(host.clone());
+                    handlers.push(
+                        "",
+                        "",
+                        (false, handler.clone()),
+                        Some((false, handler.clone())),
+                    );
                 }
             }
 
-            let value_exact = (false, host_conf.config.try_into()?);
-            let value_prefix = value_exact.clone();
-            handlers.push(&host, "", value_exact, Some(value_prefix));
+            handlers.push(&host, "", (false, handler.clone()), Some((false, handler)));
 
             for (path, conf) in host_conf.subdirs {
                 let value_exact = (conf.strip_prefix, conf.config.try_into()?);
@@ -242,11 +245,7 @@ where
         }
         let handlers = handlers.build();
 
-        Ok(Self {
-            handlers,
-            aliases,
-            default,
-        })
+        Ok(Self { handlers })
     }
 }
 
