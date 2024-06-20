@@ -2,8 +2,8 @@
 
 This module simplifies dealing with virtual hosts. It wraps any handler implementing
 `module_utils::RequestFilter` and its configuration, allowing to supply a different
-configuration for that handler for each virtual host and subdirectories of that host. For
-example, if Static Files Module is the wrapped handler, the configuration file might look like this:
+configuration for that handler for each virtual host and paths of that host. For example, if
+Static Files Module is the wrapped handler, the configuration file might look like this:
 
 ```yaml
 vhosts:
@@ -17,13 +17,15 @@ vhosts:
             - www.example.com
         default: true
         root: ./production-root
-        subdirs:
-            /metrics
+        subpaths:
+            /metrics/*
                 root: ./metrics
-            /test:
+            /test/*:
                 strip_prefix: true
                 root: ./local-debug-root
                 redirect_prefix: /test
+            /test/file.txt:
+                root: ./production-root
 ```
 
 A virtual host configuration adds three configuration settings to the configuration of the
@@ -32,16 +34,18 @@ wrapped handler:
 * `aliases` lists additional host names that should share the same configuration.
 * `default` can be set to `true` to indicate that this configuration should apply to all host
   names not listed explicitly.
-* `subdirs` maps subdirectories to their respective configuration. The configuration is that of
-  the wrapped handler with the added `strip_prefix` setting. If `true`, this setting will
-  remove the subdirectory path from the URI before the request is passed on to the handler.
+* `subpaths` maps paths within the virtual host to their respective configuration. If the path
+  ends with `/*`, it will match not only the exact path but any files within the subdirectory
+  as well. The configuration is that of the wrapped handler with the added `strip_prefix`
+  setting. If `true`, this setting will remove the matched path from the URI before the request
+  is passed on to the handler.
 
 If no default host entry is present and a request is made for an unknown host name, this
 handler will leave the request unhandled. Otherwise the handling is delegated to the wrapped
 handler.
 
-When selecting a subdirectory configuration, longer matching paths are preferred. Matching
-always happens against full file names, meaning that URI `/test/abc` matches the subdirectory
+When selecting a path configuration, longer matching paths are preferred. Matching always
+happens against full file names, meaning that URI `/test/abc` matches the subdirectory
 `/test` whereas the URI `/test_abc` doesn’t. If no matching path is found, the host
 configuration will be used.
 

@@ -18,6 +18,7 @@ use log::warn;
 use module_utils::pingora::{Error, HttpPeer, ResponseHeader, SessionWrapper};
 use module_utils::router::Router;
 use module_utils::{RequestFilter, RequestFilterResult};
+use std::collections::BTreeSet;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
@@ -208,12 +209,25 @@ where
                 continue;
             }
 
-            let handler = host_conf.config.try_into()?;
-            for alias in host_conf.aliases.into_iter() {
+            let mut aliases = BTreeSet::new();
+            for alias in host_conf.aliases {
                 if alias.is_empty() {
                     warn!("ignoring empty alias for host name {host}, please use `default` setting instead");
-                    continue;
+                } else {
+                    aliases.insert(alias);
                 }
+            }
+            if host_conf.default {
+                if let Some(previous) = &default {
+                    warn!("both {previous} and {host} are marked as default virtual host, ignoring the latter");
+                } else {
+                    default = Some(host.clone());
+                    aliases.insert(String::new());
+                }
+            }
+
+            let handler = host_conf.config.try_into()?;
+            for alias in &aliases {
                 handlers.push(
                     alias,
                     "",
@@ -221,26 +235,41 @@ where
                     Some((false, handler.clone())),
                 );
             }
-            if host_conf.default {
-                if let Some(previous) = &default {
-                    warn!("both {previous} and {host} are marked as default virtual host, ignoring the latter");
-                } else {
-                    default = Some(host.clone());
-                    handlers.push(
-                        "",
-                        "",
-                        (false, handler.clone()),
-                        Some((false, handler.clone())),
-                    );
-                }
-            }
-
             handlers.push(&host, "", (false, handler.clone()), Some((false, handler)));
 
-            for (path, conf) in host_conf.subdirs {
-                let value_exact = (conf.strip_prefix, conf.config.try_into()?);
-                let value_prefix = value_exact.clone();
-                handlers.push(&host, path, value_exact, Some(value_prefix));
+            let mut subpaths = host_conf.subpaths.into_iter().collect::<Vec<_>>();
+
+            // Make sure to add exact match rules last so that these take precedence over prefix
+            // rules. This also ensures that these rules are merged with the right prefix rule
+            // because these are all added already.
+            subpaths.sort_by_key(|(rule, _)| rule.exact);
+
+            for (rule, conf) in subpaths {
+                let handler = conf.config.try_into()?;
+                for alias in &aliases {
+                    handlers.push(
+                        alias,
+                        &rule.path,
+                        (conf.strip_prefix, handler.clone()),
+                        if rule.exact {
+                            None
+                        } else {
+                            Some((conf.strip_prefix, handler.clone()))
+                        },
+                    );
+                }
+
+                let handler_prefix = if rule.exact {
+                    None
+                } else {
+                    Some((conf.strip_prefix, handler.clone()))
+                };
+                handlers.push(
+                    &host,
+                    &rule.path,
+                    (conf.strip_prefix, handler),
+                    handler_prefix,
+                );
             }
         }
         let handlers = handlers.build();
@@ -305,11 +334,13 @@ mod tests {
                         aliases: ["127.0.0.1:8080", "[::1]:8080"]
                         default: {add_default}
                         result: ResponseSent
-                        subdirs:
-                            /subdir/:
+                        subpaths:
+                            /subdir/*:
                                 strip_prefix: true
                                 result: Unhandled
-                            /subdir/subsub:
+                            /subdir/file.txt:
+                                result: ResponseSent
+                            /subdir/subsub/*:
                                 result: Handled
                     example.com:
                         aliases: ["example.com:8080"]
@@ -498,6 +529,76 @@ mod tests {
         );
         assert_eq!(session.req_header().uri, "/subdir/subsub/xyz");
         assert!(session.extensions().get::<Uri>().is_none());
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn subdir_alias_match() -> Result<(), Box<Error>> {
+        let (handler, mut ctx) = handler(false);
+        let mut session = make_session("/subdir/xyz?abc", Some("127.0.0.1:8080")).await;
+        assert_eq!(
+            handler.request_filter(&mut session, &mut ctx).await?,
+            RequestFilterResult::Unhandled
+        );
+        assert_eq!(session.req_header().uri, "/xyz?abc");
+        assert_eq!(
+            session.extensions().get::<Uri>().unwrap(),
+            "/subdir/xyz?abc"
+        );
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn subdir_default_match() -> Result<(), Box<Error>> {
+        let (handler, mut ctx) = handler(true);
+        let mut session = make_session("/subdir/xyz?abc", Some("unknown")).await;
+        assert_eq!(
+            handler.request_filter(&mut session, &mut ctx).await?,
+            RequestFilterResult::Unhandled
+        );
+        assert_eq!(session.req_header().uri, "/xyz?abc");
+        assert_eq!(
+            session.extensions().get::<Uri>().unwrap(),
+            "/subdir/xyz?abc"
+        );
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn subpath_exact_match() -> Result<(), Box<Error>> {
+        let (handler, mut ctx) = handler(true);
+        let mut session = make_session("/subdir/file.txt", Some("localhost:8080")).await;
+        assert_eq!(
+            handler.request_filter(&mut session, &mut ctx).await?,
+            RequestFilterResult::ResponseSent
+        );
+        assert_eq!(session.req_header().uri, "/subdir/file.txt");
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn subpath_exact_match_trailing_slash() -> Result<(), Box<Error>> {
+        let (handler, mut ctx) = handler(true);
+        let mut session = make_session("/subdir/file.txt/", Some("localhost:8080")).await;
+        assert_eq!(
+            handler.request_filter(&mut session, &mut ctx).await?,
+            RequestFilterResult::ResponseSent
+        );
+        assert_eq!(session.req_header().uri, "/subdir/file.txt/");
+        Ok(())
+    }
+
+    #[ignore]
+    #[test(tokio::test)]
+    async fn subpath_exact_match_with_suffix() -> Result<(), Box<Error>> {
+        let (handler, mut ctx) = handler(true);
+        let mut session = make_session("/subdir/file.txt/xyz", Some("localhost:8080")).await;
+        assert_eq!(
+            handler.request_filter(&mut session, &mut ctx).await?,
+            RequestFilterResult::Unhandled
+        );
+        assert_eq!(session.req_header().uri, "/file.txt/xyz");
+        assert_eq!(session.extensions().get::<Uri>().unwrap(), "/file.txt/xyz");
         Ok(())
     }
 }

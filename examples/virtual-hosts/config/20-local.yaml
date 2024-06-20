@@ -29,15 +29,15 @@ vhosts:
       from_regex: "\\.jpg$"
       to: https://example.com${tail}
       type: redirect
-    subdirs:
-      /uncompressed:
+    subpaths:
+      /uncompressed/*:
         strip_prefix: true
         log_file: localhost.access.log
         root: ../../static-files-module/testdata/root
         index_file:
         - index.html
         redirect_prefix: /uncompressed
-      /reindexed:
+      /reindexed/*:
         strip_prefix: true
         log_file: localhost.access.log
         root: ../../static-files-module/testdata/root

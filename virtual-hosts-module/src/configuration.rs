@@ -12,13 +12,50 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use module_utils::serde::{Deserialize, Deserializer};
 use module_utils::DeserializeMap;
 use std::collections::HashMap;
 
-/// Subdirectory configuration
+/// Determines which paths a configuration should apply to
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
+pub struct PathMatchRule {
+    /// Path to match
+    pub path: String,
+
+    /// If `true`, only exact path matches will be accepted. Otherwise exact and prefix matches
+    /// will be accepted.
+    pub exact: bool,
+}
+
+impl From<&str> for PathMatchRule {
+    fn from(path: &str) -> Self {
+        if let Some(path) = path.strip_suffix("/*") {
+            Self {
+                path: path.to_owned(),
+                exact: false,
+            }
+        } else {
+            Self {
+                path: path.to_owned(),
+                exact: true,
+            }
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for PathMatchRule {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Ok(String::deserialize(deserializer)?.as_str().into())
+    }
+}
+
+/// Configuration of a path within a virtual host
 #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
-pub struct SubDirConf<C: Default> {
-    /// If `true`, subdirectory will be removed from the URI before passing it on to the handler.
+pub struct SubPathConf<C: Default> {
+    /// If `true`, matched path will be removed from the URI before passing it on to the handler.
     pub strip_prefix: bool,
     /// Generic handler settings
     ///
@@ -36,8 +73,8 @@ pub struct VirtualHostConf<C: Default> {
     /// If true, this virtual host should be used as fallback when no other virtual host
     /// configuration applies
     pub default: bool,
-    /// Maps virtual host's subdirectories to their special configurations
-    pub subdirs: HashMap<String, SubDirConf<C>>,
+    /// Maps virtual host's paths to their special configurations
+    pub subpaths: HashMap<PathMatchRule, SubPathConf<C>>,
     /// Generic handler settings
     ///
     /// These settings are flattened and appear at the same level as `default` in the configuration
