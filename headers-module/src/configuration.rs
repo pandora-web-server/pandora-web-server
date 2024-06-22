@@ -149,40 +149,40 @@ pub struct WithMatchRules<C: Clone + PartialEq + Eq> {
 pub struct CacheControlConf {
     /// If set, max-age option will be sent
     #[module_utils(rename = "max-age")]
-    max_age: Option<usize>,
+    pub max_age: Option<usize>,
     /// If set, s-max-age option will be sent
     #[module_utils(rename = "s-maxage")]
-    s_maxage: Option<usize>,
+    pub s_maxage: Option<usize>,
     /// If `true`, no-cache flag will be sent
     #[module_utils(rename = "no-cache")]
-    no_cache: bool,
+    pub no_cache: bool,
     /// If `true`, no-storage flag will be sent
     #[module_utils(rename = "no-storage")]
-    no_storage: bool,
+    pub no_storage: bool,
     /// If `true`, no-transform flag will be sent
     #[module_utils(rename = "no-transform")]
-    no_transform: bool,
+    pub no_transform: bool,
     /// If `true`, must-revalidate flag will be sent
     #[module_utils(rename = "must-revalidate")]
-    must_revalidate: bool,
+    pub must_revalidate: bool,
     /// If `true`, proxy-revalidate flag will be sent
     #[module_utils(rename = "proxy-revalidate")]
-    proxy_revalidate: bool,
+    pub proxy_revalidate: bool,
     /// If `true`, must-understand flag will be sent
     #[module_utils(rename = "must-understand")]
-    must_understand: bool,
+    pub must_understand: bool,
     /// If `true`, private flag will be sent
-    private: bool,
+    pub private: bool,
     /// If `true`, public flag will be sent
-    public: bool,
+    pub public: bool,
     /// If `true`, immutable flag will be sent
-    immutable: bool,
+    pub immutable: bool,
     /// If set, stale-while-revalidate option will be sent
     #[module_utils(rename = "stale-while-revalidate")]
-    stale_while_revalidate: Option<usize>,
+    pub stale_while_revalidate: Option<usize>,
     /// If set, stale-if-error option will be sent
     #[module_utils(rename = "stale-if-error")]
-    stale_if_error: Option<usize>,
+    pub stale_if_error: Option<usize>,
 }
 
 impl IntoHeaders for CacheControlConf {
