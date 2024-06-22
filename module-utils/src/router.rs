@@ -26,14 +26,12 @@
 //! Empty host name is considered the fallback host, its values apply to all hosts but with a lower
 //! priority than values designated to the host.
 //!
-//! By default, only the best match is returned. If rules exist for `/`, `/dir/` and `/dir/subdir/`
-//! for example, the path `/dir/subdir/file` will match `/dir/subdir/`. To change that behavior,
-//! you can give `RouterBuilder` a custom `Merger` type. Then the result will be a merged value,
-//! with the more distant matches merged in first.
+//! Only the best match is returned. If rules exist for `/`, `/dir/` and `/dir/subdir/` for
+//! example, the path `/dir/subdir/file` will match `/dir/subdir/`.
 
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::ops::Deref;
-use std::{collections::HashMap, marker::PhantomData};
 
 pub use crate::trie::LookupResult;
 use crate::trie::{common_prefix_length, Trie, SEPARATOR};
@@ -141,7 +139,10 @@ impl<Value> Router<Value> {
     where
         Value: Clone + Eq,
     {
-        Default::default()
+        RouterBuilder {
+            entries: Default::default(),
+            fallbacks: Default::default(),
+        }
     }
 
     /// Looks up a host/path combination in the routing table, returns the matching value if any.
@@ -239,139 +240,36 @@ struct RouterEntry<Value> {
     value_prefix: Option<(Value, usize)>,
 }
 
-/// Trait allowing to merge two router values
-pub trait Merge<Value> {
-    /// Merges the value `new` into the existing value `current`.
-    fn merge(current: &mut Value, new: Value);
-}
-
-/// Default merging implementation, replaces existing value by the incoming one.
-#[derive(Debug)]
-pub struct DefaultMerger;
-impl<Value> Merge<Value> for DefaultMerger {
-    fn merge(current: &mut Value, new: Value) {
-        *current = new;
-    }
-}
-
 /// The router builder used to set up a [`Router`] instance
 #[derive(Debug)]
-pub struct RouterBuilder<Value, Merger: Merge<Value> = DefaultMerger> {
+pub struct RouterBuilder<Value> {
     entries: HashMap<Vec<u8>, Vec<RouterEntry<Value>>>,
     fallbacks: Vec<RouterEntry<Value>>,
-    marker: PhantomData<Merger>,
 }
 
-impl<Value, Merger: Merge<Value>> Default for RouterBuilder<Value, Merger> {
-    fn default() -> Self {
-        Self {
-            entries: Default::default(),
-            fallbacks: Default::default(),
-            marker: Default::default(),
-        }
-    }
-}
-
-impl<Value: Clone + Eq, Merger: Merge<Value>> RouterBuilder<Value, Merger> {
-    fn merge_into(
-        current: &mut RouterEntry<Value>,
-        mut new_exact: (Value, usize),
-        new_prefix: Option<(Value, usize)>,
-        prefer_existing: bool,
-    ) {
-        if prefer_existing {
-            std::mem::swap(&mut current.value_exact, &mut new_exact);
-        }
-        Merger::merge(&mut current.value_exact.0, new_exact.0);
-        current.value_exact.1 = new_exact.1;
-
-        if let Some(mut new_prefix) = new_prefix {
-            if let Some(ref mut value_prefix) = &mut current.value_prefix {
-                if prefer_existing {
-                    std::mem::swap(value_prefix, &mut new_prefix);
-                }
-                Merger::merge(&mut value_prefix.0, new_prefix.0);
-                value_prefix.1 = new_prefix.1;
-            } else {
-                current.value_prefix = Some(new_prefix);
-            }
-        }
-    }
-
-    fn merge_from(
-        current_prefix: &(Value, usize),
-        new_exact: &mut (Value, usize),
-        new_prefix: &mut Option<(Value, usize)>,
-        prefer_existing: bool,
-    ) {
-        let mut current = current_prefix.clone();
-        if !prefer_existing {
-            std::mem::swap(new_exact, &mut current);
-        }
-        Merger::merge(&mut new_exact.0, current.0);
-        new_exact.1 = current.1;
-
-        let mut current = current_prefix.clone();
-        if let Some(new_prefix) = new_prefix {
-            if !prefer_existing {
-                std::mem::swap(new_prefix, &mut current);
-            }
-            Merger::merge(&mut new_prefix.0, current.0);
-            new_prefix.1 = current.1;
-        } else {
-            *new_prefix = Some(current);
-        }
-    }
-
+impl<Value: Clone + Eq> RouterBuilder<Value> {
     fn merge_value(
         existing: &mut Vec<RouterEntry<Value>>,
         path: Path,
-        mut value_exact: (Value, usize),
+        value_exact: (Value, usize),
         mut value_prefix: Option<(Value, usize)>,
-        prefer_existing: bool,
     ) {
         match existing.binary_search_by_key(&path.as_slice(), |entry| entry.path.as_slice()) {
             Ok(index) => {
-                // Matching entry already exists, merge with it.
-                Self::merge_into(
-                    &mut existing[index],
-                    value_exact,
-                    value_prefix,
-                    prefer_existing,
-                );
+                existing[index].value_exact = value_exact;
+                if value_prefix.is_some() {
+                    existing[index].value_prefix = value_prefix;
+                }
             }
             Err(index) => {
-                // Adding a new entry. Go backwards to find its closest parent.
-                for parent in existing[0..index].iter_mut().rev() {
-                    if common_prefix_length(&parent.path, &path) != parent.path.len() {
-                        continue;
-                    }
-
-                    // Merge the new value with its parent.
-                    if let Some(existing) = &parent.value_prefix {
-                        Self::merge_from(
-                            existing,
-                            &mut value_exact,
-                            &mut value_prefix,
-                            prefer_existing,
-                        );
-                    }
-                    break;
-                }
-
-                // Merge the new value into all its children.
-                if let Some(value_prefix) = &value_prefix {
-                    for child in &mut existing[index..] {
-                        if common_prefix_length(&child.path, &path) != path.len() {
+                // Adding a new entry.
+                if value_prefix.is_none() {
+                    // Copy `value_prefix` from closest parent.
+                    for parent in existing[0..index].iter_mut().rev() {
+                        if parent.path.is_prefix_of(&path) && parent.value_prefix.is_some() {
+                            value_prefix.clone_from(&parent.value_prefix);
                             break;
                         }
-
-                        Self::merge_into(
-                            child,
-                            value_prefix.clone(),
-                            Some(value_prefix.clone()),
-                            true,
-                        );
                     }
                 }
 
@@ -412,58 +310,12 @@ impl<Value: Clone + Eq, Merger: Merge<Value>> RouterBuilder<Value, Merger> {
             path,
             (value_exact, context),
             value_prefix.map(|v| (v, context)),
-            false,
         );
     }
 
     /// Translates all rules into a router instance while also merging values if multiple apply to
     /// the same location.
-    pub fn build(mut self) -> Router<Value> {
-        // Push the fallback routes as defaults for all hosts
-        for fallback_entry in &self.fallbacks {
-            for entries in self.entries.values_mut() {
-                Self::merge_value(
-                    entries,
-                    fallback_entry.path.clone(),
-                    fallback_entry.value_exact.clone(),
-                    fallback_entry.value_prefix.clone(),
-                    true,
-                );
-            }
-        }
-
-        // Remove unnecessary states
-        for entries in self.entries.values_mut() {
-            for i in (1..entries.len()).rev() {
-                let entry = &entries[i];
-                if entry
-                    .value_prefix
-                    .as_ref()
-                    .is_some_and(|value_prefix| value_prefix != &entry.value_exact)
-                {
-                    // States with different exact and prefix values are never redundant.
-                    continue;
-                }
-
-                // Walk backwards in the list to find the parent
-                let mut redundant = false;
-                for parent in entries[0..i].iter().rev() {
-                    if common_prefix_length(&parent.path, &entry.path) != parent.path.len() {
-                        continue;
-                    }
-
-                    // We remove the state if its value matches the parent’s
-                    redundant = parent.value_prefix == entry.value_prefix;
-                    break;
-                }
-
-                if redundant {
-                    entries.remove(i);
-                }
-            }
-        }
-
-        // Feed the trie builders
+    pub fn build(self) -> Router<Value> {
         let mut builder = Trie::builder();
         for (host, entries) in self.entries {
             for entry in entries {
@@ -670,77 +522,6 @@ mod tests {
         assert_eq!(
             lookup(&router, "localhost/def", "/abc"),
             Some((2, "/".into()))
-        );
-    }
-
-    #[test]
-    fn merging() {
-        fn lookup(router: &Router<String>, host: &str, path: &str) -> Option<(String, String)> {
-            let (value, tail) = router.lookup(host, path)?;
-            let tail = if let Some(tail) = tail {
-                String::from_utf8_lossy(tail.as_ref()).to_string()
-            } else {
-                path.to_owned()
-            };
-            Some((value.to_string(), tail))
-        }
-
-        struct StringMerge;
-        impl Merge<String> for StringMerge {
-            fn merge(current: &mut String, new: String) {
-                current.push_str(&new);
-            }
-        }
-
-        let mut builder: RouterBuilder<String, StringMerge> = Default::default();
-        builder.push("localhost", "/", "a".to_owned(), Some("a".to_owned()));
-        builder.push("localhost", "/abc", "b".to_owned(), None);
-        builder.push(
-            "localhost",
-            "/xyz/aaa",
-            "c".to_owned(),
-            Some("c".to_owned()),
-        );
-        builder.push(
-            "localhost",
-            "/xyz/abc/",
-            "d".to_owned(),
-            Some("d".to_owned()),
-        );
-        builder.push("example.com", "/abc/def/", "e".to_owned(), None);
-        builder.push("example.com", "/x", "f".to_owned(), Some("f".to_owned()));
-        builder.push("", "/abc", "g".to_owned(), Some("g".to_owned()));
-        let router = builder.build();
-
-        assert_eq!(
-            lookup(&router, "localhost", "/"),
-            Some(("a".to_owned(), "/".to_owned()))
-        );
-
-        assert_eq!(
-            lookup(&router, "localhost", "/abc"),
-            Some(("gab".to_owned(), "/".to_owned()))
-        );
-
-        assert_eq!(
-            lookup(&router, "localhost", "/abc/def"),
-            // localhost/* takes priority over /abc/* here, so tail refers to it
-            Some(("ga".to_owned(), "/abc/def".to_owned()))
-        );
-
-        assert_eq!(
-            lookup(&router, "localhost", "/xyz/abc"),
-            Some(("ad".to_owned(), "/".to_owned()))
-        );
-
-        assert_eq!(
-            lookup(&router, "example.com", "/abc/def"),
-            Some(("ge".to_owned(), "/".to_owned()))
-        );
-
-        assert_eq!(
-            lookup(&router, "example.com", "/abc/def/g"),
-            Some(("g".to_owned(), "/def/g".to_owned()))
         );
     }
 }
