@@ -96,23 +96,21 @@ impl RequestFilter for HeadersHandler {
         session: &mut impl SessionWrapper,
         _ctx: &mut Self::CTX,
     ) -> Result<RequestFilterResult, Box<Error>> {
-        let list = {
-            let path = session.req_header().uri.path();
-            trace!(
-                "Determining response headers for host/path combination {:?}{path}",
-                session.host()
-            );
+        let path = session.req_header().uri.path();
+        trace!(
+            "Determining response headers for host/path combination {:?}{path}",
+            session.host()
+        );
 
-            let match_ = session
-                .host()
-                .and_then(|host| self.router.lookup(host.as_ref(), path))
-                .or_else(|| self.router.lookup("", path));
+        let match_ = session
+            .host()
+            .and_then(|host| self.router.lookup(host.as_ref(), path))
+            .or_else(|| self.router.lookup("", path));
 
-            if let Some((conf, _)) = match_ {
-                conf.as_value()
-            } else {
-                return Ok(RequestFilterResult::Unhandled);
-            }
+        let list = if let Some(list) = match_ {
+            list.as_value()
+        } else {
+            return Ok(RequestFilterResult::Unhandled);
         };
 
         session.extensions_mut().insert(list.clone());

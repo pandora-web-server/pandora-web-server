@@ -341,10 +341,10 @@ impl<Matcher, Conf> Default for MergerEntries<Matcher, Conf> {
 ///
 /// // Merge configurations by joining them
 /// let router = merger.merge(|values| values.copied().collect::<String>());
-/// assert_eq!(router.lookup("localhost", "/").unwrap().0.as_value(), "da");
-/// assert_eq!(router.lookup("localhost", "/abc").unwrap().0.as_value(), "dab");
-/// assert_eq!(router.lookup("localhost", "/abc/def").unwrap().0.as_value(), "da");
-/// assert_eq!(router.lookup("example.com", "/abc/def").unwrap().0.as_value(), "dc");
+/// assert_eq!(*router.lookup("localhost", "/").unwrap(), "da");
+/// assert_eq!(*router.lookup("localhost", "/abc").unwrap(), "dab");
+/// assert_eq!(*router.lookup("localhost", "/abc/def").unwrap(), "da");
+/// assert_eq!(*router.lookup("example.com", "/abc/def").unwrap(), "dc");
 /// ```
 ///
 /// Rather than directly producing a `Router` instance, `merge_into_merger` method can be called to
@@ -627,28 +627,12 @@ where
 mod tests {
     use super::*;
 
-    fn lookup(router: &Router<String>, host: &str, path: &str) -> Option<(String, String)> {
-        let (value, tail) = router.lookup(host, path)?;
-        let tail = if let Some(tail) = tail {
-            String::from_utf8_lossy(tail.as_ref()).to_string()
-        } else {
-            path.to_owned()
-        };
-        Some((value.to_string(), tail))
+    fn lookup(router: &Router<String>, host: &str, path: &str) -> Option<String> {
+        router.lookup(host, path).as_deref().cloned()
     }
 
     #[test]
     fn merge() {
-        fn lookup(router: &Router<String>, host: &str, path: &str) -> Option<(String, String)> {
-            let (value, tail) = router.lookup(host, path)?;
-            let tail = if let Some(tail) = tail {
-                String::from_utf8_lossy(tail.as_ref()).to_string()
-            } else {
-                path.to_owned()
-            };
-            Some((value.to_string(), tail))
-        }
-
         let mut merger = Merger::<HostPathMatcher, String>::new();
         merger.push("localhost".into(), "a".to_owned());
         merger.push("localhost/abc/".into(), "b".to_owned());
@@ -659,37 +643,28 @@ mod tests {
         merger.push("/abc/*".into(), "g".to_owned());
         let router = merger.merge(|values| values.map(String::as_str).collect::<String>());
 
-        assert_eq!(
-            lookup(&router, "localhost", "/"),
-            Some(("a".to_owned(), "/".to_owned()))
-        );
+        assert_eq!(lookup(&router, "localhost", "/"), Some("a".to_owned()));
 
-        assert_eq!(
-            lookup(&router, "localhost", "/abc"),
-            Some(("gab".to_owned(), "/".to_owned()))
-        );
+        assert_eq!(lookup(&router, "localhost", "/abc"), Some("gab".to_owned()));
 
         assert_eq!(
             lookup(&router, "localhost", "/abc/def"),
-            // localhost/* takes priority over /abc/* here, so tail refers to it
-            // TODO: Tail should be /abc/def here
-            Some(("ga".to_owned(), "/def".to_owned()))
+            Some("ga".to_owned())
         );
 
         assert_eq!(
             lookup(&router, "localhost", "/xyz/abc"),
-            Some(("ad".to_owned(), "/".to_owned()))
+            Some("ad".to_owned())
         );
 
         assert_eq!(
             lookup(&router, "example.com", "/abc/def"),
-            Some(("ge".to_owned(), "/".to_owned()))
+            Some("ge".to_owned())
         );
 
         assert_eq!(
             lookup(&router, "example.com", "/abc/def/g"),
-            // TODO: Tail should be /def/g here
-            Some(("g".to_owned(), "/g".to_owned()))
+            Some("g".to_owned())
         );
     }
 
@@ -708,37 +683,28 @@ mod tests {
             .merge_into_merger(|values| values.map(String::as_str).collect::<String>())
             .merge(|values| values.map(String::as_str).collect::<String>());
 
-        assert_eq!(
-            lookup(&router, "localhost", "/"),
-            Some(("a".to_owned(), "/".to_owned()))
-        );
+        assert_eq!(lookup(&router, "localhost", "/"), Some("a".to_owned()));
 
-        assert_eq!(
-            lookup(&router, "localhost", "/abc"),
-            Some(("gab".to_owned(), "/".to_owned()))
-        );
+        assert_eq!(lookup(&router, "localhost", "/abc"), Some("gab".to_owned()));
 
         assert_eq!(
             lookup(&router, "localhost", "/abc/def"),
-            // localhost/* takes priority over /abc/* here, so tail refers to it
-            // TODO: Tail should be /abc/def here
-            Some(("ga".to_owned(), "/def".to_owned()))
+            Some("ga".to_owned())
         );
 
         assert_eq!(
             lookup(&router, "localhost", "/xyz/abc"),
-            Some(("ad".to_owned(), "/".to_owned()))
+            Some("ad".to_owned())
         );
 
         assert_eq!(
             lookup(&router, "example.com", "/abc/def"),
-            Some(("ge".to_owned(), "/".to_owned()))
+            Some("ge".to_owned())
         );
 
         assert_eq!(
             lookup(&router, "example.com", "/abc/def/g"),
-            // TODO: Tail should be /def/g here
-            Some(("g".to_owned(), "/g".to_owned()))
+            Some("g".to_owned())
         );
     }
 
@@ -768,80 +734,56 @@ mod tests {
         merger1.extend([merger2]);
         let router = merger1.merge(|values| values.map(String::as_str).collect::<String>());
 
-        assert_eq!(
-            lookup(&router, "localhost", "/"),
-            Some(("ak".to_owned(), "/".to_owned()))
-        );
+        assert_eq!(lookup(&router, "localhost", "/"), Some("ak".to_owned()));
 
-        assert_eq!(
-            lookup(&router, "localhost", "/x"),
-            Some(("ak".to_owned(), "/x".to_owned()))
-        );
+        assert_eq!(lookup(&router, "localhost", "/x"), Some("ak".to_owned()));
 
         assert_eq!(
             lookup(&router, "localhost", "/abc"),
-            Some(("gabklj".to_owned(), "/".to_owned()))
+            Some("gabklj".to_owned())
         );
 
         assert_eq!(
             lookup(&router, "localhost", "/abc/x"),
-            Some(("gakj".to_owned(), "/x".to_owned()))
+            Some("gakj".to_owned())
         );
 
         assert_eq!(
             lookup(&router, "localhost", "/xyz/abc/x"),
-            Some(("adk".to_owned(), "/x".to_owned()))
+            Some("adk".to_owned())
         );
 
-        assert_eq!(
-            lookup(&router, "example.com", "/"),
-            Some(("k".to_owned(), "/".to_owned()))
-        );
+        assert_eq!(lookup(&router, "example.com", "/"), Some("k".to_owned()));
 
         assert_eq!(
             lookup(&router, "example.com", "/abc/def"),
-            Some(("kmge".to_owned(), "/".to_owned()))
+            Some("kmge".to_owned())
         );
 
         assert_eq!(
             lookup(&router, "example.com", "/abc/def/x"),
-            Some(("kmg".to_owned(), "/x".to_owned()))
+            Some("kmg".to_owned())
         );
 
-        assert_eq!(
-            lookup(&router, "example.net", "/"),
-            Some(("kh".to_owned(), "/".to_owned()))
-        );
+        assert_eq!(lookup(&router, "example.net", "/"), Some("kh".to_owned()));
 
         assert_eq!(
             lookup(&router, "example.net", "/abc"),
-            Some(("gklhi".to_owned(), "/".to_owned()))
+            Some("gklhi".to_owned())
         );
 
         assert_eq!(
             lookup(&router, "example.net", "/abc/x"),
-            Some(("gkhi".to_owned(), "/x".to_owned()))
+            Some("gkhi".to_owned())
         );
 
-        assert_eq!(
-            lookup(&router, "", "/"),
-            Some(("k".to_owned(), "/".to_owned()))
-        );
+        assert_eq!(lookup(&router, "", "/"), Some("k".to_owned()));
 
-        assert_eq!(
-            lookup(&router, "", "/abc"),
-            Some(("gkl".to_owned(), "/".to_owned()))
-        );
+        assert_eq!(lookup(&router, "", "/abc"), Some("gkl".to_owned()));
 
-        assert_eq!(
-            lookup(&router, "", "/abc/def"),
-            Some(("gkm".to_owned(), "/".to_owned()))
-        );
+        assert_eq!(lookup(&router, "", "/abc/def"), Some("gkm".to_owned()));
 
-        assert_eq!(
-            lookup(&router, "", "/abc/def/x"),
-            Some(("gkm".to_owned(), "/x".to_owned()))
-        );
+        assert_eq!(lookup(&router, "", "/abc/def/x"), Some("gkm".to_owned()));
     }
 
     #[test]
@@ -888,21 +830,15 @@ mod tests {
         merger.push(CustomMatcher::new(), "a".to_owned());
         let router = merger.merge(|values| values.map(String::as_str).collect::<String>());
 
-        assert_eq!(
-            lookup(&router, "localhost", "/"),
-            Some(("".to_owned(), "/".to_owned()))
-        );
-        assert_eq!(
-            lookup(&router, "localhost", "/abc"),
-            Some(("".to_owned(), "/abc".to_owned()))
-        );
+        assert_eq!(lookup(&router, "localhost", "/"), Some("".to_owned()));
+        assert_eq!(lookup(&router, "localhost", "/abc"), Some("".to_owned()));
         assert_eq!(
             lookup(&router, "localhost", "/abc/def"),
-            Some(("a".to_owned(), "/".to_owned()))
+            Some("a".to_owned())
         );
         assert_eq!(
             lookup(&router, "localhost", "/abc/def/xyz"),
-            Some(("a".to_owned(), "/xyz".to_owned()))
+            Some("a".to_owned())
         );
     }
 }

@@ -87,15 +87,6 @@ impl Path {
         common_prefix_length(&self.path, &other.path) == self.path.len()
     }
 
-    /// Calculates the number of path segments in this path
-    fn num_segments(&self) -> usize {
-        if self.path.is_empty() {
-            0
-        } else {
-            self.path.iter().filter(|b| **b == SEPARATOR).count() + 1
-        }
-    }
-
     /// If this path is a non-empty prefix of the given path, removes the prefix. Otherwise returns
     /// `None`.
     pub fn remove_prefix_from(&self, path: impl AsRef<[u8]>) -> Option<Vec<u8>> {
@@ -155,9 +146,9 @@ impl Deref for Path {
 /// builder.push("example.com", "/dir/", "Website subdirectory", Some("Within website subdirectory"));
 ///
 /// let router = builder.build();
-/// assert!(router.lookup("localhost", "/").is_some_and(|(value, _)| *value == "Localhost root"));
-/// assert!(router.lookup("localhost", "/dir/file").is_some_and(|(value, _)| *value == "Within localhost"));
-/// assert!(router.lookup("example.com", "/dir/file").is_some_and(|(value, _)| *value == "Within website subdirectory"));
+/// assert_eq!(*router.lookup("localhost", "/").unwrap(), "Localhost root");
+/// assert_eq!(*router.lookup("localhost", "/dir/file").unwrap(), "Within localhost");
+/// assert_eq!(*router.lookup("example.com", "/dir/file").unwrap(), "Within website subdirectory");
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Router<Value> {
@@ -181,35 +172,17 @@ impl<Value> Router<Value> {
     }
 
     /// Looks up a host/path combination in the routing table, returns the matching value if any.
-    ///
-    /// The second part of the return value is the tail path. It is only present if part of the
-    /// path matched the rule’s path. The iterator will produce the remaining part of the path
-    /// then.
-    ///
-    /// *Note*: Tail path will always start with a slash. For example, matching request path `/dir`
-    /// and `/dir/` against the rule `/dir/` will both result in the tail path `/` being returned.
-    pub fn lookup<'a>(
+    pub fn lookup(
         &self,
         host: &(impl AsRef<[u8]> + ?Sized),
-        path: &'a (impl AsRef<[u8]> + ?Sized),
-    ) -> Option<(LookupResult<'_, Value>, Option<impl AsRef<[u8]> + 'a>)> {
+        path: &(impl AsRef<[u8]> + ?Sized),
+    ) -> Option<LookupResult<'_, Value>> {
         let key = make_key(host, path);
-        let path = path.as_ref();
-        let (value, matched_segments) = if host.as_ref().is_empty() {
-            self.fallback.lookup(key)?
+        if host.as_ref().is_empty() {
+            self.fallback.lookup(key)
         } else {
-            self.trie.lookup(key)?
-        };
-        let tail = if matched_segments > 0 {
-            Some(PathTail {
-                path,
-                skip_segments: matched_segments,
-            })
-        } else {
-            None
-        };
-
-        Some((value, tail))
+            self.trie.lookup(key)
+        }
     }
 
     /// Retrieves the value from a previous lookup by its index
@@ -235,44 +208,12 @@ fn make_key<'a>(
     }
 }
 
-struct PathTail<'a> {
-    path: &'a [u8],
-    skip_segments: usize,
-}
-
-impl<'a> AsRef<[u8]> for PathTail<'a> {
-    fn as_ref(&self) -> &'a [u8] {
-        let mut tail_start = 0;
-        let mut segments = self.skip_segments;
-        let mut expect_separator = true;
-
-        while segments > 0 && tail_start < self.path.len() {
-            if self.path[tail_start] != SEPARATOR {
-                expect_separator = false;
-            } else if !expect_separator {
-                expect_separator = true;
-                segments -= 1;
-            }
-
-            if segments > 0 {
-                tail_start += 1;
-            }
-        }
-
-        if tail_start < self.path.len() {
-            &self.path[tail_start..]
-        } else {
-            b"/"
-        }
-    }
-}
-
 /// Intermediate entry stored in the router prior to merging
 #[derive(Debug)]
 struct RouterEntry<Value> {
     path: Path,
-    value_exact: (Value, usize),
-    value_prefix: Option<(Value, usize)>,
+    value_exact: Value,
+    value_prefix: Option<Value>,
 }
 
 /// The router builder used to set up a [`Router`] instance
@@ -286,8 +227,8 @@ impl<Value: Clone + Eq> RouterBuilder<Value> {
     fn merge_value(
         existing: &mut Vec<RouterEntry<Value>>,
         path: Path,
-        value_exact: (Value, usize),
-        mut value_prefix: Option<(Value, usize)>,
+        value_exact: Value,
+        mut value_prefix: Option<Value>,
     ) {
         match existing.binary_search_by_key(&path.as_slice(), |entry| entry.path.as_slice()) {
             Ok(index) => {
@@ -332,7 +273,6 @@ impl<Value: Clone + Eq> RouterBuilder<Value> {
         value_prefix: Option<Value>,
     ) {
         let path = Path::new(path);
-        let context = path.num_segments();
 
         let existing = if host.as_ref().is_empty() {
             &mut self.fallbacks
@@ -340,12 +280,7 @@ impl<Value: Clone + Eq> RouterBuilder<Value> {
             self.entries.entry(host.as_ref().to_vec()).or_default()
         };
 
-        Self::merge_value(
-            existing,
-            path,
-            (value_exact, context),
-            value_prefix.map(|v| (v, context)),
-        );
+        Self::merge_value(existing, path, value_exact, value_prefix);
     }
 
     /// Translates all rules into a router instance while also merging values if multiple apply to
@@ -517,14 +452,8 @@ mod tests {
 
     #[test]
     fn routing() {
-        fn lookup(router: &Router<u8>, host: &str, path: &str) -> Option<(u8, String)> {
-            let (value, tail) = router.lookup(host, path)?;
-            let tail = if let Some(tail) = tail {
-                String::from_utf8_lossy(tail.as_ref()).to_string()
-            } else {
-                path.to_owned()
-            };
-            Some((*value, tail))
+        fn lookup(router: &Router<u8>, host: &str, path: &str) -> Option<u8> {
+            router.lookup(host, path).as_deref().copied()
         }
 
         let mut builder = Router::builder();
@@ -537,56 +466,29 @@ mod tests {
         builder.push("", "/abc", 7, Some(7));
         let router = builder.build();
 
-        assert_eq!(lookup(&router, "localhost", "/"), Some((1, "/".into())));
-        assert_eq!(lookup(&router, "localhost", "/ab"), Some((1, "/ab".into())));
-        assert_eq!(lookup(&router, "localhost", "/abc"), Some((2, "/".into())));
-        assert_eq!(lookup(&router, "localhost", "/abc/"), Some((2, "/".into())));
-        assert_eq!(
-            lookup(&router, "localhost", "/abc/d"),
-            Some((2, "/d".into()))
-        );
-        assert_eq!(
-            lookup(&router, "localhost", "/abc/d/"),
-            Some((2, "/d/".into()))
-        );
-        assert_eq!(
-            lookup(&router, "localhost", "/xyz"),
-            Some((1, "/xyz".into()))
-        );
-        assert_eq!(
-            lookup(&router, "localhost", "/xyz/"),
-            Some((1, "/xyz/".into()))
-        );
-        assert_eq!(
-            lookup(&router, "localhost", "/xyz/abc"),
-            Some((3, "/".into()))
-        );
-        assert_eq!(lookup(&router, "example.com", "/"), Some((4, "/".into())));
-        assert_eq!(
-            lookup(&router, "example.com", "/abc"),
-            Some((4, "/abc".into()))
-        );
-        assert_eq!(
-            lookup(&router, "example.com", "/abc/def"),
-            Some((5, "/".into()))
-        );
-        assert_eq!(lookup(&router, "example.com", "/x/"), Some((6, "/".into())));
-        assert_eq!(
-            lookup(&router, "example.com", "/xyz"),
-            Some((4, "/xyz".into()))
-        );
+        assert_eq!(lookup(&router, "localhost", "/"), Some(1));
+        assert_eq!(lookup(&router, "localhost", "/ab"), Some(1));
+        assert_eq!(lookup(&router, "localhost", "/abc"), Some(2));
+        assert_eq!(lookup(&router, "localhost", "/abc/"), Some(2));
+        assert_eq!(lookup(&router, "localhost", "/abc/d"), Some(2));
+        assert_eq!(lookup(&router, "localhost", "/abc/d/"), Some(2));
+        assert_eq!(lookup(&router, "localhost", "/xyz"), Some(1));
+        assert_eq!(lookup(&router, "localhost", "/xyz/"), Some(1));
+        assert_eq!(lookup(&router, "localhost", "/xyz/abc"), Some(3));
+        assert_eq!(lookup(&router, "example.com", "/"), Some(4));
+        assert_eq!(lookup(&router, "example.com", "/abc"), Some(4));
+        assert_eq!(lookup(&router, "example.com", "/abc/def"), Some(5));
+        assert_eq!(lookup(&router, "example.com", "/x/"), Some(6));
+        assert_eq!(lookup(&router, "example.com", "/xyz"), Some(4));
         assert_eq!(lookup(&router, "example.net", "/"), None);
         assert_eq!(lookup(&router, "example.net", "/abc"), None);
         assert_eq!(lookup(&router, "", "/"), None);
-        assert_eq!(lookup(&router, "", "/abc"), Some((7, "/".into())));
-        assert_eq!(lookup(&router, "", "/abc/def"), Some((7, "/def".into())));
+        assert_eq!(lookup(&router, "", "/abc"), Some(7));
+        assert_eq!(lookup(&router, "", "/abc/def"), Some(7));
 
         // A special case to keep in mind: slashes in host name will cause incorrect segmentation
         // of the path, essentially causing everything after the slash to be ignored. As such, this
         // is not an issue but it might become one as the implementation changes.
-        assert_eq!(
-            lookup(&router, "localhost/def", "/abc"),
-            Some((2, "/".into()))
-        );
+        assert_eq!(lookup(&router, "localhost/def", "/abc"), Some(2));
     }
 }

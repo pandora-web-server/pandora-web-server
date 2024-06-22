@@ -73,7 +73,7 @@ impl<H: Debug> VirtualHostsHandler<H> {
         host: impl AsRef<[u8]>,
         path: impl AsRef<[u8]>,
     ) -> Option<(&H, usize, Option<Vec<u8>>)> {
-        self.handlers.lookup(&host, &path).map(|(result, _)| {
+        self.handlers.lookup(&host, &path).map(|result| {
             let (strip_path, handler) = result.as_value();
             let index = result.index();
             (

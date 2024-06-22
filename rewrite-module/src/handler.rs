@@ -88,8 +88,8 @@ impl RequestFilter for RewriteHandler {
         let path = session.req_header().uri.path();
         trace!("Determining rewrite rules for path {path}");
 
-        let list = if let Some((list, _)) = self.router.lookup("", path) {
-            list.as_value()
+        let list = if let Some(list) = self.router.lookup("", path) {
+            list
         } else {
             trace!("No match for the path");
             return Ok(RequestFilterResult::Unhandled);

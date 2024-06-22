@@ -119,8 +119,8 @@ impl<Value> Deref for LookupResult<'_, Value> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Node {
     label: Range<usize>,
-    value_exact: Option<(usize, usize)>,
-    value_prefix: Option<(usize, usize)>,
+    value_exact: Option<usize>,
+    value_prefix: Option<usize>,
     children: Range<usize>,
 }
 
@@ -137,13 +137,10 @@ impl<Value> Trie<Value> {
     }
 
     /// Converts a value index into a lookup result
-    fn to_lookup_result(
-        &self,
-        result: Option<(usize, usize)>,
-    ) -> Option<(LookupResult<'_, Value>, usize)> {
+    fn to_lookup_result(&self, result: Option<usize>) -> Option<LookupResult<'_, Value>> {
         result
-            .and_then(|(index, segment)| Some((self.values.get(index)?, index, segment)))
-            .map(|(value, index, segment)| (LookupResult::new(value, index), segment))
+            .and_then(|index| Some((self.values.get(index)?, index)))
+            .map(|(value, index)| (LookupResult::new(value, index)))
     }
 
     /// Looks up a particular label in the trie.
@@ -151,9 +148,8 @@ impl<Value> Trie<Value> {
     /// The label is identified by an iterator producing segments. The segments are expected to be
     /// normalized: no empty segments exist and no segments contain the separator character.
     ///
-    /// This will return the value corresponding to the longest matching path if any. In addition,
-    /// the result contains the number of segments consumed.
-    pub(crate) fn lookup<'a, L>(&self, mut label: L) -> Option<(LookupResult<'_, Value>, usize)>
+    /// This will return the value corresponding to the longest matching path if any.
+    pub(crate) fn lookup<'a, L>(&self, mut label: L) -> Option<LookupResult<'_, Value>>
     where
         L: Iterator<Item = &'a [u8]>,
     {
@@ -241,8 +237,8 @@ pub(crate) struct TrieBuilder<Value> {
 struct BuilderNode<Value> {
     label: Vec<u8>,
     children: Vec<BuilderNode<Value>>,
-    value_exact: Option<(Value, usize)>,
-    value_prefix: Option<(Value, usize)>,
+    value_exact: Option<Value>,
+    value_prefix: Option<Value>,
 }
 
 impl<Value: Eq> TrieBuilder<Value> {
@@ -319,17 +315,13 @@ impl<Value: Eq> TrieBuilder<Value> {
     /// `value_exact` will only be returned for exact matches. If present, `value_prefix` will be
     /// returned for any paths starting with the given label.
     ///
-    /// The values contain a “context” number as a second tuple element. This is used to store the
-    /// number of label segments associated with the value and will be returned by `Trie::lookup`
-    /// along with the matching value.
-    ///
     /// The label is expected to be normalized: no separator characters at the beginning or end, and
     /// always only one separator character used to separate segments.
     pub(crate) fn push(
         &mut self,
         mut label: Vec<u8>,
-        value_exact: (Value, usize),
-        value_prefix: Option<(Value, usize)>,
+        value_exact: Value,
+        value_prefix: Option<Value>,
     ) -> bool {
         let node = Self::find_insertion_point(
             &mut self.root,
@@ -397,11 +389,11 @@ impl<Value: Eq> TrieBuilder<Value> {
         nodes[index].label = labels.len()..labels.len() + current.label.len();
         labels.append(&mut current.label);
 
-        if let Some((value, context)) = current.value_exact {
-            nodes[index].value_exact = Some((Self::add_value(value, values), context));
+        if let Some(value) = current.value_exact {
+            nodes[index].value_exact = Some(Self::add_value(value, values));
         }
-        if let Some((value, context)) = current.value_prefix {
-            nodes[index].value_prefix = Some((Self::add_value(value, values), context));
+        if let Some(value) = current.value_prefix {
+            nodes[index].value_prefix = Some(Self::add_value(value, values));
         }
 
         current.children.sort_by(|a, b| a.label.cmp(&b.label));
@@ -452,14 +444,6 @@ mod tests {
         )
     }
 
-    fn num_segments(path: &str) -> usize {
-        if path.is_empty() {
-            0
-        } else {
-            path.as_bytes().iter().filter(|b| **b == SEPARATOR).count() + 1
-        }
-    }
-
     #[test]
     fn common_prefix() {
         assert_eq!(common_prefix_length(b"", b""), 0);
@@ -489,67 +473,24 @@ mod tests {
             ("a/bc", 4, 14),
             ("a/bc/de/g", 5, 15),
         ] {
-            assert!(!builder.push(
-                label.as_bytes().to_vec(),
-                (value_exact, num_segments(label)),
-                Some((value_prefix, num_segments(label)))
-            ));
+            assert!(!builder.push(label.as_bytes().to_vec(), value_exact, Some(value_prefix)));
         }
-        assert!(builder.push("a/bc".as_bytes().to_vec(), (6, 2), Some((16, 2))));
+        assert!(builder.push("a/bc".as_bytes().to_vec(), 6, Some(16)));
         let trie = builder.build();
 
-        assert_eq!(
-            trie.lookup(make_key("")).map(|(v, i)| (*v, i)),
-            Some((1, 0))
-        );
-        assert_eq!(
-            trie.lookup(make_key("a")).map(|(v, i)| (*v, i)),
-            Some((2, 1))
-        );
-        assert_eq!(
-            trie.lookup(make_key("x")).map(|(v, i)| (*v, i)),
-            Some((11, 0))
-        );
-        assert_eq!(
-            trie.lookup(make_key("bc")).map(|(v, i)| (*v, i)),
-            Some((7, 1))
-        );
-        assert_eq!(
-            trie.lookup(make_key("x/y")).map(|(v, i)| (*v, i)),
-            Some((11, 0))
-        );
-        assert_eq!(
-            trie.lookup(make_key("a/bc")).map(|(v, i)| (*v, i)),
-            Some((6, 2))
-        );
-        assert_eq!(
-            trie.lookup(make_key("a/b")).map(|(v, i)| (*v, i)),
-            Some((12, 1))
-        );
-        assert_eq!(
-            trie.lookup(make_key("a/bcde")).map(|(v, i)| (*v, i)),
-            Some((12, 1))
-        );
-        assert_eq!(
-            trie.lookup(make_key("a/bc/de")).map(|(v, i)| (*v, i)),
-            Some((16, 2))
-        );
-        assert_eq!(
-            trie.lookup(make_key("a/bc/de/f")).map(|(v, i)| (*v, i)),
-            Some((3, 4))
-        );
-        assert_eq!(
-            trie.lookup(make_key("a/bc/de/fh")).map(|(v, i)| (*v, i)),
-            Some((16, 2))
-        );
-        assert_eq!(
-            trie.lookup(make_key("a/bc/de/g")).map(|(v, i)| (*v, i)),
-            Some((5, 4))
-        );
-        assert_eq!(
-            trie.lookup(make_key("a/bc/de/h")).map(|(v, i)| (*v, i)),
-            Some((16, 2))
-        );
+        assert_eq!(trie.lookup(make_key("")).as_deref(), Some(&1));
+        assert_eq!(trie.lookup(make_key("a")).as_deref(), Some(&2));
+        assert_eq!(trie.lookup(make_key("x")).as_deref(), Some(&11));
+        assert_eq!(trie.lookup(make_key("bc")).as_deref(), Some(&7));
+        assert_eq!(trie.lookup(make_key("x/y")).as_deref(), Some(&11));
+        assert_eq!(trie.lookup(make_key("a/bc")).as_deref(), Some(&6));
+        assert_eq!(trie.lookup(make_key("a/b")).as_deref(), Some(&12));
+        assert_eq!(trie.lookup(make_key("a/bcde")).as_deref(), Some(&12));
+        assert_eq!(trie.lookup(make_key("a/bc/de")).as_deref(), Some(&16));
+        assert_eq!(trie.lookup(make_key("a/bc/de/f")).as_deref(), Some(&3));
+        assert_eq!(trie.lookup(make_key("a/bc/de/fh")).as_deref(), Some(&16));
+        assert_eq!(trie.lookup(make_key("a/bc/de/g")).as_deref(), Some(&5));
+        assert_eq!(trie.lookup(make_key("a/bc/de/h")).as_deref(), Some(&16));
     }
 
     #[test]
@@ -562,60 +503,26 @@ mod tests {
             ("a/bc", 4, 14),
             ("a/bc/de/g", 5, 15),
         ] {
-            assert!(!builder.push(
-                label.as_bytes().to_vec(),
-                (value_exact, num_segments(label)),
-                Some((value_prefix, num_segments(label)))
-            ));
+            assert!(!builder.push(label.as_bytes().to_vec(), value_exact, Some(value_prefix)));
         }
-        assert!(builder.push("a/bc".as_bytes().to_vec(), (6, 2), Some((16, 2))));
+        assert!(builder.push("a/bc".as_bytes().to_vec(), 6, Some(16)));
         let trie = builder.build();
 
-        assert_eq!(trie.lookup(make_key("")).map(|(v, i)| (*v, i)), None);
-        assert_eq!(
-            trie.lookup(make_key("a")).map(|(v, i)| (*v, i)),
-            Some((2, 1))
-        );
-        assert_eq!(trie.lookup(make_key("x")).map(|(v, i)| (*v, i)), None);
-        assert_eq!(trie.lookup(make_key("b")).map(|(v, i)| (*v, i)), None);
-        assert_eq!(
-            trie.lookup(make_key("bc")).map(|(v, i)| (*v, i)),
-            Some((7, 1))
-        );
-        assert_eq!(trie.lookup(make_key("bcd")).map(|(v, i)| (*v, i)), None);
-        assert_eq!(trie.lookup(make_key("x/y")).map(|(v, i)| (*v, i)), None);
-        assert_eq!(
-            trie.lookup(make_key("a/bc")).map(|(v, i)| (*v, i)),
-            Some((6, 2))
-        );
-        assert_eq!(
-            trie.lookup(make_key("a/b")).map(|(v, i)| (*v, i)),
-            Some((12, 1))
-        );
-        assert_eq!(
-            trie.lookup(make_key("a/bcde")).map(|(v, i)| (*v, i)),
-            Some((12, 1))
-        );
-        assert_eq!(
-            trie.lookup(make_key("a/bc/de")).map(|(v, i)| (*v, i)),
-            Some((16, 2))
-        );
-        assert_eq!(
-            trie.lookup(make_key("a/bc/de/f")).map(|(v, i)| (*v, i)),
-            Some((3, 4))
-        );
-        assert_eq!(
-            trie.lookup(make_key("a/bc/de/fh")).map(|(v, i)| (*v, i)),
-            Some((16, 2))
-        );
-        assert_eq!(
-            trie.lookup(make_key("a/bc/de/g")).map(|(v, i)| (*v, i)),
-            Some((5, 4))
-        );
-        assert_eq!(
-            trie.lookup(make_key("a/bc/de/h")).map(|(v, i)| (*v, i)),
-            Some((16, 2))
-        );
+        assert_eq!(trie.lookup(make_key("")).as_deref(), None);
+        assert_eq!(trie.lookup(make_key("a")).as_deref(), Some(&2));
+        assert_eq!(trie.lookup(make_key("x")).as_deref(), None);
+        assert_eq!(trie.lookup(make_key("b")).as_deref(), None);
+        assert_eq!(trie.lookup(make_key("bc")).as_deref(), Some(&7));
+        assert_eq!(trie.lookup(make_key("bcd")).as_deref(), None);
+        assert_eq!(trie.lookup(make_key("x/y")).as_deref(), None);
+        assert_eq!(trie.lookup(make_key("a/bc")).as_deref(), Some(&6));
+        assert_eq!(trie.lookup(make_key("a/b")).as_deref(), Some(&12));
+        assert_eq!(trie.lookup(make_key("a/bcde")).as_deref(), Some(&12));
+        assert_eq!(trie.lookup(make_key("a/bc/de")).as_deref(), Some(&16));
+        assert_eq!(trie.lookup(make_key("a/bc/de/f")).as_deref(), Some(&3));
+        assert_eq!(trie.lookup(make_key("a/bc/de/fh")).as_deref(), Some(&16));
+        assert_eq!(trie.lookup(make_key("a/bc/de/g")).as_deref(), Some(&5));
+        assert_eq!(trie.lookup(make_key("a/bc/de/h")).as_deref(), Some(&16));
     }
 
     #[test]
@@ -628,11 +535,7 @@ mod tests {
             ("a/bc", 123, 123),
             ("a/bc/de/g", 123, 123),
         ] {
-            assert!(!builder.push(
-                label.as_bytes().to_vec(),
-                (value_exact, 0),
-                Some((value_prefix, 0))
-            ));
+            assert!(!builder.push(label.as_bytes().to_vec(), value_exact, Some(value_prefix)));
         }
         let trie = builder.build();
         assert_eq!(trie.values.len(), 2);
