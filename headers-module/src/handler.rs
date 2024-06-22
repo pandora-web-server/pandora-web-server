@@ -13,13 +13,31 @@
 // limitations under the License.
 
 use async_trait::async_trait;
+use http::{HeaderName, HeaderValue};
 use log::{debug, trace};
+use module_utils::merger::{Merger, StrictHostPathMatcher};
 use module_utils::pingora::{Error, ResponseHeader, SessionWrapper};
 use module_utils::router::Router;
 use module_utils::{RequestFilter, RequestFilterResult};
 
-use crate::configuration::{Header, HeadersConf};
-use crate::processing::IntoMergedConf;
+use crate::configuration::{Header, HeadersConf, IntoHeaders, WithMatchRules};
+
+fn merge_rules<C>(rules: Vec<WithMatchRules<C>>) -> Merger<StrictHostPathMatcher, Vec<Header>>
+where
+    C: Default + Clone + Eq + IntoHeaders,
+{
+    let mut merger = Merger::new();
+    for rule in rules {
+        merger.push(rule.match_rules, rule.conf);
+    }
+    merger.merge_into_merger(|values| {
+        let mut result = C::default();
+        for conf in values {
+            result.merge_with(conf);
+        }
+        result.into_headers()
+    })
+}
 
 /// Handler for Pingora’s `request_filter` phase
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,16 +51,31 @@ impl TryFrom<HeadersConf> for HeadersHandler {
     fn try_from(value: HeadersConf) -> Result<Self, Self::Error> {
         debug!("Headers configuration received: {value:#?}");
 
-        let merged_cache_control = value.response_headers.cache_control.into_merged();
-        let merged_custom = value.response_headers.custom.into_merged();
-        let merged = (merged_cache_control, merged_custom).into_merged();
+        let cache_control = merge_rules(value.response_headers.cache_control);
+        let merged_custom = merge_rules(value.response_headers.custom);
+
+        let mut merged = cache_control;
+        merged.extend([merged_custom]);
         trace!("Merged headers configuration into: {merged:#?}");
 
-        let mut builder = Router::builder();
-        for ((host, path), conf) in merged.into_iter() {
-            builder.push(&host, &path, conf.exact, Some(conf.prefix));
-        }
-        let router = builder.build();
+        let router = merged.merge(|values| {
+            let mut result = Vec::<(HeaderName, HeaderValue)>::new();
+            for headers in values {
+                for (name, value) in headers {
+                    if let Some(existing) = result.iter().position(|(n, _)| n == name) {
+                        // Combine duplicate headers
+                        // https://datatracker.ietf.org/doc/html/rfc7230#section-3.2.2
+                        let mut new_value = result[existing].1.as_bytes().to_vec();
+                        new_value.extend_from_slice(b", ");
+                        new_value.extend_from_slice(value.as_bytes());
+                        result[existing].1 = HeaderValue::from_bytes(&new_value).unwrap();
+                    } else {
+                        result.push((name.clone(), value.clone()))
+                    }
+                }
+            }
+            result
+        });
 
         Ok(Self { router })
     }

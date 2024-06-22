@@ -176,6 +176,5 @@
 pub mod configuration;
 mod deserialize;
 mod handler;
-mod processing;
 
 pub use handler::HeadersHandler;

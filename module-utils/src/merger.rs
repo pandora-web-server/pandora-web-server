@@ -216,9 +216,10 @@ impl PathMatch for PathMatcher {
     }
 }
 
-/// This is almost identical to `HostPathMatcher` but won’t allow prefix rules to match on exact path.
+/// This is almost identical to `HostPathMatcher` but won’t allow prefix rules to match on exact
+/// path.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-struct StrictHostPathMatcher {
+pub struct StrictHostPathMatcher {
     host: Vec<u8>,
     path: Path,
     exact: bool,
@@ -366,7 +367,7 @@ where
             if parent_path.is_prefix_of(path) {
                 // Copy any configurations from parent that apply
                 for entry in parent_fallback {
-                    if entry.matcher.matches(host, path, false).any() {
+                    if entry.matcher.matches(b"", path, false).any() {
                         list_fallback.push(entry.clone());
                     }
                 }
@@ -405,8 +406,7 @@ where
             for (path, list_fallback, list_main) in entries.iter_mut() {
                 if entry.matcher.matches(host, path, false).any() {
                     list_main.push(entry.clone());
-                } else if !host.is_empty() && entry.matcher.matches(&Vec::new(), path, false).any()
-                {
+                } else if !host.is_empty() && entry.matcher.matches(b"", path, false).any() {
                     list_fallback.push(entry.clone());
                 }
             }
@@ -499,10 +499,7 @@ where
     /// The result can be combined with other mergers of the same type and turned into a router
     /// then.
     ///
-    /// *Note*: It is no longer possible to add individual values to the resulting merger, due to
-    /// the use of a private path matcher. This is intentional, the inconsistent internal state of
-    /// this merger doesn’t allow safe additions.
-    #[allow(private_interfaces)]
+    /// *Note*: The resulting merger is not meant for additions of individual items.
     pub fn merge_into_merger<C, M>(self, callback: C) -> Merger<StrictHostPathMatcher, M>
     where
         C: for<'a> Fn(Box<dyn Iterator<Item = &'a Conf> + 'a>) -> M,

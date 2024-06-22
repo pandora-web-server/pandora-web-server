@@ -21,82 +21,18 @@ use http::{
     header,
     header::{HeaderName, HeaderValue},
 };
-use module_utils::DeserializeMap;
+use module_utils::{
+    merger::{HostPathMatcher, PathMatch, PathMatchResult},
+    router::{Path, EMPTY_PATH},
+    DeserializeMap,
+};
 use std::borrow::Cow;
-use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt::Debug;
 
 use crate::deserialize::{
     deserialize_custom_headers, deserialize_match_rule_list, deserialize_with_match_rules,
 };
-
-/// A single match rule within `match_rules.include` or `match_rules.exclude`
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MatchRule {
-    /// The host name to match
-    ///
-    /// If empty, this will match all host names. Otherwise an exact match is required.
-    pub host: String,
-
-    /// The path to match
-    ///
-    /// This should be a *normalized* path, without leading or trailing slashes and with exactly
-    /// one slash character used as separator. The normalization is normally performed by YAML
-    /// deserialization.
-    pub path: String,
-
-    /// If `true`, the path will match the exact directory and any files/directories within.
-    /// Otherwise an exact match is required.
-    pub prefix: bool,
-}
-
-impl MatchRule {
-    /// Checks whether the rule matches the host/path combination.
-    ///
-    /// The path given should be normalized (no leading or trailing slashes, exactly one slash
-    /// character as separator).
-    ///
-    /// Matches that only apply to the exact path and none of its children will only be considered
-    /// if `allow_exact` is `true`.
-    pub(crate) fn matches(&self, host: &str, path: &str, allow_exact: bool) -> bool {
-        if !self.host.is_empty() && self.host != host {
-            return false;
-        }
-
-        if self.prefix {
-            path.starts_with(&self.path)
-                && (path.len() == self.path.len()
-                    || self.path.is_empty()
-                    || path.as_bytes()[self.path.len()] == b'/')
-        } else {
-            allow_exact && self.path == path
-        }
-    }
-}
-
-impl PartialOrd for MatchRule {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for MatchRule {
-    fn cmp(&self, other: &Self) -> Ordering {
-        let result = self.host.cmp(&other.host);
-        if result == Ordering::Equal {
-            let result = self.path.cmp(&other.path);
-            if result == Ordering::Equal {
-                // Prefix matches go before exact matches
-                other.prefix.cmp(&self.prefix)
-            } else {
-                result
-            }
-        } else {
-            result
-        }
-    }
-}
 
 /// Include and exclude rules applying to a configuration entry
 ///
@@ -116,83 +52,83 @@ impl Ord for MatchRule {
 pub struct MatchRules {
     /// Rules determining the locations where the configuration entry should apply
     #[module_utils(deserialize_with_seed = "deserialize_match_rule_list")]
-    pub include: Vec<MatchRule>,
+    pub include: Vec<HostPathMatcher>,
     /// Rules determining the locations where the configuration entry should not apply
     #[module_utils(deserialize_with_seed = "deserialize_match_rule_list")]
-    pub exclude: Vec<MatchRule>,
+    pub exclude: Vec<HostPathMatcher>,
 }
 
-impl MatchRules {
-    const RULE_DEFAULT: &'static MatchRule = &MatchRule {
-        host: String::new(),
-        path: String::new(),
-        prefix: true,
-    };
-
-    /// Produces all rules, both include and exclude
-    pub(crate) fn iter(&self) -> Box<dyn Iterator<Item = &MatchRule> + '_> {
+impl PathMatch for MatchRules {
+    fn iter(&self) -> Box<dyn Iterator<Item = (&[u8], &Path)> + '_> {
         if self.include.is_empty() && self.exclude.is_empty() {
-            Box::new(std::iter::once(Self::RULE_DEFAULT))
+            Box::new(std::iter::once(("".as_bytes(), EMPTY_PATH)))
         } else {
-            Box::new(self.include.iter().chain(self.exclude.iter()))
+            Box::new(
+                self.include
+                    .iter()
+                    .chain(self.exclude.iter())
+                    .flat_map(|matcher| matcher.iter()),
+            )
         }
     }
 
-    /// Checks whether the rules match the given host/path combination. If there is a matching rule
-    /// and it’s an include rule, that rule is returned.
-    ///
-    /// The path given should be normalized (no leading or trailing slashes, exactly one slash
-    /// character as separator).
-    ///
-    /// Matches that only apply to the exact path and none of its children will only be considered
-    /// if `allow_exact` is `true`.
-    pub(crate) fn matches(&self, host: &str, path: &str, allow_exact: bool) -> Option<&MatchRule> {
+    fn matches(&self, host: &[u8], path: &Path, force_prefix: bool) -> PathMatchResult {
         fn find_match<'a>(
-            rules: &'a [MatchRule],
-            host: &str,
-            path: &str,
-            allow_exact: bool,
-        ) -> Option<&'a MatchRule> {
-            rules.iter().fold(None, |previous, current| {
-                if current.matches(host, path, allow_exact) {
-                    if previous.is_some_and(|previous| previous > current) {
-                        previous
+            rules: &'a [HostPathMatcher],
+            host: &[u8],
+            path: &Path,
+            force_prefix: bool,
+        ) -> (PathMatchResult, Option<&'a HostPathMatcher>) {
+            rules.iter().fold(
+                (PathMatchResult::NoMatch, None),
+                |(previous_result, previous), current| {
+                    let result = current.matches(host, path, force_prefix);
+                    if result.any() {
+                        if previous.is_some_and(|previous| previous > current) {
+                            (previous_result, previous)
+                        } else {
+                            (result, Some(current))
+                        }
                     } else {
-                        Some(current)
+                        (previous_result, previous)
                     }
-                } else {
-                    previous
-                }
-            })
+                },
+            )
         }
 
         if self.include.is_empty() && self.exclude.is_empty() {
-            // Match everything by default
-            return Some(Self::RULE_DEFAULT);
+            // By default, this is a fallback rule matching everything on fallback host.
+            if host.is_empty() {
+                return if path.is_empty() {
+                    PathMatchResult::MatchesBoth
+                } else {
+                    PathMatchResult::MatchesPrefix
+                };
+            } else {
+                return PathMatchResult::NoMatch;
+            }
         }
 
-        let exclude = find_match(&self.exclude, host, path, allow_exact);
-        let include = find_match(&self.include, host, path, allow_exact);
+        let (_, exclude) = find_match(&self.exclude, host, path, force_prefix);
+        let (include_result, include) = find_match(&self.include, host, path, force_prefix);
         if let Some(exclude) = exclude {
             if include.is_some_and(|include| include > exclude) {
-                include
+                include_result
             } else {
-                None
+                PathMatchResult::NoMatch
             }
         } else {
-            include
+            include_result
         }
     }
-}
-
-pub(crate) trait Mergeable {
-    /// Merges two configurations, with conflicting settings from `other` being prioritized.
-    fn merge_with(&mut self, other: Self);
 }
 
 pub(crate) type Header = (HeaderName, HeaderValue);
 
 pub(crate) trait IntoHeaders {
+    /// Merges two configurations, with conflicting settings from `other` being prioritized.
+    fn merge_with(&mut self, other: &Self);
+
     /// Translates the configuration into a list of HTTP headers.
     fn into_headers(self) -> Vec<Header>;
 }
@@ -249,8 +185,8 @@ pub struct CacheControlConf {
     stale_if_error: Option<usize>,
 }
 
-impl Mergeable for CacheControlConf {
-    fn merge_with(&mut self, other: Self) {
+impl IntoHeaders for CacheControlConf {
+    fn merge_with(&mut self, other: &Self) {
         macro_rules! merge_option {
             ($name: ident) => {
                 if other.$name.is_some() {
@@ -280,9 +216,7 @@ impl Mergeable for CacheControlConf {
         merge_option!(stale_while_revalidate);
         merge_option!(stale_if_error);
     }
-}
 
-impl IntoHeaders for CacheControlConf {
     fn into_headers(self) -> Vec<Header> {
         let mut entries: Vec<Cow<'_, str>> = Vec::new();
         if let Some(max_age) = self.max_age {
@@ -330,13 +264,15 @@ impl IntoHeaders for CacheControlConf {
     }
 }
 
-impl Mergeable for HashMap<HeaderName, HeaderValue> {
-    fn merge_with(&mut self, other: Self) {
-        self.extend(other);
-    }
-}
-
 impl IntoHeaders for HashMap<HeaderName, HeaderValue> {
+    fn merge_with(&mut self, other: &Self) {
+        self.extend(
+            other
+                .iter()
+                .map(|(name, value)| (name.clone(), value.clone())),
+        );
+    }
+
     fn into_headers(self) -> Vec<Header> {
         self.into_iter().collect()
     }
@@ -359,102 +295,4 @@ pub struct HeadersInnerConf {
 pub struct HeadersConf {
     /// Various settings to configure HTTP response headers
     pub response_headers: HeadersInnerConf,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn match_rule_parsing() {
-        assert_eq!(
-            MatchRule::from(""),
-            MatchRule {
-                host: "".to_owned(),
-                path: "".to_owned(),
-                prefix: true,
-            }
-        );
-
-        assert_eq!(
-            MatchRule::from("localhost"),
-            MatchRule {
-                host: "localhost".to_owned(),
-                path: "".to_owned(),
-                prefix: true,
-            }
-        );
-
-        assert_eq!(
-            MatchRule::from("localhost/"),
-            MatchRule {
-                host: "localhost".to_owned(),
-                path: "".to_owned(),
-                prefix: false,
-            }
-        );
-
-        assert_eq!(
-            MatchRule::from("localhost/*"),
-            MatchRule {
-                host: "localhost".to_owned(),
-                path: "".to_owned(),
-                prefix: true,
-            }
-        );
-
-        assert_eq!(
-            MatchRule::from("localhost/dir"),
-            MatchRule {
-                host: "localhost".to_owned(),
-                path: "dir".to_owned(),
-                prefix: false,
-            }
-        );
-
-        assert_eq!(
-            MatchRule::from("localhost/dir/*"),
-            MatchRule {
-                host: "localhost".to_owned(),
-                path: "dir".to_owned(),
-                prefix: true,
-            }
-        );
-
-        assert_eq!(
-            MatchRule::from("localhost///dir///*"),
-            MatchRule {
-                host: "localhost".to_owned(),
-                path: "dir".to_owned(),
-                prefix: true,
-            }
-        );
-    }
-
-    #[test]
-    fn match_rule_ordering() {
-        // Identical
-        assert_eq!(
-            MatchRule::from("example.com/dir/*").cmp(&MatchRule::from("example.com//dir//*")),
-            Ordering::Equal
-        );
-
-        // Host name specificity
-        assert_eq!(
-            MatchRule::from("example.com/dir/*").cmp(&MatchRule::from("/dir/subdir/*")),
-            Ordering::Greater
-        );
-
-        // Path length
-        assert_eq!(
-            MatchRule::from("example.com/dir/*").cmp(&MatchRule::from("example.com/dir/subdir/*")),
-            Ordering::Less
-        );
-
-        // Exact matches sorted last
-        assert_eq!(
-            MatchRule::from("example.com/dir/").cmp(&MatchRule::from("example.com/dir/*")),
-            Ordering::Greater
-        );
-    }
 }

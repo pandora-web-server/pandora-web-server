@@ -15,87 +15,27 @@
 //! Custom deserialization code for the configuration
 
 use http::header::{HeaderName, HeaderValue};
-use module_utils::{DeserializeMap, MapVisitor};
+use module_utils::{merger::HostPathMatcher, DeserializeMap, MapVisitor};
 use serde::{
     de::{DeserializeSeed, Deserializer, Error as _, MapAccess, SeqAccess, Visitor},
     Deserialize,
 };
 use std::collections::HashMap;
 
-use crate::configuration::{MatchRule, MatchRules, WithMatchRules};
-
-/// Normalizes a path by removing leading and trailing slashes as well as collapsing multiple
-/// separating slashes into one.
-fn normalize_path(path: &str) -> String {
-    let mut had_slash = true;
-    let mut path: String = path
-        .chars()
-        .filter(|c| {
-            if *c == '/' {
-                if had_slash {
-                    false
-                } else {
-                    had_slash = true;
-                    true
-                }
-            } else {
-                had_slash = false;
-                true
-            }
-        })
-        .collect();
-
-    if path.ends_with('/') {
-        path.pop();
-    }
-
-    path
-}
-
-impl<T: AsRef<str>> From<T> for MatchRule {
-    fn from(value: T) -> Self {
-        let mut rule = value.as_ref().trim();
-        let prefix = if let Some(r) = rule.strip_suffix("/*") {
-            rule = r;
-            true
-        } else {
-            !rule.contains('/')
-        };
-
-        let (host, path) = if rule.starts_with('/') {
-            ("", rule)
-        } else if let Some((host, path)) = rule.split_once('/') {
-            (host, path)
-        } else {
-            (rule, "")
-        };
-
-        Self {
-            host: host.to_owned(),
-            path: normalize_path(path),
-            prefix,
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for MatchRule {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Ok(String::deserialize(deserializer)?.into())
-    }
-}
+use crate::configuration::{MatchRules, WithMatchRules};
 
 pub(crate) fn deserialize_match_rule_list<'de, D>(
-    seed: Vec<MatchRule>,
+    seed: Vec<HostPathMatcher>,
     deserializer: D,
-) -> Result<Vec<MatchRule>, D::Error>
+) -> Result<Vec<HostPathMatcher>, D::Error>
 where
     D: Deserializer<'de>,
 {
     struct ListVisitor {
-        seed: Vec<MatchRule>,
+        seed: Vec<HostPathMatcher>,
     }
     impl<'de> Visitor<'de> for ListVisitor {
-        type Value = Vec<MatchRule>;
+        type Value = Vec<HostPathMatcher>;
 
         fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             formatter.write_str("String or Vec<String>")
@@ -117,7 +57,7 @@ where
             E: serde::de::Error,
         {
             let mut list = self.seed;
-            list.push(MatchRule::from(v));
+            list.push(HostPathMatcher::from(v.as_str()));
             Ok(list)
         }
 
@@ -126,7 +66,7 @@ where
             E: serde::de::Error,
         {
             let mut list = self.seed;
-            list.push(MatchRule::from(v));
+            list.push(HostPathMatcher::from(v));
             Ok(list)
         }
 
@@ -135,7 +75,7 @@ where
             E: serde::de::Error,
         {
             let mut list = self.seed;
-            list.push(MatchRule::from(v));
+            list.push(HostPathMatcher::from(v));
             Ok(list)
         }
     }
@@ -372,22 +312,11 @@ mod tests {
     use module_utils::FromYaml;
 
     #[test]
-    fn path_normalization() {
-        assert_eq!(normalize_path(""), "");
-        assert_eq!(normalize_path("/"), "");
-        assert_eq!(normalize_path("///"), "");
-        assert_eq!(normalize_path("abc"), "abc");
-        assert_eq!(normalize_path("//abc//"), "abc");
-        assert_eq!(normalize_path("abc/def"), "abc/def");
-        assert_eq!(normalize_path("//abc//def//"), "abc/def");
-    }
-
-    #[test]
     fn match_rule_deserialization() {
         #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
         struct Conf {
             #[module_utils(deserialize_with_seed = "deserialize_match_rule_list")]
-            rules: Vec<MatchRule>,
+            rules: Vec<HostPathMatcher>,
         }
 
         assert_eq!(
@@ -403,64 +332,12 @@ mod tests {
         assert_eq!(
             Conf::from_yaml(
                 r#"
-                rules: ""
-            "#
-            )
-            .unwrap(),
-            Conf {
-                rules: vec![MatchRule {
-                    host: "".to_owned(),
-                    path: "".to_owned(),
-                    prefix: true,
-                }],
-            }
-        );
-
-        assert_eq!(
-            Conf::from_yaml(
-                r#"
                 rules: example.com
             "#
             )
             .unwrap(),
             Conf {
-                rules: vec![MatchRule {
-                    host: "example.com".to_owned(),
-                    path: "".to_owned(),
-                    prefix: true,
-                }],
-            }
-        );
-
-        assert_eq!(
-            Conf::from_yaml(
-                r#"
-                rules: /
-            "#
-            )
-            .unwrap(),
-            Conf {
-                rules: vec![MatchRule {
-                    host: "".to_owned(),
-                    path: "".to_owned(),
-                    prefix: false,
-                }],
-            }
-        );
-
-        assert_eq!(
-            Conf::from_yaml(
-                r#"
-                rules: /*
-            "#
-            )
-            .unwrap(),
-            Conf {
-                rules: vec![MatchRule {
-                    host: "".to_owned(),
-                    path: "".to_owned(),
-                    prefix: true,
-                }],
+                rules: vec![HostPathMatcher::from("example.com/*")],
             }
         );
 
@@ -472,11 +349,7 @@ mod tests {
             )
             .unwrap(),
             Conf {
-                rules: vec![MatchRule {
-                    host: "localhost".to_owned(),
-                    path: "subdir/sub".to_owned(),
-                    prefix: false,
-                }],
+                rules: vec![HostPathMatcher::from("localhost/subdir/sub")],
             }
         );
 
@@ -489,16 +362,8 @@ mod tests {
             .unwrap(),
             Conf {
                 rules: vec![
-                    MatchRule {
-                        host: "".to_owned(),
-                        path: "".to_owned(),
-                        prefix: false,
-                    },
-                    MatchRule {
-                        host: "example.com".to_owned(),
-                        path: "".to_owned(),
-                        prefix: true,
-                    }
+                    HostPathMatcher::from("/"),
+                    HostPathMatcher::from("example.com")
                 ],
             }
         );
@@ -514,16 +379,8 @@ mod tests {
             .unwrap(),
             Conf {
                 rules: vec![
-                    MatchRule {
-                        host: "".to_owned(),
-                        path: "".to_owned(),
-                        prefix: false,
-                    },
-                    MatchRule {
-                        host: "example.com".to_owned(),
-                        path: "".to_owned(),
-                        prefix: true,
-                    }
+                    HostPathMatcher::from("/"),
+                    HostPathMatcher::from("example.com")
                 ],
             }
         );
@@ -534,7 +391,7 @@ mod tests {
         #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
         struct Conf {
             #[module_utils(deserialize_with_seed = "deserialize_match_rule_list")]
-            rules: Vec<MatchRule>,
+            rules: Vec<HostPathMatcher>,
         }
 
         let conf = Conf::from_yaml(
@@ -566,26 +423,10 @@ mod tests {
             conf,
             Conf {
                 rules: vec![
-                    MatchRule {
-                        host: "".to_owned(),
-                        path: "".to_owned(),
-                        prefix: true,
-                    },
-                    MatchRule {
-                        host: "example.com".to_owned(),
-                        path: "".to_owned(),
-                        prefix: true,
-                    },
-                    MatchRule {
-                        host: "".to_owned(),
-                        path: "subdir".to_owned(),
-                        prefix: false,
-                    },
-                    MatchRule {
-                        host: "example.net".to_owned(),
-                        path: "subdir".to_owned(),
-                        prefix: true,
-                    },
+                    HostPathMatcher::from("/*"),
+                    HostPathMatcher::from("example.com"),
+                    HostPathMatcher::from("/subdir"),
+                    HostPathMatcher::from("example.net/subdir/*"),
                 ]
             }
         );
@@ -632,7 +473,7 @@ mod tests {
             DummyConf {
                 inner: vec![WithMatchRules {
                     match_rules: MatchRules {
-                        include: vec![MatchRule::from("/*")],
+                        include: vec![HostPathMatcher::from("/*")],
                         ..Default::default()
                     },
                     conf: DummyInner { value: 12 },
@@ -705,7 +546,7 @@ mod tests {
             DummyConf {
                 inner: vec![WithMatchRules {
                     match_rules: MatchRules {
-                        include: vec![MatchRule::from("/*")],
+                        include: vec![HostPathMatcher::from("/*")],
                         ..Default::default()
                     },
                     conf: HashMap::from([
@@ -730,7 +571,7 @@ mod tests {
             DummyConf {
                 inner: vec![WithMatchRules {
                     match_rules: MatchRules {
-                        include: vec![MatchRule::from("/*")],
+                        include: vec![HostPathMatcher::from("/*")],
                         ..Default::default()
                     },
                     conf: HashMap::from([
@@ -766,7 +607,7 @@ mod tests {
                     },
                     WithMatchRules {
                         match_rules: MatchRules {
-                            include: vec![MatchRule::from("/*")],
+                            include: vec![HostPathMatcher::from("/*")],
                             ..Default::default()
                         },
                         conf: HashMap::from([(

@@ -38,6 +38,9 @@ use std::{collections::HashMap, marker::PhantomData};
 pub use crate::trie::LookupResult;
 use crate::trie::{common_prefix_length, Trie, SEPARATOR};
 
+/// Empty path
+pub const EMPTY_PATH: &Path = &Path { path: Vec::new() };
+
 /// Encapsulates a router path
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Path {
@@ -487,7 +490,113 @@ impl<Value: Clone + Eq, Merger: Merge<Value>> RouterBuilder<Value, Merger> {
 
 #[cfg(test)]
 mod tests {
+    use crate::merger::HostPathMatcher;
+
     use super::*;
+
+    #[test]
+    fn path_normalization() {
+        assert_eq!(&Path::new("").path, b"");
+        assert_eq!(&Path::new("/").path, b"");
+        assert_eq!(&Path::new("///").path, b"");
+        assert_eq!(&Path::new("abc").path, b"abc");
+        assert_eq!(&Path::new("//abc//").path, b"abc");
+        assert_eq!(&Path::new("abc/def").path, b"abc/def");
+        assert_eq!(&Path::new("//abc//def//").path, b"abc/def");
+    }
+
+    #[test]
+    fn host_path_matcher_parsing() {
+        assert_eq!(
+            HostPathMatcher::from(""),
+            HostPathMatcher {
+                host: b"".to_vec(),
+                path: Path::new(""),
+                exact: false,
+            }
+        );
+
+        assert_eq!(
+            HostPathMatcher::from("/*"),
+            HostPathMatcher {
+                host: b"".to_vec(),
+                path: Path::new(""),
+                exact: false,
+            }
+        );
+
+        assert_eq!(
+            HostPathMatcher::from("abc/*"),
+            HostPathMatcher {
+                host: b"abc".to_vec(),
+                path: Path::new(""),
+                exact: false,
+            }
+        );
+
+        assert_eq!(
+            HostPathMatcher::from("/abc/*"),
+            HostPathMatcher {
+                host: b"".to_vec(),
+                path: Path::new("abc"),
+                exact: false,
+            }
+        );
+
+        assert_eq!(
+            HostPathMatcher::from("abc"),
+            HostPathMatcher {
+                host: b"abc".to_vec(),
+                path: Path::new(""),
+                exact: false,
+            }
+        );
+
+        assert_eq!(
+            HostPathMatcher::from("/abc"),
+            HostPathMatcher {
+                host: b"".to_vec(),
+                path: Path::new("abc"),
+                exact: true,
+            }
+        );
+
+        assert_eq!(
+            HostPathMatcher::from("/abc*"),
+            HostPathMatcher {
+                host: b"".to_vec(),
+                path: Path::new("abc*"),
+                exact: true,
+            }
+        );
+
+        assert_eq!(
+            HostPathMatcher::from("localhost/"),
+            HostPathMatcher {
+                host: b"localhost".to_vec(),
+                path: Path::new(""),
+                exact: true,
+            }
+        );
+
+        assert_eq!(
+            HostPathMatcher::from("localhost/abc/*"),
+            HostPathMatcher {
+                host: b"localhost".to_vec(),
+                path: Path::new("abc"),
+                exact: false,
+            }
+        );
+
+        assert_eq!(
+            HostPathMatcher::from("localhost///abc///"),
+            HostPathMatcher {
+                host: b"localhost".to_vec(),
+                path: Path::new("abc"),
+                exact: true,
+            }
+        );
+    }
 
     #[test]
     fn routing() {
