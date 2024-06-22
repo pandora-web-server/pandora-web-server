@@ -17,8 +17,9 @@
 use async_trait::async_trait;
 use http::{HeaderValue, StatusCode};
 use log::{debug, error, trace};
+use module_utils::merger::Merger;
 use module_utils::pingora::{Error, SessionWrapper};
-use module_utils::router::{Router, RouterBuilder};
+use module_utils::router::Router;
 use module_utils::standard_response::redirect_response;
 use module_utils::{RequestFilter, RequestFilterResult};
 
@@ -30,13 +31,6 @@ struct Rule {
     query_regex: Option<RegexMatch>,
     to: VariableInterpolation,
     r#type: RewriteType,
-}
-
-struct RuleMerger;
-impl module_utils::router::Merge<Vec<Rule>> for RuleMerger {
-    fn merge(current: &mut Vec<Rule>, new: Vec<Rule>) {
-        current.extend(new);
-    }
 }
 
 /// Handler for Pingora’s `request_filter` phase
@@ -51,14 +45,13 @@ impl TryFrom<RewriteConf> for RewriteHandler {
     fn try_from(mut conf: RewriteConf) -> Result<Self, Self::Error> {
         debug!("Rewrite configuration received: {conf:#?}");
 
-        let mut builder = RouterBuilder::<Vec<Rule>, RuleMerger>::default();
+        let mut merger = Merger::new();
 
         // Add in reverse order, so that the first rule listed in configuration takes precedence.
         conf.rewrite_rules.reverse();
 
-        // Add exact rules last, making sure they take precedence over prefix rules with the same
-        // path.
-        conf.rewrite_rules.sort_by_key(|rule| !rule.from.prefix);
+        // Sort by prefix so that exact rules get priority.
+        conf.rewrite_rules.sort_by(|a, b| a.from.cmp(&b.from));
 
         for rule in conf.rewrite_rules {
             let from = rule.from;
@@ -69,15 +62,11 @@ impl TryFrom<RewriteConf> for RewriteHandler {
                 r#type: rule.r#type,
             };
 
-            if from.prefix {
-                builder.push("", from.path, vec![rule.clone()], Some(vec![rule]));
-            } else {
-                builder.push("", from.path, vec![rule], None);
-            }
+            merger.push(from, rule);
         }
 
         Ok(Self {
-            router: builder.build(),
+            router: merger.merge(|rules| rules.cloned().collect::<Vec<_>>()),
         })
     }
 }

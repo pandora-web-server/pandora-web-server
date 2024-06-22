@@ -14,107 +14,14 @@
 
 //! Structures required to deserialize Rewrite Module configuration from YAML configuration files.
 
+use module_utils::merger::PathMatcher;
 use module_utils::DeserializeMap;
 use regex::Regex;
 use serde::{
     de::{Deserializer, Error},
     Deserialize,
 };
-use std::borrow::Cow;
-use std::cmp::Ordering;
 use std::default::Default;
-
-/// A parsed representation of the `from` field of the rewrite rule
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PathMatch {
-    /// The path to match
-    ///
-    /// This should be a *normalized* path, without leading or trailing slashes and with exactly
-    /// one slash character used as separator. The normalization is normally performed by YAML
-    /// deserialization.
-    pub path: String,
-
-    /// If `true`, the path will match the exact directory and any files/directories within.
-    /// Otherwise an exact match is required.
-    pub prefix: bool,
-}
-
-impl<'a> From<Cow<'a, str>> for PathMatch {
-    fn from(value: Cow<'a, str>) -> Self {
-        let (path, prefix) = if let Some(path) = value.strip_suffix("/*") {
-            (Cow::from(path), true)
-        } else {
-            (value, false)
-        };
-        Self {
-            path: normalize_path(&path),
-            prefix,
-        }
-    }
-}
-
-impl From<String> for PathMatch {
-    fn from(value: String) -> Self {
-        Cow::from(value).into()
-    }
-}
-
-impl<'a> From<&'a str> for PathMatch {
-    fn from(value: &'a str) -> Self {
-        Cow::from(value).into()
-    }
-}
-
-impl<'de> Deserialize<'de> for PathMatch {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        Ok(String::deserialize(deserializer)?.into())
-    }
-}
-
-impl Ord for PathMatch {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.path
-            .cmp(&other.path)
-            .then(other.prefix.cmp(&self.prefix))
-    }
-}
-
-impl PartialOrd for PathMatch {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-/// Normalizes a path by removing leading and trailing slashes as well as collapsing multiple
-/// separating slashes into one.
-fn normalize_path(path: &str) -> String {
-    let mut had_slash = true;
-    let mut path: String = path
-        .chars()
-        .filter(|c| {
-            if *c == '/' {
-                if had_slash {
-                    false
-                } else {
-                    had_slash = true;
-                    true
-                }
-            } else {
-                had_slash = false;
-                true
-            }
-        })
-        .collect();
-
-    if path.ends_with('/') {
-        path.pop();
-    }
-
-    path
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum VariableInterpolationPart {
@@ -292,9 +199,9 @@ pub struct RewriteRule {
     /// match, both `/path/` and `/path/subdir/file.txt` will be matched.
     ///
     /// When multiple rules potentially apply to a location, the closest matches will be evaluated
-    /// first meaning. Rules with a longer path are considered closer matches than shorter paths.
-    /// Exact matches are considered closer matches than prefix matches for the same path.
-    pub from: PathMatch,
+    /// first. Rules with a longer path are considered closer matches than shorter paths. Exact
+    /// matches are considered closer matches than prefix matches for the same path.
+    pub from: PathMatcher,
 
     /// Additional regular expression to further restrict matching paths, e.g. `\.png$` to match
     /// only PNG files. Prefixing the regular expression with `!` will negate its effect, e.g.
