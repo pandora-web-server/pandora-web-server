@@ -40,7 +40,7 @@ use crate::trie::{common_prefix_length, Trie, SEPARATOR};
 pub const EMPTY_PATH: &Path = &Path { path: Vec::new() };
 
 /// Encapsulates a router path
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Path {
     path: Vec<u8>,
 }
@@ -94,6 +94,12 @@ impl Path {
         } else {
             self.path.iter().filter(|b| **b == SEPARATOR).count() + 1
         }
+    }
+}
+
+impl Debug for Path {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&String::from_utf8_lossy(&self.path))
     }
 }
 

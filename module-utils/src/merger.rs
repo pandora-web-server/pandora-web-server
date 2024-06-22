@@ -68,7 +68,7 @@ pub trait PathMatch {
 }
 
 /// A basic path matcher, applying to a single host/path combination
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct HostPathMatcher {
     /// Host name that the matcher applies to
     pub host: Vec<u8>,
@@ -78,6 +78,20 @@ pub struct HostPathMatcher {
 
     /// If `true`, only exact path matches are accepted, otherwise both exact and prefix matches.
     pub exact: bool,
+}
+
+impl Debug for HostPathMatcher {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&String::from_utf8_lossy(&self.host))?;
+        if !self.path.is_empty() || self.exact {
+            f.write_str("/")?;
+        }
+        self.path.fmt(f)?;
+        if !self.exact {
+            f.write_str("/*")?;
+        }
+        Ok(())
+    }
 }
 
 impl From<&str> for HostPathMatcher {
@@ -149,13 +163,23 @@ impl PathMatch for HostPathMatcher {
 }
 
 /// A basic path matcher, applying to a single path on the empty host
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PathMatcher {
     /// Path that the matcher applies to
     pub path: Path,
 
     /// If `true`, only exact path matches are accepted, otherwise both exact and prefix matches.
     pub exact: bool,
+}
+
+impl Debug for PathMatcher {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.path.fmt(f)?;
+        if !self.exact {
+            f.write_str("/*")?;
+        }
+        Ok(())
+    }
 }
 
 impl From<&str> for PathMatcher {
@@ -218,7 +242,7 @@ impl PathMatch for PathMatcher {
 
 /// This is almost identical to `HostPathMatcher` but won’t allow prefix rules to match on exact
 /// path.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct StrictHostPathMatcher {
     host: Vec<u8>,
     path: Path,
@@ -247,6 +271,21 @@ impl PathMatch for StrictHostPathMatcher {
         } else {
             PathMatchResult::NoMatch
         }
+    }
+}
+
+impl Debug for StrictHostPathMatcher {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("!")?;
+        f.write_str(&String::from_utf8_lossy(&self.host))?;
+        if !self.path.is_empty() || self.exact {
+            f.write_str("/")?;
+        }
+        self.path.fmt(f)?;
+        if !self.exact {
+            f.write_str("/*")?;
+        }
+        Ok(())
     }
 }
 
