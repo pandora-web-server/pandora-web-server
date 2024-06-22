@@ -114,15 +114,15 @@ impl Deref for Path {
 /// use module_utils::router::Router;
 ///
 /// let mut builder = Router::builder();
-/// builder.push("localhost", "/", "Localhost root", Some("Localhost root"));
+/// builder.push("localhost", "/", "Localhost root", Some("Within localhost"));
 /// builder.push("localhost", "/dir/", "Localhost subdirectory", None);
-/// builder.push("example.com", "/", "Website root", Some("Website root"));
-/// builder.push("example.com", "/dir/", "Website subdirectory", Some("Website subdirectory"));
+/// builder.push("example.com", "/", "Website root", Some("Within website"));
+/// builder.push("example.com", "/dir/", "Website subdirectory", Some("Within website subdirectory"));
 ///
 /// let router = builder.build();
 /// assert!(router.lookup("localhost", "/").is_some_and(|(value, _)| *value == "Localhost root"));
-/// assert!(router.lookup("localhost", "/dir/file").is_some_and(|(value, _)| *value == "Localhost root"));
-/// assert!(router.lookup("example.com", "/dir/file").is_some_and(|(value, _)| *value == "Website subdirectory"));
+/// assert!(router.lookup("localhost", "/dir/file").is_some_and(|(value, _)| *value == "Within localhost"));
+/// assert!(router.lookup("example.com", "/dir/file").is_some_and(|(value, _)| *value == "Within website subdirectory"));
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Router<Value> {
