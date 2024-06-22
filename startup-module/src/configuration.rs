@@ -68,7 +68,7 @@ pub struct ListenAddr {
     /// This required TLS configuration to be present.
     pub tls: bool,
 
-    /// Determines whether listening on IPv6 [::] address should accept IPv4 connections as well.
+    /// Determines whether listening on IPv6 `[::]` address should accept IPv4 connections as well.
     ///
     /// If set, the IPV6_V6ONLY flag will be set accordingly for the socket. Otherwise the system
     /// default will be used.

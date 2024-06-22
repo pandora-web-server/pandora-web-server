@@ -143,14 +143,14 @@ pub trait RequestFilter: Sized {
         self.logging(&mut session, e, ctx).await
     }
 
-    /// Per-request state of this handler, see [`pingora_proxy::ProxyHttp::CTX`]
+    /// Per-request state of this handler, see [`pingora::ProxyHttp::CTX`]
     type CTX;
 
-    /// Creates a new state object, see [`pingora_proxy::ProxyHttp::new_ctx`]
+    /// Creates a new state object, see [`pingora::ProxyHttp::new_ctx`]
     fn new_ctx() -> Self::CTX;
 
     /// Handler to run during Pingora’s `request_filter` phase, see
-    /// [`pingora_proxy::ProxyHttp::request_filter`]. This uses a different return type to account
+    /// [`pingora::ProxyHttp::request_filter`]. This uses a different return type to account
     /// for the existence of multiple chained handlers.
     async fn request_filter(
         &self,
@@ -169,7 +169,7 @@ pub trait RequestFilter: Sized {
     }
 
     /// Handler to run during Pingora’s `upstream_peer` phase, see
-    /// [`pingora_proxy::ProxyHttp::upstream_peer`]. This uses a different return type to account
+    /// [`pingora::ProxyHttp::upstream_peer`]. This uses a different return type to account
     /// for the existence of multiple chained handlers.
     async fn upstream_peer(
         &self,
@@ -191,7 +191,7 @@ pub trait RequestFilter: Sized {
     ) {
     }
 
-    /// Handler to run during Pingora’s `logging` phase, see [`pingora_proxy::ProxyHttp::logging`].
+    /// Handler to run during Pingora’s `logging` phase, see [`pingora::ProxyHttp::logging`].
     async fn logging(
         &self,
         _session: &mut impl SessionWrapper,
