@@ -95,6 +95,35 @@ impl Path {
             self.path.iter().filter(|b| **b == SEPARATOR).count() + 1
         }
     }
+
+    /// If this path is a non-empty prefix of the given path, removes the prefix. Otherwise returns
+    /// `None`.
+    pub fn remove_prefix_from(&self, path: impl AsRef<[u8]>) -> Option<Vec<u8>> {
+        if self.path.is_empty() {
+            return None;
+        }
+
+        let mut path = path.as_ref();
+        for segment in self.path.split(|b| *b == SEPARATOR) {
+            while let [SEPARATOR, rest @ ..] = path {
+                path = rest;
+            }
+
+            if !path.starts_with(segment)
+                || path.get(segment.len()).is_some_and(|b| *b != SEPARATOR)
+            {
+                return None;
+            }
+
+            path = &path[segment.len()..];
+        }
+
+        if path.is_empty() {
+            Some(b"/".to_vec())
+        } else {
+            Some(path.to_vec())
+        }
+    }
 }
 
 impl Debug for Path {
@@ -361,6 +390,36 @@ mod tests {
         assert_eq!(&Path::new("//abc//").path, b"abc");
         assert_eq!(&Path::new("abc/def").path, b"abc/def");
         assert_eq!(&Path::new("//abc//def//").path, b"abc/def");
+    }
+
+    #[test]
+    fn path_remove_prefix() {
+        assert_eq!(Path::new("").remove_prefix_from("/"), None);
+        assert_eq!(Path::new("").remove_prefix_from("/abc"), None);
+        assert_eq!(Path::new("///").remove_prefix_from("/"), None);
+        assert_eq!(Path::new("///").remove_prefix_from("/abc"), None);
+        assert_eq!(
+            Path::new("abc").remove_prefix_from("/abc"),
+            Some(b"/".into())
+        );
+        assert_eq!(Path::new("abc").remove_prefix_from("/def"), None);
+        assert_eq!(Path::new("abc").remove_prefix_from("/abcd"), None);
+        assert_eq!(
+            Path::new("abc").remove_prefix_from("/abc//d"),
+            Some(b"//d".into())
+        );
+        assert_eq!(
+            Path::new("/abc/def/").remove_prefix_from("/abc//def"),
+            Some(b"/".into())
+        );
+        assert_eq!(
+            Path::new("/abc/def/").remove_prefix_from("/abc//def\\xyz"),
+            None
+        );
+        assert_eq!(
+            Path::new("/abc/def/").remove_prefix_from("/abc//def/xyz"),
+            Some(b"/xyz".into())
+        );
     }
 
     #[test]

@@ -16,7 +16,7 @@ use async_trait::async_trait;
 use http::uri::Uri;
 use log::warn;
 use module_utils::pingora::{Error, HttpPeer, ResponseHeader, SessionWrapper};
-use module_utils::router::Router;
+use module_utils::router::{Path, Router};
 use module_utils::{RequestFilter, RequestFilterResult};
 use std::collections::BTreeSet;
 use std::fmt::Debug;
@@ -64,7 +64,7 @@ impl<Ctx> DerefMut for VirtualHostsCtx<Ctx> {
 /// Handler for Pingora’s `request_filter` phase
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VirtualHostsHandler<H: Debug> {
-    handlers: Router<(bool, H)>,
+    handlers: Router<(Option<Path>, H)>,
 }
 
 impl<H: Debug> VirtualHostsHandler<H> {
@@ -73,13 +73,15 @@ impl<H: Debug> VirtualHostsHandler<H> {
         host: impl AsRef<[u8]>,
         path: impl AsRef<[u8]>,
     ) -> Option<(&H, usize, Option<Vec<u8>>)> {
-        self.handlers.lookup(&host, &path).map(|(result, tail)| {
-            let (strip_prefix, handler) = result.as_value();
+        self.handlers.lookup(&host, &path).map(|(result, _)| {
+            let (strip_path, handler) = result.as_value();
             let index = result.index();
             (
                 handler,
                 index,
-                tail.filter(|_| *strip_prefix).map(|t| t.as_ref().to_vec()),
+                strip_path
+                    .as_ref()
+                    .and_then(|p| p.remove_prefix_from(&path)),
             )
         })
     }
@@ -231,11 +233,11 @@ where
                 handlers.push(
                     alias,
                     "",
-                    (false, handler.clone()),
-                    Some((false, handler.clone())),
+                    (None, handler.clone()),
+                    Some((None, handler.clone())),
                 );
             }
-            handlers.push(&host, "", (false, handler.clone()), Some((false, handler)));
+            handlers.push(&host, "", (None, handler.clone()), Some((None, handler)));
 
             let mut subpaths = host_conf.subpaths.into_iter().collect::<Vec<_>>();
 
@@ -246,15 +248,20 @@ where
 
             for (rule, conf) in subpaths {
                 let handler = conf.config.try_into()?;
+                let strip_path = if conf.strip_prefix {
+                    Some(Path::new(&rule.path))
+                } else {
+                    None
+                };
                 for alias in &aliases {
                     handlers.push(
                         alias,
                         &rule.path,
-                        (conf.strip_prefix, handler.clone()),
+                        (strip_path.clone(), handler.clone()),
                         if rule.exact {
                             None
                         } else {
-                            Some((conf.strip_prefix, handler.clone()))
+                            Some((strip_path.clone(), handler.clone()))
                         },
                     );
                 }
@@ -262,14 +269,9 @@ where
                 let handler_prefix = if rule.exact {
                     None
                 } else {
-                    Some((conf.strip_prefix, handler.clone()))
+                    Some((strip_path.clone(), handler.clone()))
                 };
-                handlers.push(
-                    &host,
-                    &rule.path,
-                    (conf.strip_prefix, handler),
-                    handler_prefix,
-                );
+                handlers.push(&host, &rule.path, (strip_path, handler), handler_prefix);
             }
         }
         let handlers = handlers.build();
