@@ -18,6 +18,7 @@
 //! `virtual-hosts-module` crates for example.
 
 mod deserialize;
+pub mod merger;
 pub mod pingora;
 pub mod router;
 pub mod standard_response;
