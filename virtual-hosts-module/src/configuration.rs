@@ -12,12 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use module_utils::serde::{Deserialize, Deserializer};
+use module_utils::serde::Deserialize;
 use module_utils::DeserializeMap;
 use std::collections::HashMap;
 
 /// Determines which paths a configuration should apply to
-#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, Deserialize)]
+#[serde(crate = "module_utils::serde", from = "String")]
 pub struct PathMatchRule {
     /// Path to match
     pub path: String,
@@ -43,12 +44,9 @@ impl From<&str> for PathMatchRule {
     }
 }
 
-impl<'de> Deserialize<'de> for PathMatchRule {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        Ok(String::deserialize(deserializer)?.as_str().into())
+impl From<String> for PathMatchRule {
+    fn from(value: String) -> Self {
+        value.as_str().into()
     }
 }
 

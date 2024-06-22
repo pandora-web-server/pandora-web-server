@@ -18,7 +18,6 @@ use http::HeaderName;
 use module_utils::DeserializeMap;
 use serde::Deserialize;
 use std::path::PathBuf;
-use std::str::FromStr;
 use structopt::StructOpt;
 
 /// Command line options of the common log module
@@ -32,7 +31,8 @@ pub struct CommonLogOpt {
 }
 
 /// An individual log field
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(try_from = "String")]
 pub enum LogField {
     /// Skipped field, `-` in config file
     None,
@@ -58,10 +58,10 @@ pub enum LogField {
     ResponseHeader(HeaderName),
 }
 
-impl FromStr for LogField {
-    type Err = String;
+impl TryFrom<&str> for LogField {
+    type Error = String;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
         match s {
             "-" => Ok(Self::None),
             "remote_addr" => Ok(Self::RemoteAddr),
@@ -91,14 +91,11 @@ impl FromStr for LogField {
     }
 }
 
-impl<'de> Deserialize<'de> for LogField {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        use serde::de::Error;
-        let name = String::deserialize(deserializer)?;
-        Self::from_str(&name).map_err(D::Error::custom)
+impl TryFrom<String> for LogField {
+    type Error = String;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        value.as_str().try_into()
     }
 }
 
@@ -147,7 +144,7 @@ mod tests {
     #[test]
     fn log_field_parsing() {
         let log_fields: Vec<_> = "remote_addr - - time_local request status bytes_sent http_referer http_user_agent processing_time sent_http_content_type remote_port time_iso8601".split_ascii_whitespace().map(|s| {
-            LogField::from_str(s).unwrap()
+            LogField::try_from(s).unwrap()
         }).collect();
         assert_eq!(
             log_fields,
@@ -167,6 +164,6 @@ mod tests {
                 LogField::TimeISO,
             ]
         );
-        assert!(LogField::from_str("unsupported_field").is_err());
+        assert!(LogField::try_from("unsupported_field").is_err());
     }
 }

@@ -68,7 +68,8 @@ pub trait PathMatch {
 }
 
 /// A basic path matcher, applying to a single host/path combination
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+#[serde(from = "String")]
 pub struct HostPathMatcher {
     /// Host name that the matcher applies to
     pub host: Vec<u8>,
@@ -129,12 +130,9 @@ impl From<&str> for HostPathMatcher {
     }
 }
 
-impl<'de> Deserialize<'de> for HostPathMatcher {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        Ok(String::deserialize(deserializer)?.as_str().into())
+impl From<String> for HostPathMatcher {
+    fn from(value: String) -> Self {
+        value.as_str().into()
     }
 }
 
@@ -163,7 +161,8 @@ impl PathMatch for HostPathMatcher {
 }
 
 /// A basic path matcher, applying to a single path on the empty host
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+#[serde(from = "String")]
 pub struct PathMatcher {
     /// Path that the matcher applies to
     pub path: Path,
@@ -207,12 +206,9 @@ impl From<&str> for PathMatcher {
     }
 }
 
-impl<'de> Deserialize<'de> for PathMatcher {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        Ok(String::deserialize(deserializer)?.as_str().into())
+impl From<String> for PathMatcher {
+    fn from(value: String) -> Self {
+        value.as_str().into()
     }
 }
 

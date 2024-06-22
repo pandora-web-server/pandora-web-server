@@ -17,10 +17,7 @@
 use module_utils::merger::PathMatcher;
 use module_utils::DeserializeMap;
 use regex::Regex;
-use serde::{
-    de::{Deserializer, Error},
-    Deserialize,
-};
+use serde::Deserialize;
 use std::default::Default;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -31,7 +28,8 @@ enum VariableInterpolationPart {
 
 /// Parsed representation of a string with variable interpolation like the `to` field of the
 /// rewrite rule
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(from = "String")]
 pub struct VariableInterpolation {
     parts: Vec<VariableInterpolationPart>,
 }
@@ -85,12 +83,9 @@ impl From<&str> for VariableInterpolation {
     }
 }
 
-impl<'de> Deserialize<'de> for VariableInterpolation {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        Ok(String::deserialize(deserializer)?.as_str().into())
+impl From<String> for VariableInterpolation {
+    fn from(value: String) -> Self {
+        value.as_str().into()
     }
 }
 
@@ -134,7 +129,8 @@ pub enum RewriteType {
 }
 
 /// A parsed representation of a field like `from_regex` of the rewrite rule
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
+#[serde(try_from = "String")]
 pub struct RegexMatch {
     /// Regular expression to apply to the value
     pub regex: Regex,
@@ -178,15 +174,11 @@ impl TryFrom<&str> for RegexMatch {
     }
 }
 
-impl<'de> Deserialize<'de> for RegexMatch {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        String::deserialize(deserializer)?
-            .as_str()
-            .try_into()
-            .map_err(D::Error::custom)
+impl TryFrom<String> for RegexMatch {
+    type Error = regex::Error;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        value.as_str().try_into()
     }
 }
 
