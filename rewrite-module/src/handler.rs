@@ -19,7 +19,7 @@ use http::{HeaderValue, StatusCode};
 use log::{debug, error, trace};
 use module_utils::merger::Merger;
 use module_utils::pingora::{Error, SessionWrapper};
-use module_utils::router::Router;
+use module_utils::router::{Path, Router};
 use module_utils::standard_response::redirect_response;
 use module_utils::{RequestFilter, RequestFilterResult};
 
@@ -36,7 +36,7 @@ struct Rule {
 /// Handler for Pingora’s `request_filter` phase
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RewriteHandler {
-    router: Router<Vec<Rule>>,
+    router: Router<Vec<(Path, Rule)>>,
 }
 
 impl TryFrom<RewriteConf> for RewriteHandler {
@@ -54,6 +54,7 @@ impl TryFrom<RewriteConf> for RewriteHandler {
         conf.rewrite_rules.sort_by(|a, b| a.from.cmp(&b.from));
 
         for rule in conf.rewrite_rules {
+            let path = rule.from.path.clone();
             let from = rule.from;
             let rule = Rule {
                 from_regex: rule.from_regex,
@@ -62,7 +63,7 @@ impl TryFrom<RewriteConf> for RewriteHandler {
                 r#type: rule.r#type,
             };
 
-            merger.push(from, rule);
+            merger.push(from, (path, rule));
         }
 
         Ok(Self {
@@ -84,30 +85,20 @@ impl RequestFilter for RewriteHandler {
         session: &mut impl SessionWrapper,
         _ctx: &mut Self::CTX,
     ) -> Result<RequestFilterResult, Box<Error>> {
-        let (list, tail) = {
-            let path = session.req_header().uri.path();
-            trace!("Determining rewrite rules for path {path}");
+        let path = session.req_header().uri.path();
+        trace!("Determining rewrite rules for path {path}");
 
-            let (list, tail) = if let Some(match_) = self.router.lookup("", path) {
-                (match_.0.as_value(), match_.1)
-            } else {
-                trace!("No match for the path");
-                return Ok(RequestFilterResult::Unhandled);
-            };
-
-            let tail = tail
-                .as_ref()
-                .map(|t| t.as_ref())
-                .unwrap_or(path.as_bytes())
-                .to_vec();
-            (list, tail)
+        let list = if let Some((list, _)) = self.router.lookup("", path) {
+            list.as_value()
+        } else {
+            trace!("No match for the path");
+            return Ok(RequestFilterResult::Unhandled);
         };
 
         trace!("Applying rewrite rules: {list:?}");
-        trace!("Tail is: {tail:?}");
 
         // Iterate in reverse order, merging puts rules in reverse order of precedence.
-        for rule in list.iter().rev() {
+        for (rule_path, rule) in list.iter().rev() {
             if let Some(from_regex) = &rule.from_regex {
                 if !from_regex.matches(session.req_header().uri.path()) {
                     continue;
@@ -119,6 +110,14 @@ impl RequestFilter for RewriteHandler {
                     continue;
                 }
             }
+
+            let tail = rule_path
+                .remove_prefix_from(path)
+                .unwrap_or(path.as_bytes().to_owned());
+            trace!(
+                "Matched rule for path `{}`, tail is: {tail:?}",
+                String::from_utf8_lossy(rule_path)
+            );
 
             let target = rule.to.interpolate(|name| match name {
                 "tail" => Some(&tail),
@@ -254,6 +253,10 @@ mod tests {
                     from: /path/*
                     from_regex: "\\.jpg$"
                     to: /another${tail}
+                -
+                    from: /path/image.jpg
+                    query_regex: "query"
+                    to: /nowhere
                 -
                     from: /path/*
                     query_regex: "!^file="
