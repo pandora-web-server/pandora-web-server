@@ -19,65 +19,7 @@ use std::{collections::HashMap, fmt::Debug};
 
 use serde::Deserialize;
 
-use crate::router::Router;
-use crate::trie::{common_prefix_length, SEPARATOR};
-
-/// Encapsulates a router path
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Path {
-    path: Vec<u8>,
-}
-
-impl Path {
-    /// Creates a new router path for given host and path
-    pub fn new(path: impl AsRef<[u8]>) -> Self {
-        Self {
-            path: Self::normalize(path),
-        }
-    }
-
-    /// Normalizes the path by removing unnecessary separators
-    fn normalize(path: impl AsRef<[u8]>) -> Vec<u8> {
-        let mut had_separator = true;
-        let mut path: Vec<u8> = path
-            .as_ref()
-            .iter()
-            .copied()
-            .filter(|b| {
-                if *b == SEPARATOR {
-                    if had_separator {
-                        false
-                    } else {
-                        had_separator = true;
-                        true
-                    }
-                } else {
-                    had_separator = false;
-                    true
-                }
-            })
-            .collect();
-
-        if path.ends_with(&[SEPARATOR]) {
-            path.pop();
-        }
-
-        path
-    }
-
-    /// Checks whether this path is a parent of the other path
-    pub fn is_prefix_of(&self, other: &Path) -> bool {
-        common_prefix_length(&self.path, &other.path) == self.path.len()
-    }
-}
-
-impl Deref for Path {
-    type Target = Vec<u8>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.path
-    }
-}
+use crate::router::{Path, Router};
 
 /// Result of a path matching operation
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

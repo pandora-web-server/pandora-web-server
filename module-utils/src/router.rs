@@ -32,10 +32,77 @@
 //! with the more distant matches merged in first.
 
 use std::fmt::Debug;
+use std::ops::Deref;
 use std::{collections::HashMap, marker::PhantomData};
 
 pub use crate::trie::LookupResult;
 use crate::trie::{common_prefix_length, Trie, SEPARATOR};
+
+/// Encapsulates a router path
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Path {
+    path: Vec<u8>,
+}
+
+impl Path {
+    /// Creates a new router path for given host and path
+    pub fn new(path: impl AsRef<[u8]>) -> Self {
+        Self {
+            path: Self::normalize(path),
+        }
+    }
+
+    /// Normalizes the path by removing unnecessary separators
+    fn normalize(path: impl AsRef<[u8]>) -> Vec<u8> {
+        let mut had_separator = true;
+        let mut path: Vec<u8> = path
+            .as_ref()
+            .iter()
+            .copied()
+            .filter(|b| {
+                if *b == SEPARATOR {
+                    if had_separator {
+                        false
+                    } else {
+                        had_separator = true;
+                        true
+                    }
+                } else {
+                    had_separator = false;
+                    true
+                }
+            })
+            .collect();
+
+        if path.ends_with(&[SEPARATOR]) {
+            path.pop();
+        }
+
+        path
+    }
+
+    /// Checks whether this path is a parent of the other path
+    pub fn is_prefix_of(&self, other: &Path) -> bool {
+        common_prefix_length(&self.path, &other.path) == self.path.len()
+    }
+
+    /// Calculates the number of path segments in this path
+    fn num_segments(&self) -> usize {
+        if self.path.is_empty() {
+            0
+        } else {
+            self.path.iter().filter(|b| **b == SEPARATOR).count() + 1
+        }
+    }
+}
+
+impl Deref for Path {
+    type Target = Vec<u8>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.path
+    }
+}
 
 /// The router implementation.
 ///
@@ -161,40 +228,10 @@ impl<'a> AsRef<[u8]> for PathTail<'a> {
     }
 }
 
-/// Normalizes a path by removing leading and trailing slashes as well as collapsing multiple
-/// separating slashes into one.
-fn normalize_path(path: impl AsRef<[u8]>) -> Vec<u8> {
-    let mut had_separator = true;
-    let mut path: Vec<u8> = path
-        .as_ref()
-        .iter()
-        .copied()
-        .filter(|b| {
-            if *b == SEPARATOR {
-                if had_separator {
-                    false
-                } else {
-                    had_separator = true;
-                    true
-                }
-            } else {
-                had_separator = false;
-                true
-            }
-        })
-        .collect();
-
-    if path.ends_with(&[SEPARATOR]) {
-        path.pop();
-    }
-
-    path
-}
-
 /// Intermediate entry stored in the router prior to merging
 #[derive(Debug)]
 struct RouterEntry<Value> {
-    path: Vec<u8>,
+    path: Path,
     value_exact: (Value, usize),
     value_prefix: Option<(Value, usize)>,
 }
@@ -233,15 +270,6 @@ impl<Value, Merger: Merge<Value>> Default for RouterBuilder<Value, Merger> {
 }
 
 impl<Value: Clone + Eq, Merger: Merge<Value>> RouterBuilder<Value, Merger> {
-    fn num_segments(path: impl AsRef<[u8]>) -> usize {
-        let path = path.as_ref();
-        if path.is_empty() {
-            0
-        } else {
-            path.iter().filter(|b| **b == SEPARATOR).count() + 1
-        }
-    }
-
     fn merge_into(
         current: &mut RouterEntry<Value>,
         mut new_exact: (Value, usize),
@@ -294,7 +322,7 @@ impl<Value: Clone + Eq, Merger: Merge<Value>> RouterBuilder<Value, Merger> {
 
     fn merge_value(
         existing: &mut Vec<RouterEntry<Value>>,
-        path: Vec<u8>,
+        path: Path,
         mut value_exact: (Value, usize),
         mut value_prefix: Option<(Value, usize)>,
         prefer_existing: bool,
@@ -367,8 +395,8 @@ impl<Value: Clone + Eq, Merger: Merge<Value>> RouterBuilder<Value, Merger> {
         value_exact: Value,
         value_prefix: Option<Value>,
     ) {
-        let path = normalize_path(path);
-        let context = Self::num_segments(&path);
+        let path = Path::new(path);
+        let context = path.num_segments();
 
         let existing = if host.as_ref().is_empty() {
             &mut self.fallbacks
@@ -447,7 +475,7 @@ impl<Value: Clone + Eq, Merger: Merge<Value>> RouterBuilder<Value, Merger> {
 
         let mut fallback_builder = Trie::builder();
         for entry in self.fallbacks {
-            fallback_builder.push(entry.path, entry.value_exact, entry.value_prefix);
+            fallback_builder.push(entry.path.path, entry.value_exact, entry.value_prefix);
         }
 
         Router {
