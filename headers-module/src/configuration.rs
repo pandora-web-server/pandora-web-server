@@ -21,11 +21,9 @@ use http::{
     header,
     header::{HeaderName, HeaderValue},
 };
-use module_utils::{
-    merger::{HostPathMatcher, PathMatch, PathMatchResult},
-    router::{Path, EMPTY_PATH},
-    DeserializeMap,
-};
+use module_utils::merger::{HostPathMatcher, PathMatch, PathMatchResult};
+use module_utils::router::{Path, EMPTY_PATH};
+use module_utils::DeserializeMap;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -80,7 +78,7 @@ impl PathMatch for MatchRules {
             force_prefix: bool,
         ) -> (PathMatchResult, Option<&'a HostPathMatcher>) {
             rules.iter().fold(
-                (PathMatchResult::NoMatch, None),
+                (PathMatchResult::EMPTY, None),
                 |(previous_result, previous), current| {
                     let result = current.matches(host, path, force_prefix);
                     if result.any() {
@@ -97,16 +95,18 @@ impl PathMatch for MatchRules {
         }
 
         if self.include.is_empty() && self.exclude.is_empty() {
-            // By default, this is a fallback rule matching everything on fallback host.
-            if host.is_empty() {
-                return if path.is_empty() {
-                    PathMatchResult::MatchesBoth
-                } else {
-                    PathMatchResult::MatchesPrefix
-                };
+            // By default, this is a fallback rule matching everything
+            let result = if host.is_empty() {
+                PathMatchResult::EMPTY
             } else {
-                return PathMatchResult::NoMatch;
-            }
+                PathMatchResult::EMPTY.set_fallback()
+            };
+
+            return if path.is_empty() {
+                result.set_exact().set_prefix()
+            } else {
+                result.set_prefix()
+            };
         }
 
         let (_, exclude) = find_match(&self.exclude, host, path, force_prefix);
@@ -115,7 +115,7 @@ impl PathMatch for MatchRules {
             if include.is_some_and(|include| include > exclude) {
                 include_result
             } else {
-                PathMatchResult::NoMatch
+                PathMatchResult::EMPTY
             }
         } else {
             include_result

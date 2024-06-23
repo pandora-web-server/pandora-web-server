@@ -14,43 +14,85 @@
 
 //! Rule/configuration merging to be performed prior to creating a router.
 
+use enumset::{EnumSet, EnumSetType};
+use serde::Deserialize;
 use std::ops::{Deref, DerefMut};
 use std::{collections::HashMap, fmt::Debug};
-
-use serde::Deserialize;
 
 use crate::router::{Path, Router};
 
 /// Result of a path matching operation
+#[derive(Debug, EnumSetType)]
+pub enum PathMatchFlags {
+    /// The match applies to the fallback host
+    Fallback,
+
+    /// There is a match for the exact path
+    Exact,
+
+    /// There is a match for the files within the path
+    Prefix,
+}
+
+/// Combination of various flags to be returned from `PathMatch::matches`
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum PathMatchResult {
-    /// Does not apply to the path
-    NoMatch,
-
-    /// Applies to the path for exact matches
-    MatchesExact,
-
-    /// Applies to the path for prefix matches
-    MatchesPrefix,
-
-    /// Applies to the path for both exact and prefix matches
-    MatchesBoth,
+pub struct PathMatchResult {
+    inner: EnumSet<PathMatchFlags>,
 }
 
 impl PathMatchResult {
-    /// Will be `true` if the rule applies to the path in some way.
+    /// A result without any flags set
+    pub const EMPTY: Self = Self {
+        inner: EnumSet::EMPTY,
+    };
+
+    /// Modifies the result to apply to the fallback host
+    pub fn set_fallback(self) -> Self {
+        Self {
+            inner: self.inner | PathMatchFlags::Fallback,
+        }
+    }
+
+    /// Modifies the result to match the exact path
+    pub fn set_exact(self) -> Self {
+        Self {
+            inner: self.inner | PathMatchFlags::Exact,
+        }
+    }
+
+    /// Modifies the result to match the files within the path
+    pub fn set_prefix(self) -> Self {
+        Self {
+            inner: self.inner | PathMatchFlags::Prefix,
+        }
+    }
+
+    /// Checks whether the match applies to the fallback host
+    pub fn fallback(&self) -> bool {
+        self.contains(PathMatchFlags::Fallback)
+    }
+
+    /// Checks whether there is a match
     pub fn any(&self) -> bool {
-        *self != Self::NoMatch
+        self.exact() || self.prefix()
     }
 
-    /// Will be `true` if the rule applies to the path for exact matches.
+    /// Checks whether there is a match for the exact path
     pub fn exact(&self) -> bool {
-        matches!(self, Self::MatchesExact | Self::MatchesBoth)
+        self.contains(PathMatchFlags::Exact)
     }
 
-    /// Will be `true` if the rule applies to the path for prefix matches.
+    /// Checks whether there is a match for the files within the path
     pub fn prefix(&self) -> bool {
-        matches!(self, Self::MatchesPrefix | Self::MatchesBoth)
+        self.contains(PathMatchFlags::Prefix)
+    }
+}
+
+impl Deref for PathMatchResult {
+    type Target = EnumSet<PathMatchFlags>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
     }
 }
 
@@ -142,20 +184,24 @@ impl PathMatch for HostPathMatcher {
     }
 
     fn matches(&self, host: &[u8], path: &Path, _force_prefix: bool) -> PathMatchResult {
-        if self.host != host {
-            return PathMatchResult::NoMatch;
-        }
+        let result = if self.host == host {
+            PathMatchResult::EMPTY
+        } else if self.host.is_empty() {
+            PathMatchResult::EMPTY.set_fallback()
+        } else {
+            return PathMatchResult::EMPTY;
+        };
 
         if &self.path == path {
             if self.exact {
-                PathMatchResult::MatchesExact
+                result.set_exact()
             } else {
-                PathMatchResult::MatchesBoth
+                result.set_exact().set_prefix()
             }
         } else if !self.exact && self.path.is_prefix_of(path) {
-            PathMatchResult::MatchesPrefix
+            result.set_prefix()
         } else {
-            PathMatchResult::NoMatch
+            PathMatchResult::EMPTY
         }
     }
 }
@@ -218,20 +264,21 @@ impl PathMatch for PathMatcher {
     }
 
     fn matches(&self, host: &[u8], path: &Path, _force_prefix: bool) -> PathMatchResult {
+        let result = PathMatchResult::EMPTY;
         if !host.is_empty() {
-            return PathMatchResult::NoMatch;
+            return result;
         }
 
         if &self.path == path {
             if self.exact {
-                PathMatchResult::MatchesExact
+                result.set_exact()
             } else {
-                PathMatchResult::MatchesBoth
+                result.set_exact().set_prefix()
             }
         } else if !self.exact && self.path.is_prefix_of(path) {
-            PathMatchResult::MatchesPrefix
+            result.set_prefix()
         } else {
-            PathMatchResult::NoMatch
+            result
         }
     }
 }
@@ -250,22 +297,26 @@ impl PathMatch for StrictHostPathMatcher {
     }
 
     fn matches(&self, host: &[u8], path: &Path, force_prefix: bool) -> PathMatchResult {
-        if self.host != host {
-            return PathMatchResult::NoMatch;
-        }
+        let result = if self.host == host {
+            PathMatchResult::EMPTY
+        } else if self.host.is_empty() {
+            PathMatchResult::EMPTY.set_fallback()
+        } else {
+            return PathMatchResult::EMPTY;
+        };
 
         if &self.path == path {
             if self.exact {
-                PathMatchResult::MatchesExact
+                result.set_exact()
             } else if force_prefix {
-                PathMatchResult::MatchesPrefix
+                result.set_prefix()
             } else {
-                PathMatchResult::NoMatch
+                PathMatchResult::EMPTY
             }
         } else if !self.exact && self.path.is_prefix_of(path) {
-            PathMatchResult::MatchesPrefix
+            result.set_prefix()
         } else {
-            PathMatchResult::NoMatch
+            PathMatchResult::EMPTY
         }
     }
 }
@@ -401,14 +452,15 @@ where
         for (parent_path, parent_fallback, parent_main) in entries[0..index].iter().rev() {
             if parent_path.is_prefix_of(path) {
                 // Copy any configurations from parent that apply
-                for entry in parent_fallback {
-                    if entry.matcher.matches(b"", path, false).any() {
-                        list_fallback.push(entry.clone());
-                    }
-                }
-                for entry in parent_main {
-                    if entry.matcher.matches(host, path, false).any() {
-                        list_main.push(entry.clone());
+                for entry in parent_fallback.iter().chain(parent_main.iter()) {
+                    let result = entry.matcher.matches(host, path, false);
+                    if result.any() {
+                        let list = if result.fallback() {
+                            &mut list_fallback
+                        } else {
+                            &mut list_main
+                        };
+                        list.push(entry.clone());
                     }
                 }
                 break;
@@ -439,10 +491,14 @@ where
         let entry = MergerEntry { matcher, conf };
         for (host, entries) in self.hosts.iter_mut() {
             for (path, list_fallback, list_main) in entries.iter_mut() {
-                if entry.matcher.matches(host, path, false).any() {
-                    list_main.push(entry.clone());
-                } else if !host.is_empty() && entry.matcher.matches(b"", path, false).any() {
-                    list_fallback.push(entry.clone());
+                let result = entry.matcher.matches(host, path, false);
+                if result.any() {
+                    let list = if result.fallback() {
+                        list_fallback
+                    } else {
+                        list_main
+                    };
+                    list.push(entry.clone())
                 }
             }
         }
@@ -463,23 +519,15 @@ where
         let value_exact = callback(Box::new(
             list_fallback
                 .iter()
-                .filter(|entry| entry.matcher.matches(b"", path, false).any())
-                .chain(
-                    list_main
-                        .iter()
-                        .filter(|entry| entry.matcher.matches(host, path, false).any()),
-                )
+                .chain(list_main.iter())
+                .filter(|entry| entry.matcher.matches(host, path, false).any())
                 .map(|entry| &entry.conf),
         ));
         let value_prefix = callback(Box::new(
             list_fallback
                 .iter()
-                .filter(|entry| entry.matcher.matches(b"", path, true).prefix())
-                .chain(
-                    list_main
-                        .iter()
-                        .filter(|entry| entry.matcher.matches(host, path, true).prefix()),
-                )
+                .chain(list_main.iter())
+                .filter(|entry| entry.matcher.matches(host, path, true).prefix())
                 .map(|entry| &entry.conf),
         ));
         (value_exact, value_prefix)
@@ -815,9 +863,9 @@ mod tests {
 
             fn matches(&self, host: &[u8], path: &Path, _force_prefix: bool) -> PathMatchResult {
                 if host == b"localhost" && Path::new("abc/def").is_prefix_of(path) {
-                    PathMatchResult::MatchesPrefix
+                    PathMatchResult::EMPTY.set_prefix()
                 } else {
-                    PathMatchResult::NoMatch
+                    PathMatchResult::EMPTY
                 }
             }
         }
@@ -835,6 +883,57 @@ mod tests {
         assert_eq!(
             lookup(&router, "localhost", "/abc/def/xyz"),
             Some("a".to_owned())
+        );
+    }
+
+    #[test]
+    fn fallback_behavior() {
+        #[derive(Debug, Clone)]
+        struct CustomMatcher {
+            include: HostPathMatcher,
+            exclude: HostPathMatcher,
+        }
+
+        impl CustomMatcher {
+            fn new() -> Self {
+                Self {
+                    include: "/*".into(),
+                    exclude: "example.com/subdir/*".into(),
+                }
+            }
+        }
+
+        impl PathMatch for CustomMatcher {
+            fn iter(&self) -> Box<dyn Iterator<Item = (&[u8], &Path)> + '_> {
+                Box::new(self.include.iter().chain(self.exclude.iter()))
+            }
+
+            fn matches(&self, host: &[u8], path: &Path, force_prefix: bool) -> PathMatchResult {
+                let result = self.exclude.matches(host, path, force_prefix);
+                if !result.any() {
+                    self.include.matches(host, path, force_prefix)
+                } else {
+                    PathMatchResult::EMPTY
+                }
+            }
+        }
+
+        let mut merger = Merger::new();
+        merger.push(CustomMatcher::new(), "match");
+        let router = merger.merge(|values| *values.last().unwrap_or(&""));
+
+        assert_eq!(router.lookup("", "").as_deref().copied(), Some("match"));
+        assert_eq!(
+            router.lookup("", "subdir").as_deref().copied(),
+            Some("match")
+        );
+        assert_eq!(
+            router.lookup("example.com", "").as_deref().copied(),
+            Some("match")
+        );
+        assert_eq!(
+            router.lookup("example.com", "subdir").as_deref().copied(),
+            Some("")
         );
     }
 }
