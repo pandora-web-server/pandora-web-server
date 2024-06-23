@@ -146,30 +146,23 @@ pub struct WithMatchRules<C: Clone + PartialEq + Eq> {
 
 /// Configuration for the Cache-Control header
 #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
+#[module_utils(rename_all = "kebab-case")]
 pub struct CacheControlConf {
     /// If set, max-age option will be sent
-    #[module_utils(rename = "max-age")]
     pub max_age: Option<usize>,
     /// If set, s-max-age option will be sent
-    #[module_utils(rename = "s-maxage")]
     pub s_maxage: Option<usize>,
     /// If `true`, no-cache flag will be sent
-    #[module_utils(rename = "no-cache")]
     pub no_cache: bool,
     /// If `true`, no-storage flag will be sent
-    #[module_utils(rename = "no-storage")]
     pub no_storage: bool,
     /// If `true`, no-transform flag will be sent
-    #[module_utils(rename = "no-transform")]
     pub no_transform: bool,
     /// If `true`, must-revalidate flag will be sent
-    #[module_utils(rename = "must-revalidate")]
     pub must_revalidate: bool,
     /// If `true`, proxy-revalidate flag will be sent
-    #[module_utils(rename = "proxy-revalidate")]
     pub proxy_revalidate: bool,
     /// If `true`, must-understand flag will be sent
-    #[module_utils(rename = "must-understand")]
     pub must_understand: bool,
     /// If `true`, private flag will be sent
     pub private: bool,
@@ -178,10 +171,8 @@ pub struct CacheControlConf {
     /// If `true`, immutable flag will be sent
     pub immutable: bool,
     /// If set, stale-while-revalidate option will be sent
-    #[module_utils(rename = "stale-while-revalidate")]
     pub stale_while_revalidate: Option<usize>,
     /// If set, stale-if-error option will be sent
-    #[module_utils(rename = "stale-if-error")]
     pub stale_if_error: Option<usize>,
 }
 
