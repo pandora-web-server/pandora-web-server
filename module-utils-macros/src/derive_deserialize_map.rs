@@ -15,9 +15,57 @@
 use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::quote;
-use syn::{DeriveInput, Error, Field, FieldsNamed, Ident, LitStr, Path, Type};
+use serde_derive_internals::attr::RenameRule;
+use syn::{spanned::Spanned, DeriveInput, Error, Field, FieldsNamed, Ident, LitStr, Path, Type};
 
 use crate::utils::{generics_with_de, get_fields, type_name_short, where_clause};
+
+#[derive(Clone)]
+struct ContainerAttributes {
+    rename_all: RenameRule,
+}
+
+impl TryFrom<&DeriveInput> for ContainerAttributes {
+    type Error = Error;
+
+    fn try_from(value: &DeriveInput) -> Result<Self, Self::Error> {
+        let mut rename_all = RenameRule::None;
+
+        for attr in &value.attrs {
+            if !attr.path().is_ident("module_utils") {
+                continue;
+            }
+
+            attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("rename_all") {
+                    if rename_all != RenameRule::None {
+                        return Err(Error::new_spanned(meta.path, "duplicate rename_all"));
+                    }
+                    let mut lit = LitStr::new("", meta.path.span());
+                    meta.parse_nested_meta(|meta| {
+                        if meta.path.is_ident("deserialize") {
+                            lit = meta.value()?.parse()?;
+                            Ok(())
+                        } else {
+                            Err(Error::new_spanned(meta.path, "unexpected parameter"))
+                        }
+                    })
+                    .or_else(|_| {
+                        lit = meta.value()?.parse()?;
+                        Ok::<_, Error>(())
+                    })?;
+                    rename_all = RenameRule::from_str(&lit.value())
+                        .map_err(|_| Error::new_spanned(lit, "invalid rename_all value"))?;
+                    Ok(())
+                } else {
+                    Err(Error::new_spanned(meta.path, "unexpected parameter"))
+                }
+            })?;
+        }
+
+        Ok(Self { rename_all })
+    }
+}
 
 #[derive(Debug, Clone)]
 struct FieldAttributes {
@@ -29,10 +77,8 @@ struct FieldAttributes {
     flatten: bool,
 }
 
-impl TryFrom<&Field> for FieldAttributes {
-    type Error = Error;
-
-    fn try_from(field: &Field) -> Result<Self, Self::Error> {
+impl FieldAttributes {
+    fn parse(field: &Field, container_attrs: &ContainerAttributes) -> Result<Self, Error> {
         let mut rename = None;
         let mut deserialize_name = Vec::new();
         let mut skip = false;
@@ -133,7 +179,7 @@ impl TryFrom<&Field> for FieldAttributes {
         deserialize_name.insert(
             0,
             rename.unwrap_or_else(|| {
-                let lit = name.to_string();
+                let lit = container_attrs.rename_all.apply_to_field(&name.to_string());
                 LitStr::new(lit.strip_prefix("r#").unwrap_or(&lit), name.span())
             }),
         );
@@ -178,8 +224,9 @@ fn generate_deserialize_map_impl(
     let vis = &input.vis;
     let struct_name = type_name_short(input);
     let (de, generics, generics_short) = generics_with_de(input);
+    let container_attrs = ContainerAttributes::try_from(input)?;
     let where_clause = where_clause(input, fields, |field| {
-        let attrs = FieldAttributes::try_from(field).ok()?;
+        let attrs = FieldAttributes::parse(field, &container_attrs).ok()?;
         if attrs.skip {
             None
         } else if attrs.flatten {
@@ -192,7 +239,7 @@ fn generate_deserialize_map_impl(
     let field_attrs = fields
         .named
         .iter()
-        .map(FieldAttributes::try_from)
+        .map(|field| FieldAttributes::parse(field, &container_attrs))
         .collect::<Result<Vec<_>, _>>()?;
     let field_name = field_attrs
         .iter()

@@ -228,6 +228,13 @@ pub fn derive_request_filter(input: TokenStream) -> TokenStream {
 ///   Same as `deserialize_with` but `$module::deserialize` will be used as the `deserialize_with`
 ///   function.
 ///
+/// As far as [container attributes](https://serde.rs/container-attrs.html) are concerned, only
+/// `rename_all` is currently implemented. For example,
+/// `#[module_utils(rename_all = "kebab-case")]` or
+/// `#[module_utils(deserialize(rename_all = "kebab-case"))]` attribute on the container will
+/// expect fields like `field_name` to be present as `field-name` in the configuration file. If a
+/// field has an individual `rename` attribute, it takes precedence over `rename_all`.
+///
 /// Unknown fields will cause a deserialization error, missing fields will be left at their initial
 /// value. This is similar to the behavior of
 /// [Serde container attributes](https://serde.rs/container-attrs.html)

@@ -187,6 +187,51 @@ async fn handler() -> Result<(), Box<Error>> {
 }
 
 #[test]
+fn container_attributes() {
+    #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
+    #[module_utils(rename_all = "kebab-case")]
+    struct Conf1 {
+        value: String,
+        string_value: String,
+        #[module_utils(rename = "string_value2")]
+        string_value2: String,
+    }
+
+    #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
+    #[module_utils(rename_all(deserialize = "kebab-case"))]
+    struct Conf2 {
+        value: String,
+        string_value: String,
+        #[module_utils(rename = "string_value2")]
+        string_value2: String,
+    }
+
+    let conf = Conf1::from_yaml(
+        r#"
+            value: "1"
+            string-value: "2"
+            string_value2: "3"
+        "#,
+    )
+    .unwrap();
+    assert_eq!(&conf.value, "1");
+    assert_eq!(&conf.string_value, "2");
+    assert_eq!(&conf.string_value2, "3");
+
+    let conf = Conf2::from_yaml(
+        r#"
+            value: "1"
+            string-value: "2"
+            string_value2: "3"
+        "#,
+    )
+    .unwrap();
+    assert_eq!(&conf.value, "1");
+    assert_eq!(&conf.string_value, "2");
+    assert_eq!(&conf.string_value2, "3");
+}
+
+#[test]
 fn field_attributes() {
     use module_utils::serde::{de::Deserializer, Deserialize};
 
