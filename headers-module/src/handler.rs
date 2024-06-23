@@ -52,10 +52,11 @@ impl TryFrom<HeadersConf> for HeadersHandler {
         debug!("Headers configuration received: {value:#?}");
 
         let cache_control = merge_rules(value.response_headers.cache_control);
-        let merged_custom = merge_rules(value.response_headers.custom);
+        let content_security_policy = merge_rules(value.response_headers.content_security_policy);
+        let custom = merge_rules(value.response_headers.custom);
 
         let mut merged = cache_control;
-        merged.extend([merged_custom]);
+        merged.extend([content_security_policy, custom]);
         trace!("Merged headers configuration into: {merged:#?}");
 
         let router = merged.merge(|values| {
@@ -229,6 +230,17 @@ mod tests {
                         include:
                         - example.info/subdir/*
                         - localhost/subdir2/
+                    content_security_policy:
+                    -
+                        script-src: ["'self'"]
+                        object-src: ["'none'"]
+                        report-to: https://example.com/report
+                        include: /*
+                        exclude: example.com/subdir/*
+                    -
+                        script-src: [https://example.com/]
+                        report-to: https://example.com/other-report
+                        include: example.net
                     custom:
                     -
                         include:
@@ -305,6 +317,10 @@ mod tests {
                 ("Cache-Control", "max-age=604800"),
                 ("X-Test", "unchanged"),
                 ("Server", "My very own web server"),
+                (
+                    "Content-Security-Policy",
+                    "object-src 'none'; script-src 'self'; report-to https://example.com/report",
+                ),
             ],
         );
 
@@ -320,6 +336,10 @@ mod tests {
                 ("X-Me", "none"),
                 ("X-Test", "unchanged"),
                 ("Server", "My very own web server"),
+                (
+                    "Content-Security-Policy",
+                    "object-src 'none'; script-src 'self'; report-to https://example.com/report",
+                ),
             ],
         );
 
@@ -336,6 +356,10 @@ mod tests {
                 ("Cache-Control", "no-cache, max-age=604800"),
                 ("X-Test", "unchanged"),
                 ("Server", "My very own web server"),
+                (
+                    "Content-Security-Policy",
+                    "object-src 'none'; script-src 'self'; report-to https://example.com/report",
+                ),
             ],
         );
 
@@ -351,6 +375,10 @@ mod tests {
                 ("X-Me", "example.com"),
                 ("X-Test", "unchanged"),
                 ("Server", "My very own web server"),
+                (
+                    "Content-Security-Policy",
+                    "object-src 'none'; script-src 'self'; report-to https://example.com/report",
+                ),
             ],
         );
 
@@ -414,6 +442,7 @@ mod tests {
                 ("X-Test", "unchanged"),
                 ("Server", "My very own web server"),
                 ("Cache-Control", "no-storage"),
+                ("Content-Security-Policy", "object-src 'none'; script-src 'self' https://example.com/; report-to https://example.com/other-report"),
             ],
         );
 
@@ -429,6 +458,10 @@ mod tests {
                 ("X-Me", "none"),
                 ("X-Test", "unchanged"),
                 ("Server", "My very own web server"),
+                (
+                    "Content-Security-Policy",
+                    "object-src 'none'; script-src 'self'; report-to https://example.com/report",
+                ),
             ],
         );
 
@@ -445,6 +478,10 @@ mod tests {
                 ("X-Test", "unchanged"),
                 ("Server", "My very own web server"),
                 ("Cache-Control", "no-cache"),
+                (
+                    "Content-Security-Policy",
+                    "object-src 'none'; script-src 'self'; report-to https://example.com/report",
+                ),
             ],
         );
 
@@ -471,6 +508,10 @@ mod tests {
                 ("Cache-Control", "max-age=604800"),
                 ("X-Test", "unchanged"),
                 ("Server", "My very own web server"),
+                (
+                    "Content-Security-Policy",
+                    "object-src 'none'; script-src 'self'; report-to https://example.com/report",
+                ),
             ],
         );
 
@@ -489,6 +530,10 @@ mod tests {
                 ("X-Me", "none"),
                 ("X-Test", "unchanged"),
                 ("Server", "My very own web server"),
+                (
+                    "Content-Security-Policy",
+                    "object-src 'none'; script-src 'self'; report-to https://example.com/report",
+                ),
             ],
         );
 
@@ -508,6 +553,10 @@ mod tests {
                 ("Cache-Control", "no-cache, max-age=604800"),
                 ("X-Test", "unchanged"),
                 ("Server", "My very own web server"),
+                (
+                    "Content-Security-Policy",
+                    "object-src 'none'; script-src 'self'; report-to https://example.com/report",
+                ),
             ],
         );
 
@@ -526,6 +575,10 @@ mod tests {
                 ("X-Me", "example.com"),
                 ("X-Test", "unchanged"),
                 ("Server", "My very own web server"),
+                (
+                    "Content-Security-Policy",
+                    "object-src 'none'; script-src 'self'; report-to https://example.com/report",
+                ),
             ],
         );
 
@@ -601,6 +654,7 @@ mod tests {
                 ("X-Test", "unchanged"),
                 ("Server", "My very own web server"),
                 ("Cache-Control", "no-storage"),
+                ("Content-Security-Policy", "object-src 'none'; script-src 'self' https://example.com/; report-to https://example.com/other-report"),
             ],
         );
 
@@ -619,6 +673,10 @@ mod tests {
                 ("X-Me", "none"),
                 ("X-Test", "unchanged"),
                 ("Server", "My very own web server"),
+                (
+                    "Content-Security-Policy",
+                    "object-src 'none'; script-src 'self'; report-to https://example.com/report",
+                ),
             ],
         );
 
@@ -638,6 +696,10 @@ mod tests {
                 ("X-Test", "unchanged"),
                 ("Server", "My very own web server"),
                 ("Cache-Control", "no-cache"),
+                (
+                    "Content-Security-Policy",
+                    "object-src 'none'; script-src 'self'; report-to https://example.com/report",
+                ),
             ],
         );
 

@@ -144,14 +144,20 @@ pub struct WithMatchRules<C: Clone + PartialEq + Eq> {
     pub conf: C,
 }
 
-macro_rules! impl_cache_control_conf {
-    ($vis:vis struct $struct_name:ident { $($name:ident($header_name:literal, $($type:tt)+),)* }) => {
-        /// Configuration for the Cache-Control header
+macro_rules! impl_conf {
+    (
+        $variant:tt:
+        $(#[$attr:meta])*
+        $vis:vis struct $struct_name:ident
+        {
+            $($name:ident($header_name:literal, $($type:tt)+),)*
+        }
+    ) => {
+        $(#[$attr])*
         #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
-        #[allow(missing_debug_implementations)]
-            $vis struct $struct_name {
+        $vis struct $struct_name {
             $(
-                #[doc = impl_cache_control_conf!(doc($header_name, $($type)+))]
+                #[doc = impl_conf!(doc($header_name, $variant $($type)+))]
                 #[module_utils(rename = $header_name)]
                 pub $name: $($type)+,
             )*
@@ -160,54 +166,96 @@ macro_rules! impl_cache_control_conf {
         impl IntoHeaders for $struct_name {
             fn merge_with(&mut self, other: &Self) {
                 $(
-                    impl_cache_control_conf!(merge(self.$name, other.$name, $($type)+));
+                    impl_conf!(merge(self.$name, other.$name, $($type)+));
                 )*
             }
             fn into_headers(self) -> Vec<Header> {
                 let mut entries: Vec<Cow<'_, str>> = Vec::new();
                 $(
-                    impl_cache_control_conf!(push(entries, $header_name, self.$name, $($type)+));
+                    impl_conf!(push(entries, $header_name, self.$name, $variant $($type)+));
                 )*
                 if entries.is_empty() {
                     Vec::new()
                 } else {
-                    vec![(
-                        header::CACHE_CONTROL,
-                        HeaderValue::from_str(&entries.join(", ")).unwrap(),
-                    )]
+                    impl_conf!(finalize(entries, $variant))
                 }
             }
         }
     };
-    (doc($header_name:literal, Option<usize>)) => {
-        concat!("If set, ", $header_name, " option will be sent")
-    };
-    (doc($header_name:literal, bool)) => {
-        concat!("If `true`, ", $header_name, " flag will be sent")
-    };
-    (merge($into:expr, $from:expr, Option<usize>)) => {
-        if $from.is_some() {
-            $into = $from;
-        }
-    };
+
+    // Merge is generic
     (merge($into:expr, $from:expr, bool)) => {
         if $from {
             $into = $from;
         }
     };
-    (push($list:expr, $header_name:literal, $value:expr, Option<usize>)) => {
+    (merge($into:expr, $from:expr, String)) => {
+        if !$from.is_empty() {
+            $into = $from.clone();
+        }
+    };
+    (merge($into:expr, $from:expr, Option<$type:ty>)) => {
+        if $from.is_some() {
+            $into = $from;
+        }
+    };
+    (merge($into:expr, $from:expr, Vec<$type:ty>)) => {
+        $into.extend_from_slice(&$from);
+    };
+
+    // Cache-Control types
+    (doc($header_name:literal, cache_control Option<usize>)) => {
+        concat!("If set, ", $header_name, " option will be sent")
+    };
+    (doc($header_name:literal, cache_control bool)) => {
+        concat!("If `true`, ", $header_name, " flag will be sent")
+    };
+    (push($list:expr, $header_name:literal, $value:expr, cache_control Option<usize>)) => {
         if let Some(value) = $value {
             $list.push(format!(concat!($header_name, "={}"), value).into());
         }
     };
-    (push($list:expr, $header_name:literal, $value:expr, bool)) => {
+    (push($list:expr, $header_name:literal, $value:expr, cache_control bool)) => {
         if $value {
             $list.push($header_name.into());
         }
     };
+    (finalize($list:expr, cache_control)) => {
+        vec![(
+            header::CACHE_CONTROL,
+            HeaderValue::from_str(&$list.join(", ")).unwrap(),
+        )]
+    };
+
+    // Content-Security-Policy types
+    (doc($header_name:literal, csp $($type:tt)*)) => {
+        concat!("If set, ", $header_name, " directive will be sent")
+    };
+    (push($list:expr, $header_name:literal, $value:expr, csp bool)) => {
+        if $value {
+            $list.push($header_name.into());
+        }
+    };
+    (push($list:expr, $header_name:literal, $value:expr, csp String)) => {
+        if !$value.is_empty() {
+            $list.push(format!(concat!($header_name, " {}"), $value).into());
+        }
+    };
+    (push($list:expr, $header_name:literal, $value:expr, csp Vec<String>)) => {
+        if !$value.is_empty() {
+            $list.push(format!(concat!($header_name, " {}"), $value.join(" ")).into());
+        }
+    };
+    (finalize($list:expr, csp)) => {
+        vec![(
+            header::CONTENT_SECURITY_POLICY,
+            HeaderValue::from_str(&$list.join("; ")).unwrap(),
+        )]
+    };
 }
 
-impl_cache_control_conf! {
+impl_conf! {cache_control:
+    /// Configuration for the Cache-Control header
     pub struct CacheControlConf {
         max_age("max-age", Option<usize>),
         s_maxage("s-maxage", Option<usize>),
@@ -222,6 +270,38 @@ impl_cache_control_conf! {
         immutable("immutable", bool),
         stale_while_revalidate("stale-while-revalidate", Option<usize>),
         stale_if_error("stale-if-error", Option<usize>),
+    }
+}
+
+impl_conf! {csp:
+    /// Configuration for the Content-Security-Policy header
+    pub struct ContentSecurityPolicyConf {
+        connect_src("connect-src", Vec<String>),
+        default_src("default-src", Vec<String>),
+        fenced_frame_src("fenced-frame-src", Vec<String>),
+        font_src("font-src", Vec<String>),
+        frame_src("frame-src", Vec<String>),
+        img_src("img-src", Vec<String>),
+        manifest_src("manifest-src", Vec<String>),
+        media_src("media-src", Vec<String>),
+        object_src("object-src", Vec<String>),
+        prefetch_src("prefetch-src", Vec<String>),
+        script_src("script-src", Vec<String>),
+        script_src_elem("script-src-elem", Vec<String>),
+        script_src_attr("script-src-attr", Vec<String>),
+        style_src("style-src", Vec<String>),
+        style_src_elem("style-src-elem", Vec<String>),
+        style_src_attr("style-src-attr", Vec<String>),
+        worker_src("worker-src", Vec<String>),
+        base_uri("base-uri", Vec<String>),
+        sandbox("sandbox", Vec<String>),
+        form_action("form-action", Vec<String>),
+        frame_ancestors("frame-ancestors", Vec<String>),
+        report_uri("report-uri", String),
+        report_to("report-to", String),
+        require_trusted_types_for("require-trusted-types-for", Vec<String>),
+        trusted_types("trusted-types", Vec<String>),
+        upgrade_insecure_requests("upgrade-insecure-requests", bool),
     }
 }
 
@@ -245,6 +325,10 @@ pub struct HeadersInnerConf {
     /// Cache-Control header
     #[module_utils(deserialize_with_seed = "deserialize_with_match_rules")]
     pub cache_control: Vec<WithMatchRules<CacheControlConf>>,
+
+    /// Content-Security-Policy header
+    #[module_utils(deserialize_with_seed = "deserialize_with_match_rules")]
+    pub content_security_policy: Vec<WithMatchRules<ContentSecurityPolicyConf>>,
 
     /// Custom headers, headers configures as name => value map here
     #[module_utils(deserialize_with_seed = "deserialize_custom_headers")]

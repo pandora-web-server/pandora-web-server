@@ -1,12 +1,18 @@
 anonymization_enabled: true
 response_headers:
-  custom:
-  - Cache-Control: "max-age=604800"
+  cache_control:
+  - max-age: 604800
     include: [localhost:8080]
     exclude: [localhost:8080/large.txt]
-  - Cache-Control: "max-age=3600"
+  - max-age: 3600
     include: [localhost:8080/uncompressed/*]
     exclude: [localhost:8080/uncompressed/large.txt]
-  - Cache-Control: "no-cache"
-    X-From: "https://example.com/"
-    include: [localhost:8081, example.com]
+  - no-cache: true
+    include: [localhost:8081, localhost:8443, example.com]
+  content_security_policy:
+  - script-src: ["'self'"]
+    object-src: ["'none'"]
+  custom:
+  - Server: My great web server
+  - X-From: "https://example.com/"
+    include: [localhost:8081, localhost:8443, example.com]

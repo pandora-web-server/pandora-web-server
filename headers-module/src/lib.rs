@@ -41,18 +41,27 @@
 //!     -
 //!         max-age: 3600
 //!         include: example.com/short_lived/*
+//!     content_security_policy:
+//!     -
+//!         script-src: ["'self'"]
+//!         frame-src: ["'self'", https://example.com, https://example.info]
+//!     -
+//!         script-src: [https://cdn.example.com]
+//!         include: example.com/app/*
+//!         exclude: example.com/app/admin/*
 //!     custom:
 //!         X-Custom-Header: "something"
 //!         include: [example.com, example.net]
 //!         exclude: example.com/exception.txt
 //! ```
 //!
-//! This defines four sets of header rules, each applying to different sections of `example.com`
-//! and `example.net` websites. While the `cache_control` section allows composing `Cache-Control`
-//! header in a structured way, the `custom` section defines header name and value combinations
-//! as they should be sent to the client.
+//! This defines six sets of header rules, each applying to different sections of `example.com`
+//! and `example.net` websites. The `cache_control` section allows composing `Cache-Control` header
+//! in a structured way, the `content_security_policy` section composes the
+//! `Content-Security-Policy` header, and the `custom` section defines arbitrary header name and
+//! value combinations as they should be sent to the client.
 //!
-//! Note that two sets of rules define the `max-age` parameter for the `Cache-Control` header and
+//! Note how two sets of rules define the `max-age` parameter for the `Cache-Control` header and
 //! both apply within the `example.com/short_lived` subdirectory. In such cases the more specific
 //! rule is respected, here it is the one applying to the specific subdirectory. This means that
 //! the shorter caching interval will be used.
@@ -98,6 +107,19 @@
 //!
 //! The following numeric settings are supported: `max-age`, `s-maxage`, `stale-while-revalidate`,
 //! `stale-if-error`. These will be added to the `Cache-Control` header with the value configured.
+//!
+//! ## `content_security_policy`
+//!
+//! The `content_security_policy` section contains settings corresponding to various
+//! [`Content-Security-Policy` header directives](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy).
+//! Most of these are lists like `script-src`. These lists will be combined if different rules
+//! apply to the same location and define different sources.
+//!
+//! Reporting directives like `report-to` take a single value. If multiple values are possible, the
+//! one from the closest rule takes precedence.
+//!
+//! Finally, `upgrade-insecure-requests` directive is a boolean value. It should be set to `true`
+//! to enable this directive in the output. Setting it to `false` has no effect.
 //!
 //! ## `custom` section
 //!
