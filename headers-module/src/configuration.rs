@@ -144,114 +144,84 @@ pub struct WithMatchRules<C: Clone + PartialEq + Eq> {
     pub conf: C,
 }
 
-/// Configuration for the Cache-Control header
-#[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
-#[module_utils(rename_all = "kebab-case")]
-pub struct CacheControlConf {
-    /// If set, max-age option will be sent
-    pub max_age: Option<usize>,
-    /// If set, s-max-age option will be sent
-    pub s_maxage: Option<usize>,
-    /// If `true`, no-cache flag will be sent
-    pub no_cache: bool,
-    /// If `true`, no-storage flag will be sent
-    pub no_storage: bool,
-    /// If `true`, no-transform flag will be sent
-    pub no_transform: bool,
-    /// If `true`, must-revalidate flag will be sent
-    pub must_revalidate: bool,
-    /// If `true`, proxy-revalidate flag will be sent
-    pub proxy_revalidate: bool,
-    /// If `true`, must-understand flag will be sent
-    pub must_understand: bool,
-    /// If `true`, private flag will be sent
-    pub private: bool,
-    /// If `true`, public flag will be sent
-    pub public: bool,
-    /// If `true`, immutable flag will be sent
-    pub immutable: bool,
-    /// If set, stale-while-revalidate option will be sent
-    pub stale_while_revalidate: Option<usize>,
-    /// If set, stale-if-error option will be sent
-    pub stale_if_error: Option<usize>,
+macro_rules! impl_cache_control_conf {
+    ($vis:vis struct $struct_name:ident { $($name:ident($header_name:literal, $($type:tt)+),)* }) => {
+        /// Configuration for the Cache-Control header
+        #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
+        #[allow(missing_debug_implementations)]
+            $vis struct $struct_name {
+            $(
+                #[doc = impl_cache_control_conf!(doc($header_name, $($type)+))]
+                #[module_utils(rename = $header_name)]
+                pub $name: $($type)+,
+            )*
+        }
+
+        impl IntoHeaders for $struct_name {
+            fn merge_with(&mut self, other: &Self) {
+                $(
+                    impl_cache_control_conf!(merge(self.$name, other.$name, $($type)+));
+                )*
+            }
+            fn into_headers(self) -> Vec<Header> {
+                let mut entries: Vec<Cow<'_, str>> = Vec::new();
+                $(
+                    impl_cache_control_conf!(push(entries, $header_name, self.$name, $($type)+));
+                )*
+                if entries.is_empty() {
+                    Vec::new()
+                } else {
+                    vec![(
+                        header::CACHE_CONTROL,
+                        HeaderValue::from_str(&entries.join(", ")).unwrap(),
+                    )]
+                }
+            }
+        }
+    };
+    (doc($header_name:literal, Option<usize>)) => {
+        concat!("If set, ", $header_name, " option will be sent")
+    };
+    (doc($header_name:literal, bool)) => {
+        concat!("If `true`, ", $header_name, " flag will be sent")
+    };
+    (merge($into:expr, $from:expr, Option<usize>)) => {
+        if $from.is_some() {
+            $into = $from;
+        }
+    };
+    (merge($into:expr, $from:expr, bool)) => {
+        if $from {
+            $into = $from;
+        }
+    };
+    (push($list:expr, $header_name:literal, $value:expr, Option<usize>)) => {
+        if let Some(value) = $value {
+            $list.push(format!(concat!($header_name, "={}"), value).into());
+        }
+    };
+    (push($list:expr, $header_name:literal, $value:expr, bool)) => {
+        if $value {
+            $list.push($header_name.into());
+        }
+    };
 }
 
-impl IntoHeaders for CacheControlConf {
-    fn merge_with(&mut self, other: &Self) {
-        macro_rules! merge_option {
-            ($name: ident) => {
-                if other.$name.is_some() {
-                    self.$name = other.$name;
-                }
-            };
-        }
-        macro_rules! merge_bool {
-            ($name: ident) => {
-                if other.$name {
-                    self.$name = other.$name;
-                }
-            };
-        }
-
-        merge_option!(max_age);
-        merge_option!(s_maxage);
-        merge_bool!(no_cache);
-        merge_bool!(no_storage);
-        merge_bool!(no_transform);
-        merge_bool!(must_revalidate);
-        merge_bool!(proxy_revalidate);
-        merge_bool!(must_understand);
-        merge_bool!(private);
-        merge_bool!(public);
-        merge_bool!(immutable);
-        merge_option!(stale_while_revalidate);
-        merge_option!(stale_if_error);
-    }
-
-    fn into_headers(self) -> Vec<Header> {
-        let mut entries: Vec<Cow<'_, str>> = Vec::new();
-        if let Some(max_age) = self.max_age {
-            entries.push(format!("max-age={max_age}").into());
-        }
-        if let Some(s_maxage) = self.s_maxage {
-            entries.push(format!("s-maxage={s_maxage}").into());
-        }
-        if self.no_cache {
-            entries.push("no-cache".into());
-        }
-        if self.no_storage {
-            entries.push("no-storage".into());
-        }
-        if self.no_transform {
-            entries.push("no-transform".into());
-        }
-        if self.must_revalidate {
-            entries.push("must-revalidate".into());
-        }
-        if self.proxy_revalidate {
-            entries.push("proxy-revalidate".into());
-        }
-        if self.must_understand {
-            entries.push("must-understand".into());
-        }
-        if self.private {
-            entries.push("private".into());
-        }
-        if self.public {
-            entries.push("public".into());
-        }
-        if self.immutable {
-            entries.push("immutable".into());
-        }
-
-        if entries.is_empty() {
-            Vec::new()
-        } else {
-            vec![(
-                header::CACHE_CONTROL,
-                HeaderValue::from_str(&entries.join(", ")).unwrap(),
-            )]
-        }
+impl_cache_control_conf! {
+    pub struct CacheControlConf {
+        max_age("max-age", Option<usize>),
+        s_maxage("s-maxage", Option<usize>),
+        no_cache("no-cache", bool),
+        no_storage("no-storage", bool),
+        no_transform("no-transform", bool),
+        must_revalidate("must-revalidate", bool),
+        proxy_revalidate("proxy-revalidate", bool),
+        must_understand("must-understand", bool),
+        private("private", bool),
+        public("public", bool),
+        immutable("immutable", bool),
+        stale_while_revalidate("stale-while-revalidate", Option<usize>),
+        stale_if_error("stale-if-error", Option<usize>),
     }
 }
 
