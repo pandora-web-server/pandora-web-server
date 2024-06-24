@@ -1,0 +1,47 @@
+name: Build release
+
+on:
+  push:
+    branches:
+    - main
+    - staging
+    - ci
+  pull_request: {}
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        toolchain: [nightly-2024-06-15]
+        features: ["", "--no-default-features --features=default-single-host", "--no-default-features", "--all-features"]
+        include:
+        - toolchain: nightly-2024-06-15
+          flags: -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort
+        - features: ""
+          name: "default-vhosts"
+        - features: "--no-default-features --features=default-single-host"
+          name: "default-single-host"
+        - features: "--no-default-features"
+          name: "no-features"
+        - features: "--all-features"
+          name: "all-features"
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install toolchain
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+          toolchain: ${{ matrix.toolchain }}
+    - name: Build
+      run: cargo build --release --package pandora-web-server ${{ matrix.features }}
+    - name: Upload pandora-web-server artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.name }} ${{ matrix.os }} ${{ matrix.toolchain }}
+        path: target/release/pandora-web-server
