@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! # Upstream Module for Pingora
+//! # Upstream Module for Pandora Web Server
 //!
 //! This crate helps configure Pingora’s upstream functionality. It is most useful in combination
 //! with the `virtual-hosts-module` crate that allows applying multiple upstream configurations
@@ -57,8 +57,6 @@
 //!
 //! // Do something with the server here, e.g. call server.run_forever()
 //! ```
-//!
-//! For more realistic code see `virtual-hosts` example in the repository.
 
 use async_trait::async_trait;
 use http::header;

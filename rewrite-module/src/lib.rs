@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! # Rewrite Module for Pingora
+//! # Rewrite Module for Pandora Web Server
 //!
 //! This crate adds URI rewriting capabilities. A modified URI can be passed on to further
 //! processors, or a redirect response can make the client emit a new request. A number of rules
@@ -98,8 +98,6 @@
 //!
 //! // Do something with the server here, e.g. call server.run_forever()
 //! ```
-//!
-//! For more comprehensive examples see the `examples` directory in the repository.
 
 pub mod configuration;
 mod handler;

@@ -1,4 +1,4 @@
-# Headers Module for Pingora
+# Headers Module for Pandora Web Server
 
 This crate allows defining additional HTTP headers to be sent with responses. It should be
 called before other handlers such as `static-files-module` or `virtual-hosts-module` to add
@@ -178,5 +178,3 @@ let server = conf.startup.into_server(app, Some(opt.startup)).unwrap();
 
 // Do something with the server here, e.g. call server.run_forever()
 ```
-
-For more comprehensive examples see the [`examples` directory in the repository](https://github.com/palant/pingora-utils/tree/main/examples).

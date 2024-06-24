@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! # IP Anonymization Module
+//! # IP Anonymization Module for Pandora Web Server
 //!
 //! This crate allows removing part of the client’s IP address, making certain that a full IP
 //! address is never logged or leaked. The remaining address still contains enough information
@@ -75,8 +75,6 @@
 //!
 //! // Do something with the server here, e.g. call server.run_forever()
 //! ```
-//!
-//! For more comprehensive examples see the `examples` directory in the repository.
 
 use std::net::IpAddr;
 

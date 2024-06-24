@@ -1,19 +1,27 @@
-# Pingora utils
+# Pandora Web Server
 
-This repository contains various crates meant to extend Pingora server functionality. At the moment these are:
+This repository contains various crates related to the Pandora Web Server. You probably want to
+have a look at the [web server documentation](../../tree/main/pandora-web-server). Other than that,
+there are:
 
-* [Module utils](../../tree/main/module-utils): Various useful helpers for the other crates
-* [Auth Module](../../tree/main/auth-module): Authentication support
-* [Common Log Module](../../tree/main/common-log-module): Creation of access logs in the [Common Log Format](https://en.wikipedia.org/wiki/Common_Log_Format)
-* [Compression Module](../../tree/main/compression-module): Helps configure Pingora’s built-in compression
-* [Headers Module](../../tree/main/headers-module): Configure HTTP headers to be added to responses
-* [IP Anonymization Module](../../tree/main/ip-anonymization-module): Remove part of the IP address to anonymize requests
-* [Rewrite Module](../../tree/main/rewrite-module): Rules to modify request URI or produce redirect responses
-* [Startup Module](../../tree/main/static-files-module): Configuring and starting the web server
-* [Static Files Module](../../tree/main/static-files-module): Serve static files from a directory
-* [Upstream Module](../../tree/main/upstream-module): Helps configure Pingora’s built-in upstream proxying
-* [Virtual Hosts Module](../../tree/main/virtual-hosts-module): Handle separate configurations for virtual hosts
+* [Module utils](../../tree/main/module-utils): Various useful helpers used by the server and its
+  modules
+* [Auth module](../../tree/main/auth-module): Authentication support
+* [Common Log module](../../tree/main/common-log-module): Creation of access logs in the [Common
+  Log Format](https://en.wikipedia.org/wiki/Common_Log_Format)
+* [Compression module](../../tree/main/compression-module): Configured dynamic response compression
+* [Headers module](../../tree/main/headers-module): Configure HTTP headers to be added to responses
+* [IP Anonymization module](../../tree/main/ip-anonymization-module): Remove part of the IP address
+  to anonymize requests
+* [Rewrite module](../../tree/main/rewrite-module): Rules to modify request URI or produce
+  redirect responses
+* [Startup module](../../tree/main/static-files-module): Configuring and starting the web server
+* [Static Files module](../../tree/main/static-files-module): Serve static files from a directory
+* [Upstream module](../../tree/main/upstream-module): Redirects response to an upstream HTTP server
+* [Virtual Hosts module](../../tree/main/virtual-hosts-module): Handle separate configurations for
+  virtual hosts
 
 ## Rust version
 
-Currently, the minimal supported Rust version (MSRV) is 1.74. In future, the plan is to track [Pingora’s MSRV](https://github.com/cloudflare/pingora/?tab=readme-ov-file#rust-version).
+Currently, the minimal supported Rust version (MSRV) is 1.74. In future, the plan is to track
+[Pingora’s MSRV](https://github.com/cloudflare/pingora/?tab=readme-ov-file#rust-version).

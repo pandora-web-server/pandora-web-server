@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! # Auth Module for Pingora
+//! # Auth Module for Pandora Web Server
 //!
 //! This crate allows putting up an authentication check before further processing of the request
 //! happens. Only authorized users will be able to access the content. This barrier can apply to
@@ -152,8 +152,6 @@
 //!
 //! // Do something with the server here, e.g. call server.run_forever()
 //! ```
-//!
-//! For more comprehensive examples see the `examples` directory in the repository.
 
 mod basic;
 mod common;

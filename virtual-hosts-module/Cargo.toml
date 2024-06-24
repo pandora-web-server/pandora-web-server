@@ -2,7 +2,7 @@
 name = "virtual-hosts-module"
 version = "0.2.0"
 authors = ["Wladimir Palant"]
-repository = "https://github.com/palant/pingora-utils"
+repository = "https://github.com/palant/pandora-web-server"
 categories = ["network-programming", "web-programming::http-server"]
 keywords = ["virtual-hosts", "web-server", "http", "pingora"]
 license = "Apache-2.0"

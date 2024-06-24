@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+  "pandora-web-server",
   "module-utils",
   "module-utils-macros",
   "auth-module",
@@ -13,9 +14,9 @@ members = [
   "static-files-module",
   "upstream-module",
   "virtual-hosts-module",
-  "examples/*",
 ]
 default-members = [
+  "pandora-web-server",
   "module-utils",
   "module-utils-macros",
   "auth-module",

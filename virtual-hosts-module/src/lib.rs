@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! # Virtual Hosts Module for Pingora
+//! # Virtual Hosts Module for Pandora Web Server
 //!
 //! This module simplifies dealing with virtual hosts. It wraps any handler implementing
 //! [`module_utils::RequestFilter`] and its configuration, allowing to supply a different
@@ -101,8 +101,6 @@
 //!
 //! // Do something with the server here, e.g. call server.run_forever()
 //! ```
-//!
-//! For complete and more comprehensive code see `virtual-hosts` example in the repository.
 
 mod configuration;
 mod handler;

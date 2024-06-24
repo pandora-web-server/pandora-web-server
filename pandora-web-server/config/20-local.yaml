@@ -9,7 +9,7 @@ vhosts:
     default: true
     log_file: localhost.access.log
     log_format: [remote_addr, -, -, time_local, request, status, bytes_sent, http_referer, http_user_agent, processing_time]
-    root: ../../static-files-module/testdata/root
+    root: ../static-files-module/testdata/root
     canonicalize_uri: true
     index_file:
     - index.html
@@ -33,14 +33,14 @@ vhosts:
       /uncompressed/*:
         strip_prefix: true
         log_file: localhost.access.log
-        root: ../../static-files-module/testdata/root
+        root: ../static-files-module/testdata/root
         index_file:
         - index.html
         redirect_prefix: /uncompressed
       /reindexed/*:
         strip_prefix: true
         log_file: localhost.access.log
-        root: ../../static-files-module/testdata/root
+        root: ../static-files-module/testdata/root
         index_file:
         - file.txt
         canonicalize_uri: false

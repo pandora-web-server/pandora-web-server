@@ -1,4 +1,4 @@
-# IP Anonymization Module
+# IP Anonymization Module for Pandora Web Server
 
 This crate allows removing part of the client’s IP address, making certain that a full IP
 address is never logged or leaked. The remaining address still contains enough information
@@ -61,5 +61,3 @@ let server = conf.startup.into_server(app, Some(opt.startup)).unwrap();
 
 // Do something with the server here, e.g. call server.run_forever()
 ```
-
-For more comprehensive examples see the [`examples` directory in the repository](https://github.com/palant/pingora-utils/tree/main/examples).

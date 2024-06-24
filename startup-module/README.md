@@ -1,4 +1,4 @@
-# Startup Module for Pingora
+# Startup Module for Pandora Web Server
 
 This crate helps configure and set up the Pingora server. It provides a `StartupOpt` data
 structure with the relevant command line and `StartupConf` with the configuration file
@@ -159,5 +159,3 @@ let server = conf.into_server(MyServer {}, Some(opt)).unwrap();
 
 // Do something with the server here, e.g. call server.run_forever()
 ```
-
-For more comprehensive examples see the [`examples` directory in the repository](https://github.com/palant/pingora-utils/tree/main/examples).

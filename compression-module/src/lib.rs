@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! # Compression Module for Pingora
+//! # Compression Module for Pandora Web Server
 //!
 //! This crate helps configure Pingora’s built-in compression mechanism. It provides two
 //! configuration options:
@@ -67,8 +67,6 @@
 //!
 //! // Do something with the server here, e.g. call server.run_forever()
 //! ```
-//!
-//! For more comprehensive examples see the `examples` directory in the repository.
 
 use async_trait::async_trait;
 use module_utils::pingora::{Error, SessionWrapper};

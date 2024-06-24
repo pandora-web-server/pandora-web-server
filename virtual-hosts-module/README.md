@@ -1,4 +1,4 @@
-# Virtual Hosts Module for Pingora
+# Virtual Hosts Module for Pandora Web Server
 
 This module simplifies dealing with virtual hosts. It wraps any handler implementing
 `module_utils::RequestFilter` and its configuration, allowing to supply a different
@@ -87,5 +87,3 @@ let server = conf.startup.into_server(app, Some(opt)).unwrap();
 
 // Do something with the server here, e.g. call server.run_forever()
 ```
-
-For complete and more comprehensive code see [virtual-hosts example](https://github.com/palant/pingora-utils/tree/main/examples/virtual-hosts) in the repository.

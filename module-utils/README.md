@@ -1,4 +1,3 @@
-# Module helpers
+# Module helpers for Pandora Web Server
 
-This crate contains some helpers that are useful when using `static-files-module` or
-`virtual-hosts-module` crates for example.
+This crate contains some helpers that are used by Pandora Web Server and its modules.

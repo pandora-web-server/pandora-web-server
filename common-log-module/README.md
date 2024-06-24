@@ -1,4 +1,4 @@
-# Common Log Module for Pingora
+# Common Log Module for Pandora Web Server
 
 This crate implements the creation of access log files in the
 [Common Log Format](https://en.wikipedia.org/wiki/Common_Log_Format) that can be processed
@@ -78,5 +78,3 @@ let server = conf.startup.into_server(app, Some(opt.startup)).unwrap();
 
 // Do something with the server here, e.g. call server.run_forever()
 ```
-
-For more comprehensive examples see the [`examples` directory in the repository](https://github.com/palant/pingora-utils/tree/main/examples).

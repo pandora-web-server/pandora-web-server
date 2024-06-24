@@ -1,4 +1,4 @@
-# Upstream Module for Pingora
+# Upstream Module for Pandora Web Server
 
 This crate helps configure Pingora’s upstream functionality. It is most useful in combination
 with the `virtual-hosts-module` crate that allows applying multiple upstream configurations
@@ -43,5 +43,3 @@ let server = conf.startup.into_server(app, Some(opt.startup)).unwrap();
 
 // Do something with the server here, e.g. call server.run_forever()
 ```
-
-For more realistic code see [`virtual-hosts` example in the repository](https://github.com/palant/pingora-utils/tree/main/examples/virtual-hosts).

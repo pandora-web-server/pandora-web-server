@@ -1,7 +1,6 @@
-# Static Files Module for Pingora
+# Static Files Module for Pandora Web Server
 
-This crate allows extending [Pingora Proxy](https://github.com/cloudflare/pingora) with the
-capability to serve static files from a directory.
+This crate adds capability to serve static files from a directory to the Pandora Web Server.
 
 ## Supported functionality
 
@@ -60,8 +59,6 @@ let server = conf.startup.into_server(app, Some(opt.startup)).unwrap();
 
 // Do something with the server here, e.g. call server.run_forever()
 ```
-
-For more comprehensive examples see the [`examples` directory in the repository](https://github.com/palant/pingora-utils/tree/main/examples).
 
 ## Compression support
 

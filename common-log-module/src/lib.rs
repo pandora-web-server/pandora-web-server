@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! # Common Log Module for Pingora
+//! # Common Log Module for Pandora Web Server
 //!
 //! This crate implements the creation of access log files in the
 //! [Common Log Format](https://en.wikipedia.org/wiki/Common_Log_Format) that can be processed
@@ -92,8 +92,6 @@
 //!
 //! // Do something with the server here, e.g. call server.run_forever()
 //! ```
-//!
-//! For more comprehensive examples see the `examples` directory in the repository.
 
 pub mod configuration;
 mod handler;

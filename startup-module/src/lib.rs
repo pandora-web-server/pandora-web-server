@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! # Startup Module for Pingora
+//! # Startup Module for Pandora Web Server
 //!
 //! This crate helps configure and set up the Pingora server. It provides a [`StartupOpt`] data
 //! structure with the relevant command line and [`StartupConf`] with the configuration file
@@ -173,8 +173,6 @@
 //!
 //! // Do something with the server here, e.g. call server.run_forever()
 //! ```
-//!
-//! For more comprehensive examples see the `examples` directory in the repository.
 
 mod configuration;
 mod redirector;

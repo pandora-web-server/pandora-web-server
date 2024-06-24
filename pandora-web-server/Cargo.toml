@@ -1,0 +1,71 @@
+[package]
+name = "pandora-web-server"
+version = "0.2.0"
+authors = ["Wladimir Palant"]
+repository = "https://github.com/palant/pandora-web-server"
+categories = ["network-programming", "web-programming::http-server"]
+keywords = ["pandora", "web-server", "file-server", "http", "pingora"]
+license = "Apache-2.0"
+edition = "2021"
+rust-version.workspace = true
+description = """
+A fast and configurable web server based on Cloudflare’s Pingora framework.
+"""
+
+[dependencies]
+auth-module = { workspace = true, optional = true }
+common-log-module = { workspace = true, optional = true }
+compression-module = { workspace = true, optional = true }
+env_logger.workspace = true
+headers-module = { workspace = true, optional = true }
+ip-anonymization-module = { workspace = true, optional = true }
+log.workspace = true
+module-utils.workspace = true
+rewrite-module = { workspace = true, optional = true }
+startup-module.workspace = true
+static-files-module = { workspace = true, optional = true }
+structopt.workspace = true
+upstream-module = { workspace = true, optional = true }
+virtual-hosts-module = { workspace = true, optional = true }
+
+[features]
+default = ["default-vhosts"]
+default-single-host = [
+    "auth-top-level",
+    "common-log-top-level",
+    "compression-top-level",
+    "headers-top-level",
+    "ip-anonymization-top-level",
+    "rewrite-top-level",
+    "static-files-top-level",
+    "upstream-top-level",
+]
+default-vhosts = [
+    "auth-per-host",
+    "common-log-per-host",
+    "compression-per-host",
+    "headers-top-level",
+    "ip-anonymization-top-level",
+    "rewrite-per-host",
+    "static-files-per-host",
+    "upstream-per-host",
+]
+auth-top-level = ["dep:auth-module"]
+auth-per-host = ["dep:auth-module", "dep:virtual-hosts-module"]
+common-log-top-level = ["dep:common-log-module"]
+common-log-per-host = ["dep:common-log-module", "dep:virtual-hosts-module"]
+compression-top-level = ["dep:compression-module"]
+compression-per-host = ["dep:compression-module", "dep:virtual-hosts-module"]
+headers-top-level = ["dep:headers-module"]
+headers-per-host = ["dep:headers-module", "dep:virtual-hosts-module"]
+ip-anonymization-top-level = ["dep:ip-anonymization-module"]
+ip-anonymization-per-host = ["dep:ip-anonymization-module", "dep:virtual-hosts-module"]
+rewrite-top-level = ["dep:rewrite-module"]
+rewrite-per-host = ["dep:rewrite-module", "dep:virtual-hosts-module"]
+static-files-top-level = ["dep:static-files-module"]
+static-files-per-host = ["dep:static-files-module", "dep:virtual-hosts-module"]
+upstream-top-level = ["dep:upstream-module"]
+upstream-per-host = ["dep:upstream-module", "dep:virtual-hosts-module"]
+
+[lints]
+workspace = true

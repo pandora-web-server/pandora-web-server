@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! # Headers Module for Pingora
+//! # Headers Module for Pandora Web Server
 //!
 //! This crate allows defining additional HTTP headers to be sent with responses. It should be
 //! called before other handlers such as `static-files-module` or `virtual-hosts-module` to add
@@ -192,8 +192,6 @@
 //!
 //! // Do something with the server here, e.g. call server.run_forever()
 //! ```
-//!
-//! For more comprehensive examples see the `examples` directory in the repository.
 
 pub mod configuration;
 mod deserialize;
