@@ -68,24 +68,6 @@ pub struct VirtualHostsHandler<H: Debug> {
 }
 
 impl<H: Debug> VirtualHostsHandler<H> {
-    fn best_match(
-        &self,
-        host: impl AsRef<[u8]>,
-        path: impl AsRef<[u8]>,
-    ) -> Option<(&H, usize, Option<Vec<u8>>)> {
-        self.handlers.lookup(&host, &path).map(|result| {
-            let (strip_path, handler) = result.as_value();
-            let index = result.index();
-            (
-                handler,
-                index,
-                strip_path
-                    .as_ref()
-                    .and_then(|p| p.remove_prefix_from(&path)),
-            )
-        })
-    }
-
     /// Retrieves the handler which was previously called for this virtual host.
     ///
     /// This will return `None` if the `request_filter` handler wasn’t called for this context yet
@@ -127,12 +109,13 @@ where
         ctx: &mut Self::CTX,
     ) -> Result<RequestFilterResult, Box<Error>> {
         let path = session.req_header().uri.path();
-        let handler = session
-            .host()
-            .and_then(|host| self.best_match(host.as_ref(), path))
-            .or_else(|| self.best_match("", path));
+        let host = session.host().unwrap_or_default();
 
-        if let Some((handler, index, new_path)) = handler {
+        if let Some(result) = self.handlers.lookup(host.as_ref(), &path) {
+            let (strip_path, handler) = result.as_value();
+            let index = result.index();
+            let new_path = strip_path.as_ref().and_then(|p| p.remove_prefix_from(path));
+
             ctx.index = Some(index);
 
             // Save ctx.index in session as well, response_filter could be called without context

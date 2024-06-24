@@ -177,12 +177,12 @@ impl<Value> Router<Value> {
         host: &(impl AsRef<[u8]> + ?Sized),
         path: &(impl AsRef<[u8]> + ?Sized),
     ) -> Option<LookupResult<'_, Value>> {
-        let key = make_key(host, path);
-        if host.as_ref().is_empty() {
-            self.fallback.lookup(key)
+        if !host.as_ref().is_empty() {
+            self.trie.lookup(make_key(host, path))
         } else {
-            self.trie.lookup(key)
+            None
         }
+        .or_else(|| self.fallback.lookup(make_key("", path)))
     }
 
     /// Retrieves the value from a previous lookup by its index
@@ -481,7 +481,7 @@ mod tests {
         assert_eq!(lookup(&router, "example.com", "/x/"), Some(6));
         assert_eq!(lookup(&router, "example.com", "/xyz"), Some(4));
         assert_eq!(lookup(&router, "example.net", "/"), None);
-        assert_eq!(lookup(&router, "example.net", "/abc"), None);
+        assert_eq!(lookup(&router, "example.net", "/abc"), Some(7));
         assert_eq!(lookup(&router, "", "/"), None);
         assert_eq!(lookup(&router, "", "/abc"), Some(7));
         assert_eq!(lookup(&router, "", "/abc/def"), Some(7));

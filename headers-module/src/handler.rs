@@ -103,12 +103,8 @@ impl RequestFilter for HeadersHandler {
             session.host()
         );
 
-        let match_ = session
-            .host()
-            .and_then(|host| self.router.lookup(host.as_ref(), path))
-            .or_else(|| self.router.lookup("", path));
-
-        let list = if let Some(list) = match_ {
+        let host = session.host().unwrap_or_default();
+        let list = if let Some(list) = self.router.lookup(host.as_ref(), path) {
             list.as_value()
         } else {
             return Ok(RequestFilterResult::Unhandled);
