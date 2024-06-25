@@ -23,14 +23,10 @@ use http::{
 };
 use module_utils::merger::{HostPathMatcher, PathMatch, PathMatchResult};
 use module_utils::router::{Path, EMPTY_PATH};
-use module_utils::DeserializeMap;
+use module_utils::{DeserializeMap, OneOrMany};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Debug;
-
-use crate::deserialize::{
-    deserialize_custom_headers, deserialize_match_rule_list, deserialize_with_match_rules,
-};
 
 /// Include and exclude rules applying to a configuration entry
 ///
@@ -49,11 +45,9 @@ use crate::deserialize::{
 #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
 pub struct MatchRules {
     /// Rules determining the locations where the configuration entry should apply
-    #[module_utils(deserialize_with_seed = "deserialize_match_rule_list")]
-    pub include: Vec<HostPathMatcher>,
+    pub include: OneOrMany<HostPathMatcher>,
     /// Rules determining the locations where the configuration entry should not apply
-    #[module_utils(deserialize_with_seed = "deserialize_match_rule_list")]
-    pub exclude: Vec<HostPathMatcher>,
+    pub exclude: OneOrMany<HostPathMatcher>,
 }
 
 impl PathMatch for MatchRules {
@@ -135,12 +129,14 @@ pub(crate) trait IntoHeaders {
 
 /// Combines a given configuration with match rules determining what host/path combinations it
 /// should apply to.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WithMatchRules<C: Clone + PartialEq + Eq> {
+#[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
+pub struct WithMatchRules<C: Default + Clone + PartialEq + Eq> {
     /// The match rules
+    #[module_utils(flatten)]
     pub match_rules: MatchRules,
 
     /// The actual configuration
+    #[module_utils(flatten)]
     pub conf: C,
 }
 
@@ -305,17 +301,24 @@ impl_conf! {csp:
     }
 }
 
-impl IntoHeaders for HashMap<HeaderName, HeaderValue> {
+/// Custom headers configuration
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct CustomHeadersConf {
+    pub(crate) headers: HashMap<HeaderName, HeaderValue>,
+}
+
+impl IntoHeaders for CustomHeadersConf {
     fn merge_with(&mut self, other: &Self) {
-        self.extend(
+        self.headers.extend(
             other
+                .headers
                 .iter()
                 .map(|(name, value)| (name.clone(), value.clone())),
         );
     }
 
     fn into_headers(self) -> Vec<Header> {
-        self.into_iter().collect()
+        self.headers.into_iter().collect()
     }
 }
 
@@ -323,16 +326,13 @@ impl IntoHeaders for HashMap<HeaderName, HeaderValue> {
 #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
 pub struct HeadersInnerConf {
     /// Cache-Control header
-    #[module_utils(deserialize_with_seed = "deserialize_with_match_rules")]
-    pub cache_control: Vec<WithMatchRules<CacheControlConf>>,
+    pub cache_control: OneOrMany<WithMatchRules<CacheControlConf>>,
 
     /// Content-Security-Policy header
-    #[module_utils(deserialize_with_seed = "deserialize_with_match_rules")]
-    pub content_security_policy: Vec<WithMatchRules<ContentSecurityPolicyConf>>,
+    pub content_security_policy: OneOrMany<WithMatchRules<ContentSecurityPolicyConf>>,
 
     /// Custom headers, headers configures as name => value map here
-    #[module_utils(deserialize_with_seed = "deserialize_custom_headers")]
-    pub custom: Vec<WithMatchRules<HashMap<HeaderName, HeaderValue>>>,
+    pub custom: OneOrMany<WithMatchRules<CustomHeadersConf>>,
 }
 
 /// Configuration file settings of the headers module

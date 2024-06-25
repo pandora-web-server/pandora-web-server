@@ -127,8 +127,8 @@
 //! client verbatim.
 //!
 //! In the unlikely scenario that you might need to send a header named `include` or `exclude`, you
-//! can put two entries with that name into the configuration file. The first entry will be
-//! interpreted as include/exclude rule, the second as a header.
+//! can add the header as `Include` or `Exclude` to the configuration file. Unlike the rule
+//! settings, header names are case-insensitive.
 //!
 //! ## A note on duplicate header values
 //!

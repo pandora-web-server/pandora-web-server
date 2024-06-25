@@ -18,11 +18,11 @@ use log::{debug, trace};
 use module_utils::merger::{Merger, StrictHostPathMatcher};
 use module_utils::pingora::{Error, ResponseHeader, SessionWrapper};
 use module_utils::router::Router;
-use module_utils::{RequestFilter, RequestFilterResult};
+use module_utils::{OneOrMany, RequestFilter, RequestFilterResult};
 
 use crate::configuration::{Header, HeadersConf, IntoHeaders, WithMatchRules};
 
-fn merge_rules<C>(rules: Vec<WithMatchRules<C>>) -> Merger<StrictHostPathMatcher, Vec<Header>>
+fn merge_rules<C>(rules: OneOrMany<WithMatchRules<C>>) -> Merger<StrictHostPathMatcher, Vec<Header>>
 where
     C: Default + Clone + Eq + IntoHeaders,
 {
