@@ -16,10 +16,9 @@
 //! #[serde(flatten)]
 
 use pingora::server::configuration::ServerConf;
-use serde::{
-    de::{Deserializer, Error},
-    Deserialize,
-};
+use serde::de::value::{MapAccessDeserializer, StrDeserializer, StringDeserializer};
+use serde::de::{Deserialize, DeserializeSeed, Deserializer, Error, SeqAccess, Visitor};
+use std::ops::{Deref, DerefMut};
 
 /// Used to efficiently deserialize merged configurations
 pub trait DeserializeMap<'de>: Deserialize<'de> {
@@ -62,11 +61,11 @@ macro_rules! impl_deserialize_map {
         ];
 
         #[derive(Debug)]
-        pub struct Visitor {
+        pub struct MapVisitorImpl {
             inner: $name,
         }
 
-        impl<'de> MapVisitor<'de> for Visitor {
+        impl<'de> MapVisitor<'de> for MapVisitorImpl {
             type Value = $name;
             fn accepts_field(field: &str) -> bool {
                 FIELDS.contains(&field)
@@ -99,10 +98,10 @@ macro_rules! impl_deserialize_map {
         }
 
         impl DeserializeMap<'_> for $name {
-            type Visitor = Visitor;
+            type Visitor = MapVisitorImpl;
 
             fn visitor(self) -> Self::Visitor {
-                Visitor {
+                MapVisitorImpl {
                     inner: self,
                 }
             }
@@ -129,6 +128,157 @@ impl_deserialize_map!(ServerConf {
     upstream_connect_offload_threadpools
     upstream_connect_offload_thread_per_pool
 });
+
+/// A wrapper around the `Vec` type allowing more comfortable deserialization.
+///
+/// If a list is encountered in the configuration file, it is deserialized into `Vec` directly.
+/// String or map values are deserialized as a `Vec` instance with one element instead.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OneOrMany<T> {
+    inner: Vec<T>,
+}
+
+impl<T> OneOrMany<T> {
+    /// Unwraps the inner `Vec` type
+    pub fn into_inner(self) -> Vec<T> {
+        self.inner
+    }
+}
+
+// Deriving `Default` would unnecessarily require `T` to implement `Default`
+impl<T> Default for OneOrMany<T> {
+    fn default() -> Self {
+        Self {
+            inner: Default::default(),
+        }
+    }
+}
+
+impl<T> Deref for OneOrMany<T> {
+    type Target = Vec<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl<T> DerefMut for OneOrMany<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+
+impl<T> From<Vec<T>> for OneOrMany<T> {
+    fn from(value: Vec<T>) -> Self {
+        Self { inner: value }
+    }
+}
+
+impl<'a, T> IntoIterator for &'a OneOrMany<T> {
+    type Item = <&'a Vec<T> as IntoIterator>::Item;
+    type IntoIter = <&'a Vec<T> as IntoIterator>::IntoIter;
+    fn into_iter(self) -> Self::IntoIter {
+        self.inner.iter()
+    }
+}
+
+impl<'a, T> IntoIterator for &'a mut OneOrMany<T> {
+    type Item = <&'a mut Vec<T> as IntoIterator>::Item;
+    type IntoIter = <&'a mut Vec<T> as IntoIterator>::IntoIter;
+    fn into_iter(self) -> Self::IntoIter {
+        self.inner.iter_mut()
+    }
+}
+
+impl<T> IntoIterator for OneOrMany<T> {
+    type Item = <Vec<T> as IntoIterator>::Item;
+    type IntoIter = <Vec<T> as IntoIterator>::IntoIter;
+    fn into_iter(self) -> Self::IntoIter {
+        self.inner.into_iter()
+    }
+}
+
+impl<'de, T: Deserialize<'de>> DeserializeSeed<'de> for OneOrMany<T> {
+    type Value = Self;
+
+    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct ListVisitor<T> {
+            seed: OneOrMany<T>,
+        }
+        impl<'de, T: Deserialize<'de>> Visitor<'de> for ListVisitor<T> {
+            type Value = OneOrMany<T>;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("T or Vec<T>")
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: SeqAccess<'de>,
+            {
+                let mut list = self.seed;
+                while let Some(entry) = seq.next_element()? {
+                    list.push(entry);
+                }
+                Ok(list)
+            }
+
+            fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                let mut list = self.seed;
+                list.push(T::deserialize(StringDeserializer::new(v))?);
+                Ok(list)
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                let mut list = self.seed;
+                list.push(T::deserialize(StrDeserializer::new(v))?);
+                Ok(list)
+            }
+
+            fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                let mut list = self.seed;
+                list.push(T::deserialize(StrDeserializer::new(v))?);
+                Ok(list)
+            }
+
+            fn visit_map<A>(self, map: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::MapAccess<'de>,
+            {
+                let mut list = self.seed;
+                list.push(T::deserialize(MapAccessDeserializer::new(map))?);
+                Ok(list)
+            }
+        }
+
+        deserializer.deserialize_any(ListVisitor { seed: self })
+    }
+}
+
+impl<'de, T> Deserialize<'de> for OneOrMany<T>
+where
+    T: Deserialize<'de>,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let seed = OneOrMany::default();
+        seed.deserialize(deserializer)
+    }
+}
 
 #[doc(hidden)]
 pub mod _private {
@@ -287,5 +437,112 @@ pub mod _private {
         {
             initial.deserialize(deserializer)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{DeserializeMap, FromYaml, OneOrMany};
+
+    #[test]
+    fn one_or_many_strings() {
+        #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
+        #[module_utils(crate = "crate")]
+        struct Conf {
+            value: OneOrMany<String>,
+        }
+
+        let conf = Conf::from_yaml(
+            r#"
+                value: hi
+            "#,
+        )
+        .unwrap();
+        assert_eq!(&*conf.value, &vec!["hi".to_owned()]);
+
+        let conf = conf
+            .merge_from_yaml(
+                r#"
+                    value: another
+                "#,
+            )
+            .unwrap();
+        assert_eq!(&*conf.value, &vec!["hi".to_owned(), "another".to_owned()]);
+
+        let conf = Conf::from_yaml(
+            r#"
+                value: [hi]
+            "#,
+        )
+        .unwrap();
+        assert_eq!(&*conf.value, &vec!["hi".to_owned()]);
+
+        let conf = conf
+            .merge_from_yaml(
+                r#"
+                    value: [another]
+                "#,
+            )
+            .unwrap();
+        assert_eq!(&*conf.value, &vec!["hi".to_owned(), "another".to_owned()]);
+    }
+
+    #[test]
+    fn one_or_many_maps() {
+        #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
+        #[module_utils(crate = "crate")]
+        struct Conf {
+            value: OneOrMany<InnerConf>,
+        }
+
+        #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
+        #[module_utils(crate = "crate")]
+        struct InnerConf {
+            value: usize,
+        }
+
+        let conf = Conf::from_yaml(
+            r#"
+                value:
+                    value: 1
+            "#,
+        )
+        .unwrap();
+        assert_eq!(&*conf.value, &vec![InnerConf { value: 1 }]);
+
+        let conf = conf
+            .merge_from_yaml(
+                r#"
+                    value:
+                        value: 2
+                "#,
+            )
+            .unwrap();
+        assert_eq!(
+            &*conf.value,
+            &vec![InnerConf { value: 1 }, InnerConf { value: 2 }]
+        );
+
+        let conf = Conf::from_yaml(
+            r#"
+                value:
+                - value: 1
+            "#,
+        )
+        .unwrap();
+        assert_eq!(&*conf.value, &vec![InnerConf { value: 1 }]);
+
+        let conf = conf
+            .merge_from_yaml(
+                r#"
+                    value:
+                    - value: 2
+                "#,
+            )
+            .unwrap();
+        assert_eq!(
+            &*conf.value,
+            &vec![InnerConf { value: 1 }, InnerConf { value: 2 }]
+        );
     }
 }
