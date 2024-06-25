@@ -16,7 +16,7 @@ use async_trait::async_trait;
 use module_utils::pingora::{
     http_proxy_service, Error, ErrorType, ProxyHttp, Server, ServerConf, ServerOpt,
 };
-use module_utils::DeserializeMap;
+use module_utils::{DeserializeMap, OneOrMany};
 use pingora::listeners::{TcpSocketOptions, TlsAccept, TlsSettings};
 use pingora::services::Service;
 use pingora::tls::ext::ssl_add_chain_cert;
@@ -261,7 +261,7 @@ impl CertKeyConf {
 #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
 pub struct TlsRedirectorConf {
     /// List of address/port combinations to listen on, e.g. "127.0.0.1:8080"
-    pub listen: Vec<ListenAddr>,
+    pub listen: OneOrMany<ListenAddr>,
 
     /// Default redirect target
     ///
@@ -358,7 +358,7 @@ impl TlsAccept for TlsAcceptCallbacks {
 #[derive(Debug, Default, PartialEq, Eq, DeserializeMap)]
 pub struct StartupConf {
     /// List of address/port combinations to listen on, e.g. "127.0.0.1:8080"
-    pub listen: Vec<ListenAddr>,
+    pub listen: OneOrMany<ListenAddr>,
 
     /// TLS configuration for the server
     pub tls: TlsConf,
@@ -377,7 +377,7 @@ impl StartupConf {
     {
         let opt = opt.unwrap_or_default();
 
-        let mut listen = opt.listen.unwrap_or(self.listen);
+        let mut listen = opt.listen.map(|l| l.into()).unwrap_or(self.listen);
         if listen.is_empty() {
             // Make certain we have a listening address
             listen.push("127.0.0.1:8080".into());

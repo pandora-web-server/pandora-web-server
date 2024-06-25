@@ -89,11 +89,11 @@ pub fn merge_opt(_args: TokenStream, input: TokenStream) -> TokenStream {
 ///
 /// let conf = Conf::from_yaml(r#"
 ///     roll_over: true
-///     listen: [127.0.0.1:8080]
+///     listen: 127.0.0.1:8080
 ///     root: .
 /// "#).unwrap();
 /// assert!(conf.app.roll_over);
-/// assert_eq!(conf.startup.listen, vec!["127.0.0.1:8080".into()]);
+/// assert_eq!(conf.startup.listen, vec!["127.0.0.1:8080".into()].into());
 /// assert_eq!(conf.static_files.root, Some(PathBuf::from(".")));
 /// ```
 ///
