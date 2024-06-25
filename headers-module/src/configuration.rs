@@ -195,7 +195,7 @@ macro_rules! impl_conf {
             $into = $from;
         }
     };
-    (merge($into:expr, $from:expr, Vec<$type:ty>)) => {
+    (merge($into:expr, $from:expr, OneOrMany<$type:ty>)) => {
         $into.extend_from_slice(&$from);
     };
 
@@ -237,7 +237,7 @@ macro_rules! impl_conf {
             $list.push(format!(concat!($header_name, " {}"), $value).into());
         }
     };
-    (push($list:expr, $header_name:literal, $value:expr, csp Vec<String>)) => {
+    (push($list:expr, $header_name:literal, $value:expr, csp OneOrMany<String>)) => {
         if !$value.is_empty() {
             $list.push(format!(concat!($header_name, " {}"), $value.join(" ")).into());
         }
@@ -272,31 +272,31 @@ impl_conf! {cache_control:
 impl_conf! {csp:
     /// Configuration for the Content-Security-Policy header
     pub struct ContentSecurityPolicyConf {
-        connect_src("connect-src", Vec<String>),
-        default_src("default-src", Vec<String>),
-        fenced_frame_src("fenced-frame-src", Vec<String>),
-        font_src("font-src", Vec<String>),
-        frame_src("frame-src", Vec<String>),
-        img_src("img-src", Vec<String>),
-        manifest_src("manifest-src", Vec<String>),
-        media_src("media-src", Vec<String>),
-        object_src("object-src", Vec<String>),
-        prefetch_src("prefetch-src", Vec<String>),
-        script_src("script-src", Vec<String>),
-        script_src_elem("script-src-elem", Vec<String>),
-        script_src_attr("script-src-attr", Vec<String>),
-        style_src("style-src", Vec<String>),
-        style_src_elem("style-src-elem", Vec<String>),
-        style_src_attr("style-src-attr", Vec<String>),
-        worker_src("worker-src", Vec<String>),
-        base_uri("base-uri", Vec<String>),
-        sandbox("sandbox", Vec<String>),
-        form_action("form-action", Vec<String>),
-        frame_ancestors("frame-ancestors", Vec<String>),
+        connect_src("connect-src", OneOrMany<String>),
+        default_src("default-src", OneOrMany<String>),
+        fenced_frame_src("fenced-frame-src", OneOrMany<String>),
+        font_src("font-src", OneOrMany<String>),
+        frame_src("frame-src", OneOrMany<String>),
+        img_src("img-src", OneOrMany<String>),
+        manifest_src("manifest-src", OneOrMany<String>),
+        media_src("media-src", OneOrMany<String>),
+        object_src("object-src", OneOrMany<String>),
+        prefetch_src("prefetch-src", OneOrMany<String>),
+        script_src("script-src", OneOrMany<String>),
+        script_src_elem("script-src-elem", OneOrMany<String>),
+        script_src_attr("script-src-attr", OneOrMany<String>),
+        style_src("style-src", OneOrMany<String>),
+        style_src_elem("style-src-elem", OneOrMany<String>),
+        style_src_attr("style-src-attr", OneOrMany<String>),
+        worker_src("worker-src", OneOrMany<String>),
+        base_uri("base-uri", OneOrMany<String>),
+        sandbox("sandbox", OneOrMany<String>),
+        form_action("form-action", OneOrMany<String>),
+        frame_ancestors("frame-ancestors", OneOrMany<String>),
         report_uri("report-uri", String),
         report_to("report-to", String),
-        require_trusted_types_for("require-trusted-types-for", Vec<String>),
-        trusted_types("trusted-types", Vec<String>),
+        require_trusted_types_for("require-trusted-types-for", OneOrMany<String>),
+        trusted_types("trusted-types", OneOrMany<String>),
         upgrade_insecure_requests("upgrade-insecure-requests", bool),
     }
 }

@@ -29,10 +29,13 @@ response_headers:
         include: example.com/short_lived/*
     content_security_policy:
     -
-        script-src: ["'self'"]
-        frame-src: ["'self'", https://example.com, https://example.info]
+        script-src: "'self'"
+        frame-src:
+        - "'self'"
+        - https://example.com
+        - https://example.info
     -
-        script-src: [https://cdn.example.com]
+        script-src: https://cdn.example.com
         include: example.com/app/*
         exclude: example.com/app/admin/*
     custom:
