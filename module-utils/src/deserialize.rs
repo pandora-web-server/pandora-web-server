@@ -18,6 +18,7 @@
 use pingora::server::configuration::ServerConf;
 use serde::de::value::{MapAccessDeserializer, StrDeserializer, StringDeserializer};
 use serde::de::{Deserialize, DeserializeSeed, Deserializer, Error, SeqAccess, Visitor};
+use std::fmt::Debug;
 use std::ops::{Deref, DerefMut};
 
 /// Used to efficiently deserialize merged configurations
@@ -133,7 +134,7 @@ impl_deserialize_map!(ServerConf {
 ///
 /// If a list is encountered in the configuration file, it is deserialized into `Vec` directly.
 /// String or map values are deserialized as a `Vec` instance with one element instead.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct OneOrMany<T> {
     inner: Vec<T>,
 }
@@ -142,6 +143,15 @@ impl<T> OneOrMany<T> {
     /// Unwraps the inner `Vec` type
     pub fn into_inner(self) -> Vec<T> {
         self.inner
+    }
+}
+
+impl<T> Debug for OneOrMany<T>
+where
+    T: Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.inner.fmt(f)
     }
 }
 
