@@ -152,7 +152,7 @@
 //! unsupported.
 
 use log::error;
-use module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
+use pandora_module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
 use startup_module::{DefaultApp, StartupConf, StartupOpt};
 use structopt::StructOpt;
 

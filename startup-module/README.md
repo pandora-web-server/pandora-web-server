@@ -132,8 +132,8 @@ The incoming server name in the `redirect_by_name` setting does not depend on th
 
 ```rust
 use async_trait::async_trait;
-use module_utils::pingora::{Error, HttpPeer, ProxyHttp, Session};
-use module_utils::FromYaml;
+use pandora_module_utils::pingora::{Error, HttpPeer, ProxyHttp, Session};
+use pandora_module_utils::FromYaml;
 use startup_module::{StartupConf, StartupOpt};
 use structopt::StructOpt;
 

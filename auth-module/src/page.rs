@@ -18,9 +18,9 @@ use http::{header, Method, StatusCode};
 use jwt::{SignWithKey, VerifyWithKey};
 use log::{error, trace, warn};
 use maud::{html, DOCTYPE};
-use module_utils::pingora::{Error, ErrorType, ResponseHeader, SessionWrapper};
-use module_utils::standard_response::{error_response, redirect_response_with_cookie};
-use module_utils::RequestFilterResult;
+use pandora_module_utils::pingora::{Error, ErrorType, ResponseHeader, SessionWrapper};
+use pandora_module_utils::standard_response::{error_response, redirect_response_with_cookie};
+use pandora_module_utils::RequestFilterResult;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use std::time::{Duration, SystemTime};
@@ -285,8 +285,8 @@ pub(crate) async fn page_auth(
 mod tests {
     use super::*;
 
-    use module_utils::pingora::{RequestHeader, TestSession};
-    use module_utils::{FromYaml, RequestFilter};
+    use pandora_module_utils::pingora::{RequestHeader, TestSession};
+    use pandora_module_utils::{FromYaml, RequestFilter};
     use test_log::test;
 
     use crate::AuthHandler;

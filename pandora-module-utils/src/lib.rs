@@ -32,7 +32,7 @@ use std::io::BufReader;
 use std::path::Path;
 
 pub use deserialize::{DeserializeMap, MapVisitor, OneOrMany, _private};
-pub use module_utils_macros::{merge_conf, merge_opt, DeserializeMap, RequestFilter};
+pub use pandora_module_utils_macros::{merge_conf, merge_opt, DeserializeMap, RequestFilter};
 
 // Required for macros
 #[doc(hidden)]

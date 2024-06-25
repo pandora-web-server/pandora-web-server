@@ -15,7 +15,7 @@
 //! Byte range processing (`Range` HTTP header)
 
 use http::header;
-use module_utils::pingora::SessionWrapper;
+use pandora_module_utils::pingora::SessionWrapper;
 use std::str::FromStr;
 
 use crate::metadata::Metadata;
@@ -97,7 +97,7 @@ mod tests {
     use super::*;
 
     use mime_guess::MimeGuess;
-    use module_utils::pingora::{RequestHeader, TestSession};
+    use pandora_module_utils::pingora::{RequestHeader, TestSession};
     use test_log::test;
 
     fn metadata() -> Metadata {

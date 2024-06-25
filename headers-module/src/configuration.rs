@@ -21,9 +21,9 @@ use http::{
     header,
     header::{HeaderName, HeaderValue},
 };
-use module_utils::merger::{HostPathMatcher, PathMatch, PathMatchResult};
-use module_utils::router::{Path, EMPTY_PATH};
-use module_utils::{DeserializeMap, OneOrMany};
+use pandora_module_utils::merger::{HostPathMatcher, PathMatch, PathMatchResult};
+use pandora_module_utils::router::{Path, EMPTY_PATH};
+use pandora_module_utils::{DeserializeMap, OneOrMany};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -132,11 +132,11 @@ pub(crate) trait IntoHeaders {
 #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
 pub struct WithMatchRules<C: Default + Clone + PartialEq + Eq> {
     /// The match rules
-    #[module_utils(flatten)]
+    #[pandora(flatten)]
     pub match_rules: MatchRules,
 
     /// The actual configuration
-    #[module_utils(flatten)]
+    #[pandora(flatten)]
     pub conf: C,
 }
 
@@ -154,7 +154,7 @@ macro_rules! impl_conf {
         $vis struct $struct_name {
             $(
                 #[doc = impl_conf!(doc($header_name, $variant $($type)+))]
-                #[module_utils(rename = $header_name)]
+                #[pandora(rename = $header_name)]
                 pub $name: $($type)+,
             )*
         }

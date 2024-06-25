@@ -24,7 +24,7 @@ http.workspace = true
 httpdate.workspace = true
 log.workspace = true
 mime_guess = { version = "2.0.4", default-features = false }
-module-utils.workspace = true
+pandora-module-utils.workspace = true
 percent-encoding.workspace = true
 serde.workspace = true
 structopt.workspace = true

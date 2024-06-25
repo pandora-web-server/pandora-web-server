@@ -15,10 +15,10 @@
 use async_trait::async_trait;
 use http::{HeaderName, HeaderValue};
 use log::{debug, trace};
-use module_utils::merger::{Merger, StrictHostPathMatcher};
-use module_utils::pingora::{Error, ResponseHeader, SessionWrapper};
-use module_utils::router::Router;
-use module_utils::{OneOrMany, RequestFilter, RequestFilterResult};
+use pandora_module_utils::merger::{Merger, StrictHostPathMatcher};
+use pandora_module_utils::pingora::{Error, ResponseHeader, SessionWrapper};
+use pandora_module_utils::router::Router;
+use pandora_module_utils::{OneOrMany, RequestFilter, RequestFilterResult};
 
 use crate::configuration::{Header, HeadersConf, IntoHeaders, WithMatchRules};
 
@@ -153,8 +153,8 @@ mod tests {
     use super::*;
 
     use http::header;
-    use module_utils::pingora::{RequestHeader, TestSession};
-    use module_utils::{DeserializeMap, FromYaml};
+    use pandora_module_utils::pingora::{RequestHeader, TestSession};
+    use pandora_module_utils::{DeserializeMap, FromYaml};
     use std::ops::{Deref, DerefMut};
     use test_log::test;
 

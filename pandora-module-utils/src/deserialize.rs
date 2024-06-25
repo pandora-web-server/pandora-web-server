@@ -457,7 +457,7 @@ mod tests {
     #[test]
     fn one_or_many_strings() {
         #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
-        #[module_utils(crate = "crate")]
+        #[pandora(crate = "crate")]
         struct Conf {
             value: OneOrMany<String>,
         }
@@ -500,13 +500,13 @@ mod tests {
     #[test]
     fn one_or_many_maps() {
         #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
-        #[module_utils(crate = "crate")]
+        #[pandora(crate = "crate")]
         struct Conf {
             value: OneOrMany<InnerConf>,
         }
 
         #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
-        #[module_utils(crate = "crate")]
+        #[pandora(crate = "crate")]
         struct InnerConf {
             value: usize,
         }

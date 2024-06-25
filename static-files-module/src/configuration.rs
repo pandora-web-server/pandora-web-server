@@ -14,7 +14,7 @@
 
 //! Data structures required for `StaticFilesHandler` configuration
 
-use module_utils::{DeserializeMap, OneOrMany};
+use pandora_module_utils::{DeserializeMap, OneOrMany};
 use std::path::PathBuf;
 use structopt::StructOpt;
 

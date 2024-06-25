@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! # Macros for module-utils crate
+//! # Macros for pandora-module-utils crate
 //!
-//! You normally shouldn’t use this crate directly but the `module-utils` crate instead.
+//! You normally shouldn’t use this crate directly but the `pandora-module-utils` crate instead.
 
 mod derive_deserialize_map;
 mod derive_request_filter;
@@ -31,7 +31,7 @@ use proc_macro::TokenStream;
 /// All field types are required to implement `structopt::StructOpt` and `Debug`.
 ///
 /// ```rust
-/// use module_utils::merge_opt;
+/// use pandora_module_utils::merge_opt;
 /// use startup_module::StartupOpt;
 /// use static_files_module::StaticFilesOpt;
 /// use structopt::StructOpt;
@@ -69,7 +69,7 @@ pub fn merge_opt(_args: TokenStream, input: TokenStream) -> TokenStream {
 /// implement `Debug`, `Default` and `DeserializeMap`.
 ///
 /// ```rust
-/// use module_utils::{merge_conf, DeserializeMap, FromYaml};
+/// use pandora_module_utils::{merge_conf, DeserializeMap, FromYaml};
 /// use startup_module::StartupConf;
 /// use static_files_module::StaticFilesConf;
 /// use std::path::PathBuf;
@@ -101,7 +101,7 @@ pub fn merge_opt(_args: TokenStream, input: TokenStream) -> TokenStream {
 ///
 /// ```rust
 /// use compression_module::CompressionConf;
-/// use module_utils::{merge_conf, FromYaml};
+/// use pandora_module_utils::{merge_conf, FromYaml};
 /// use static_files_module::StaticFilesConf;
 ///
 /// #[merge_conf]
@@ -133,7 +133,7 @@ pub fn merge_conf(_attr: TokenStream, input: TokenStream) -> TokenStream {
 /// handler in this struct.
 ///
 /// ```rust
-/// use module_utils::{FromYaml, RequestFilter};
+/// use pandora_module_utils::{FromYaml, RequestFilter};
 /// use compression_module::CompressionHandler;
 /// use static_files_module::StaticFilesHandler;
 ///
@@ -156,7 +156,7 @@ pub fn merge_conf(_attr: TokenStream, input: TokenStream) -> TokenStream {
 /// configuration will cause an error during deserialization:
 ///
 /// ```rust
-/// use module_utils::{FromYaml, RequestFilter};
+/// use pandora_module_utils::{FromYaml, RequestFilter};
 /// use compression_module::CompressionHandler;
 /// use static_files_module::StaticFilesHandler;
 ///
@@ -194,30 +194,30 @@ pub fn derive_request_filter(input: TokenStream) -> TokenStream {
 /// following field attributes are supported, striving for compatibility with the corresponding
 /// [Serde field attributes](https://serde.rs/field-attrs.html):
 ///
-/// * `#[module_utils(rename = "name")]` or `#[module_utils(rename(deserialize = "name"))]`
+/// * `#[pandora(rename = "name")]` or `#[pandora(rename(deserialize = "name"))]`
 ///
 ///   Deserialize this field with the given name instead of its Rust name.
-/// * `#[module_utils(alias = "name")]`
+/// * `#[pandora(alias = "name")]`
 ///
 ///   Deserialize this field from the given name or from its Rust name. May be repeated to specify
 ///   multiple possible names for the same field.
-/// * `#[module_utils(flatten)]`
+/// * `#[pandora(flatten)]`
 ///
 ///   Flatten the contents of this field into the container it is defined in. This removes one
 ///   level of structure between the configuration file and the Rust data structure representation.
 ///
 ///   Unlike regular fields, flattened fields have to implement `DeserializeMap` trait.
-/// * `#[module_utils(skip)]` or `#[serde(skip_deserializing)]`
+/// * `#[pandora(skip)]` or `#[serde(skip_deserializing)]`
 ///
 ///   Skip this field when deserializing, always use the default value instead.
-/// * `#[module_utils(deserialize_with = "path")]`
+/// * `#[pandora(deserialize_with = "path")]`
 ///
 ///   Deserialize this field using a function that is different from its implementation of
 ///   `serde::Deserialize`. The given function must be callable as
 ///   `fn<'de, D>(D) -> Result<T, D::Error> where D: serde::Deserializer<'de>`, although it may
 ///   also be generic over `T`. Fields used with `deserialize_with` are not required to implement
 ///   `serde::Deserialize`.
-/// * `#[module_utils(deserialize_with_seed = "path")]`
+/// * `#[pandora(deserialize_with_seed = "path")]`
 ///
 ///   This is similar to `deserialize_with` but meant for fields that support merging of values.
 ///   The function receives an additional parameter before the deserializer, the previous value of
@@ -230,18 +230,18 @@ pub fn derive_request_filter(input: TokenStream) -> TokenStream {
 /// In addition, the following analogs of [Serde’s container
 /// attributes](https://serde.rs/container-attrs.html) are currently supported:
 ///
-/// * `#[module_utils(rename_all = "convention")]` or
-///   `#[module_utils(rename_all(deserialize = "convention"))]`
+/// * `#[pandora(rename_all = "convention")]` or
+///   `#[pandora(rename_all(deserialize = "convention"))]`
 ///
 ///   Rename all the fields according to the given case convention. The possible values are
 ///   `"lowercase"`, `"UPPERCASE"`, `"PascalCase"`, `"camelCase"`, `"snake_case"`,
 ///   `"SCREAMING_SNAKE_CASE"`, `"kebab-case"`, `"SCREAMING-KEBAB-CASE"`. The field’s individual
 ///   `rename` attribute takes precedence.
-/// * `#[module_utils(crate = "path")]`
+/// * `#[pandora(crate = "path")]`
 ///
-///   Specify a path to the `module_utils` crate instance to use when referring to APIs from
-///   generated code. This is normally only applicable when `module_utils` isn’t accessible under
-///   its usual name but only as a re-exported name from a different crate.
+///   Specify a path to the `pandora_module_utils` crate instance to use when referring to APIs
+///   from generated code. This is normally only applicable when `pandora_module_utils` isn’t
+///   accessible under its usual name but only as a re-exported name from a different crate.
 ///
 /// Unknown fields will cause a deserialization error, missing fields will be left at their initial
 /// value. This is similar to the behavior of
@@ -251,7 +251,7 @@ pub fn derive_request_filter(input: TokenStream) -> TokenStream {
 /// Example:
 ///
 /// ```rust
-/// use module_utils::{DeserializeMap, FromYaml, merge_conf};
+/// use pandora_module_utils::{DeserializeMap, FromYaml, merge_conf};
 ///
 /// #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
 /// struct Conf1 {
@@ -260,9 +260,9 @@ pub fn derive_request_filter(input: TokenStream) -> TokenStream {
 ///
 /// #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
 /// struct Conf2 {
-///     #[module_utils(rename = "Value2")]
+///     #[pandora(rename = "Value2")]
 ///     value2: String,
-///     #[module_utils(skip)]
+///     #[pandora(skip)]
 ///     value3: Option<bool>,
 /// }
 ///
@@ -281,7 +281,7 @@ pub fn derive_request_filter(input: TokenStream) -> TokenStream {
 /// assert_eq!(conf.conf2.value2, String::from("Hi!"));
 /// assert!(conf.conf2.value3.is_none());
 /// ```
-#[proc_macro_derive(DeserializeMap, attributes(module_utils))]
+#[proc_macro_derive(DeserializeMap, attributes(pandora))]
 pub fn derive_deserialize_map(input: TokenStream) -> TokenStream {
     derive_deserialize_map::derive_deserialize_map(input)
         .unwrap_or_else(|err| err.into_compile_error().into())

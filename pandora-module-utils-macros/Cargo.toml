@@ -1,5 +1,5 @@
 [package]
-name = "module-utils-macros"
+name = "pandora-module-utils-macros"
 version = "0.2.0"
 authors = ["Wladimir Palant"]
 repository = "https://github.com/palant/pandora-web-server"
@@ -9,11 +9,11 @@ license = "Apache-2.0"
 edition = "2021"
 rust-version.workspace = true
 description = """
-Macro definitions for module-utils crate.
+Macro definitions for pandora-module-utils crate.
 """
 
 [lib]
-name = "module_utils_macros"
+name = "pandora_module_utils_macros"
 path = "src/lib.rs"
 proc-macro = true
 
@@ -27,7 +27,7 @@ syn = { version = "2.0.62", features = ["extra-traits", "full", "visit"] }
 async-trait.workspace = true
 compression-module.workspace = true
 env_logger.workspace = true
-module-utils.workspace = true
+pandora-module-utils.workspace = true
 startup-module.workspace = true
 static-files-module.workspace = true
 structopt.workspace = true

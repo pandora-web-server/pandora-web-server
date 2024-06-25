@@ -14,10 +14,10 @@
 
 use async_trait::async_trait;
 use http::{header, Method, StatusCode};
-use module_utils::pingora::{
+use pandora_module_utils::pingora::{
     Error, ErrorType, HttpPeer, ProxyHttp, ResponseHeader, ServerConf, Session,
 };
-use module_utils::standard_response::response_text;
+use pandora_module_utils::standard_response::response_text;
 use pingora::{proxy::http_proxy_service, services::Service};
 use std::collections::HashMap;
 use std::sync::Arc;

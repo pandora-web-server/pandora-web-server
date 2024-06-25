@@ -137,7 +137,7 @@ impl Deref for Path {
 /// [`RouterBuilder::build`] to compile an efficient routing data structure:
 ///
 /// ```rust
-/// use module_utils::router::Router;
+/// use pandora_module_utils::router::Router;
 ///
 /// let mut builder = Router::builder();
 /// builder.push("localhost", "/", "Localhost root", Some("Within localhost"));

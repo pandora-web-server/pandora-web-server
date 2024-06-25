@@ -32,7 +32,7 @@ fn generate_request_filter_impl(
     if let Some(fields) = get_fields_mut(&mut conf) {
         for field in fields.named.iter_mut() {
             let ty = &field.ty;
-            field.ty = syn::parse2(quote! {<#ty as ::module_utils::RequestFilter>::Conf})?;
+            field.ty = syn::parse2(quote! {<#ty as ::pandora_module_utils::RequestFilter>::Conf})?;
         }
     }
     let conf_name = &conf.ident;
@@ -43,7 +43,7 @@ fn generate_request_filter_impl(
     if let Some(fields) = get_fields_mut(&mut ctx) {
         for field in fields.named.iter_mut() {
             let ty = &field.ty;
-            field.ty = syn::parse2(quote! {<#ty as ::module_utils::RequestFilter>::CTX})?;
+            field.ty = syn::parse2(quote! {<#ty as ::pandora_module_utils::RequestFilter>::CTX})?;
         }
     }
     let ctx_name = &ctx.ident;
@@ -62,7 +62,7 @@ fn generate_request_filter_impl(
 
     Ok(quote! {
         const _: () = {
-            #[::module_utils::merge_conf]
+            #[::pandora_module_utils::merge_conf]
             #conf
 
             #ctx
@@ -70,7 +70,7 @@ fn generate_request_filter_impl(
             impl<#generics> ::std::convert::TryFrom<#conf_name<#generics_short>>
             for #struct_name #where_clause
             {
-                type Error = ::std::boxed::Box<::module_utils::pingora::Error>;
+                type Error = ::std::boxed::Box<::pandora_module_utils::pingora::Error>;
 
                 fn try_from(conf: #conf_name<#generics_short>)
                     -> ::std::result::Result<Self, Self::Error>
@@ -84,8 +84,8 @@ fn generate_request_filter_impl(
                 }
             }
 
-            #[::module_utils::async_trait::async_trait]
-            impl<#generics> ::module_utils::RequestFilter for #struct_name
+            #[::pandora_module_utils::async_trait::async_trait]
+            impl<#generics> ::pandora_module_utils::RequestFilter for #struct_name
             #where_clause
             {
                 type Conf = #conf_name<#generics_short>;
@@ -102,23 +102,27 @@ fn generate_request_filter_impl(
 
                 async fn request_filter(
                     &self,
-                    _session: &mut impl ::module_utils::pingora::SessionWrapper,
+                    _session: &mut impl ::pandora_module_utils::pingora::SessionWrapper,
                     _ctx: &mut Self::CTX,
-                ) -> ::std::result::Result<::module_utils::RequestFilterResult, ::std::boxed::Box<::module_utils::pingora::Error>> {
+                ) -> ::std::result::Result<
+                    ::pandora_module_utils::RequestFilterResult,
+                    ::std::boxed::Box<::pandora_module_utils::pingora::Error>
+                >
+                {
                     #(
                         let result = self.#field_name.request_filter(_session, &mut _ctx.#field_name).await?;
-                        if result != ::module_utils::RequestFilterResult::Unhandled {
+                        if result != ::pandora_module_utils::RequestFilterResult::Unhandled {
                             return ::std::result::Result::Ok(result);
                         }
                     )*
-                    ::std::result::Result::Ok(module_utils::RequestFilterResult::Unhandled)
+                    ::std::result::Result::Ok(pandora_module_utils::RequestFilterResult::Unhandled)
                 }
 
                 fn request_filter_done(
                     &self,
-                    _session: &mut impl ::module_utils::pingora::SessionWrapper,
+                    _session: &mut impl ::pandora_module_utils::pingora::SessionWrapper,
                     _ctx: &mut Self::CTX,
-                    _result: ::module_utils::RequestFilterResult,
+                    _result: ::pandora_module_utils::RequestFilterResult,
                 ) {
                     #(
                         self.#field_name.request_filter_done(_session, &mut _ctx.#field_name, _result);
@@ -127,11 +131,11 @@ fn generate_request_filter_impl(
 
                 async fn upstream_peer(
                     &self,
-                    _session: &mut impl ::module_utils::pingora::SessionWrapper,
+                    _session: &mut impl ::pandora_module_utils::pingora::SessionWrapper,
                     _ctx: &mut Self::CTX,
                 ) -> ::std::result::Result<
-                    ::std::option::Option<::std::boxed::Box<::module_utils::pingora::HttpPeer>>,
-                    ::std::boxed::Box<::module_utils::pingora::Error>
+                    ::std::option::Option<::std::boxed::Box<::pandora_module_utils::pingora::HttpPeer>>,
+                    ::std::boxed::Box<::pandora_module_utils::pingora::Error>
                 >
                 {
                     #(
@@ -146,8 +150,8 @@ fn generate_request_filter_impl(
 
                 fn response_filter(
                     &self,
-                    _session: &mut impl ::module_utils::pingora::SessionWrapper,
-                    _response: &mut ::module_utils::pingora::ResponseHeader,
+                    _session: &mut impl ::pandora_module_utils::pingora::SessionWrapper,
+                    _response: &mut ::pandora_module_utils::pingora::ResponseHeader,
                     mut _ctx: ::std::option::Option<&mut Self::CTX>,
                 ) {
                     #(
@@ -157,8 +161,8 @@ fn generate_request_filter_impl(
 
                 async fn logging(
                     &self,
-                    _session: &mut impl ::module_utils::pingora::SessionWrapper,
-                    _e: ::std::option::Option<&::module_utils::pingora::Error>,
+                    _session: &mut impl ::pandora_module_utils::pingora::SessionWrapper,
+                    _e: ::std::option::Option<&::pandora_module_utils::pingora::Error>,
                     _ctx: &mut Self::CTX,
                 ) {
                     #(

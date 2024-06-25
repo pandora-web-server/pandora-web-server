@@ -4,8 +4,8 @@ This repository contains various crates related to the Pandora Web Server. You p
 have a look at the [web server documentation](../../tree/main/pandora-web-server). Other than that,
 there are:
 
-* [Module utils](../../tree/main/module-utils): Various useful helpers used by the server and its
-  modules
+* [Pandora Module Utils](../../tree/main/pandora-module-utils): Various useful helpers used by the
+  server and its modules
 * [Auth module](../../tree/main/auth-module): Authentication support
 * [Common Log module](../../tree/main/common-log-module): Creation of access logs in the [Common
   Log Format](https://en.wikipedia.org/wiki/Common_Log_Format)

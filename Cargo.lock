@@ -161,8 +161,8 @@ dependencies = [
  "jwt",
  "log",
  "maud",
- "module-utils",
  "once_cell",
+ "pandora-module-utils",
  "pingora-limits",
  "serde",
  "serde_urlencoded",
@@ -379,8 +379,8 @@ dependencies = [
  "env_logger",
  "http 1.1.0",
  "log",
- "module-utils",
  "once_cell",
+ "pandora-module-utils",
  "serde",
  "startup-module",
  "static-files-module",
@@ -395,7 +395,7 @@ dependencies = [
  "async-trait",
  "env_logger",
  "log",
- "module-utils",
+ "pandora-module-utils",
  "startup-module",
  "static-files-module",
  "structopt",
@@ -856,7 +856,7 @@ dependencies = [
  "env_logger",
  "http 1.1.0",
  "log",
- "module-utils",
+ "pandora-module-utils",
  "serde",
  "startup-module",
  "structopt",
@@ -1199,7 +1199,7 @@ dependencies = [
  "async-trait",
  "env_logger",
  "log",
- "module-utils",
+ "pandora-module-utils",
  "startup-module",
  "static-files-module",
  "structopt",
@@ -1391,43 +1391,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "module-utils"
-version = "0.2.0"
-dependencies = [
- "async-trait",
- "bytes",
- "enumset",
- "glob",
- "http 1.1.0",
- "log",
- "maud",
- "module-utils-macros",
- "pingora",
- "serde",
- "serde_yaml",
- "structopt",
-]
-
-[[package]]
-name = "module-utils-macros"
-version = "0.2.0"
-dependencies = [
- "async-trait",
- "compression-module",
- "env_logger",
- "module-utils",
- "proc-macro2",
- "quote",
- "serde_derive_internals",
- "startup-module",
- "static-files-module",
- "structopt",
- "syn 2.0.66",
- "test-log",
- "tokio",
-]
-
-[[package]]
 name = "nix"
 version = "0.24.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1534,6 +1497,43 @@ dependencies = [
 ]
 
 [[package]]
+name = "pandora-module-utils"
+version = "0.2.0"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "enumset",
+ "glob",
+ "http 1.1.0",
+ "log",
+ "maud",
+ "pandora-module-utils-macros",
+ "pingora",
+ "serde",
+ "serde_yaml",
+ "structopt",
+]
+
+[[package]]
+name = "pandora-module-utils-macros"
+version = "0.2.0"
+dependencies = [
+ "async-trait",
+ "compression-module",
+ "env_logger",
+ "pandora-module-utils",
+ "proc-macro2",
+ "quote",
+ "serde_derive_internals",
+ "startup-module",
+ "static-files-module",
+ "structopt",
+ "syn 2.0.66",
+ "test-log",
+ "tokio",
+]
+
+[[package]]
 name = "pandora-web-server"
 version = "0.2.0"
 dependencies = [
@@ -1544,7 +1544,7 @@ dependencies = [
  "headers-module",
  "ip-anonymization-module",
  "log",
- "module-utils",
+ "pandora-module-utils",
  "rewrite-module",
  "startup-module",
  "static-files-module",
@@ -2055,7 +2055,7 @@ dependencies = [
  "env_logger",
  "http 1.1.0",
  "log",
- "module-utils",
+ "pandora-module-utils",
  "regex",
  "serde",
  "startup-module",
@@ -2433,7 +2433,7 @@ version = "0.2.0"
 dependencies = [
  "async-trait",
  "http 1.1.0",
- "module-utils",
+ "pandora-module-utils",
  "pingora",
  "serde",
  "structopt",
@@ -2452,7 +2452,7 @@ dependencies = [
  "httpdate",
  "log",
  "mime_guess",
- "module-utils",
+ "pandora-module-utils",
  "percent-encoding",
  "serde",
  "startup-module",
@@ -2877,7 +2877,7 @@ dependencies = [
  "env_logger",
  "http 1.1.0",
  "log",
- "module-utils",
+ "pandora-module-utils",
  "serde",
  "startup-module",
  "structopt",
@@ -2945,7 +2945,7 @@ dependencies = [
  "env_logger",
  "http 1.1.0",
  "log",
- "module-utils",
+ "pandora-module-utils",
  "startup-module",
  "static-files-module",
  "structopt",

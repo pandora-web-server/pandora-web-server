@@ -2,8 +2,8 @@
 resolver = "2"
 members = [
   "pandora-web-server",
-  "module-utils",
-  "module-utils-macros",
+  "pandora-module-utils",
+  "pandora-module-utils-macros",
   "auth-module",
   "common-log-module",
   "compression-module",
@@ -17,8 +17,8 @@ members = [
 ]
 default-members = [
   "pandora-web-server",
-  "module-utils",
-  "module-utils-macros",
+  "pandora-module-utils",
+  "pandora-module-utils-macros",
   "auth-module",
   "common-log-module",
   "compression-module",
@@ -48,8 +48,8 @@ httpdate = "1"
 ip-anonymization-module = { path = "ip-anonymization-module", version = "0.2.0" }
 log = "0.4"
 maud = "0.26.0"
-module-utils = { path = "module-utils", version = "0.2.0" }
-module-utils-macros = { path = "module-utils-macros", version = "0.2.0" }
+pandora-module-utils = { path = "pandora-module-utils", version = "0.2.0" }
+pandora-module-utils-macros = { path = "pandora-module-utils-macros", version = "0.2.0" }
 percent-encoding = "2.1"
 pingora = "0.2.0"
 pingora-limits = "0.2.0"

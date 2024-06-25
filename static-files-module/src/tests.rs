@@ -18,9 +18,9 @@ use crate::metadata::Metadata;
 
 use const_format::{concatcp, str_repeat};
 use http::status::StatusCode;
-use module_utils::pingora::{Error, RequestHeader, SessionWrapper, TestSession};
-use module_utils::standard_response::response_text;
-use module_utils::{FromYaml, RequestFilter, RequestFilterResult};
+use pandora_module_utils::pingora::{Error, RequestHeader, SessionWrapper, TestSession};
+use pandora_module_utils::standard_response::response_text;
+use pandora_module_utils::{FromYaml, RequestFilter, RequestFilterResult};
 use std::path::PathBuf;
 use test_log::test;
 

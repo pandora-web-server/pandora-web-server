@@ -41,7 +41,7 @@
 //!
 //! ```rust
 //! use ip_anonymization_module::{IPAnonymizationHandler, IPAnonymizationOpt};
-//! use module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
+//! use pandora_module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
 //! use startup_module::{DefaultApp, StartupConf, StartupOpt};
 //! use static_files_module::{StaticFilesHandler, StaticFilesOpt};
 //! use structopt::StructOpt;
@@ -79,8 +79,8 @@
 use std::net::IpAddr;
 
 use async_trait::async_trait;
-use module_utils::pingora::{Error, SessionWrapper, SocketAddr};
-use module_utils::{DeserializeMap, RequestFilter, RequestFilterResult};
+use pandora_module_utils::pingora::{Error, SessionWrapper, SocketAddr};
+use pandora_module_utils::{DeserializeMap, RequestFilter, RequestFilterResult};
 use structopt::StructOpt;
 
 /// Command line options of the IP anonymization module
@@ -181,8 +181,8 @@ mod tests {
 
     use super::*;
 
-    use module_utils::pingora::{RequestHeader, TestSession};
-    use module_utils::FromYaml;
+    use pandora_module_utils::pingora::{RequestHeader, TestSession};
+    use pandora_module_utils::FromYaml;
     use test_log::test;
 
     fn make_handler(conf: &str) -> IPAnonymizationHandler {

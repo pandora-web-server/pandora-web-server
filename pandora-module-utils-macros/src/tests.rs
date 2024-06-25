@@ -13,9 +13,11 @@
 // limitations under the License.
 
 use async_trait::async_trait;
-use module_utils::pingora::{Error, RequestHeader, SessionWrapper, TestSession};
-use module_utils::serde::{Deserialize, Deserializer};
-use module_utils::{merge_conf, DeserializeMap, FromYaml, RequestFilter, RequestFilterResult};
+use pandora_module_utils::pingora::{Error, RequestHeader, SessionWrapper, TestSession};
+use pandora_module_utils::serde::{Deserialize, Deserializer};
+use pandora_module_utils::{
+    merge_conf, DeserializeMap, FromYaml, RequestFilter, RequestFilterResult,
+};
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Debug;
 use test_log::test;
@@ -189,20 +191,20 @@ async fn handler() -> Result<(), Box<Error>> {
 #[test]
 fn container_attributes() {
     #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
-    #[module_utils(rename_all = "kebab-case")]
+    #[pandora(rename_all = "kebab-case")]
     struct Conf1 {
         value: String,
         string_value: String,
-        #[module_utils(rename = "string_value2")]
+        #[pandora(rename = "string_value2")]
         string_value2: String,
     }
 
     #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
-    #[module_utils(rename_all(deserialize = "kebab-case"))]
+    #[pandora(rename_all(deserialize = "kebab-case"))]
     struct Conf2 {
         value: String,
         string_value: String,
-        #[module_utils(rename = "string_value2")]
+        #[pandora(rename = "string_value2")]
         string_value2: String,
     }
 
@@ -233,7 +235,7 @@ fn container_attributes() {
 
 #[test]
 fn field_attributes() {
-    use module_utils::serde::{de::Deserializer, Deserialize};
+    use pandora_module_utils::serde::{de::Deserializer, Deserialize};
 
     #[derive(Debug, Clone, Default, PartialEq, Eq)]
     struct Blub {
@@ -265,18 +267,18 @@ fn field_attributes() {
 
     #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
     struct Conf {
-        #[module_utils(rename = "v1", alias = "hi1")]
-        #[module_utils(alias = "another1")]
+        #[pandora(rename = "v1", alias = "hi1")]
+        #[pandora(alias = "another1")]
         value1: u32,
-        #[module_utils(skip)]
+        #[pandora(skip)]
         value2: Option<Blub>,
-        #[module_utils(deserialize_with = "custom_deserialize", alias = "v3")]
+        #[pandora(deserialize_with = "custom_deserialize", alias = "v3")]
         value3: Blub,
-        #[module_utils(with = "Blub", rename(deserialize = "v4"))]
+        #[pandora(with = "Blub", rename(deserialize = "v4"))]
         value4: Blub,
-        #[module_utils(skip_deserializing)]
+        #[pandora(skip_deserializing)]
         value5: Option<Blub>,
-        #[module_utils(flatten)]
+        #[pandora(flatten)]
         value6: Blob,
     }
 
@@ -353,7 +355,7 @@ fn from_yaml_seed() {
     #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
     struct Conf2 {
         value3: Vec<bool>,
-        #[module_utils(deserialize_with_seed = "custom_deserialize_seed")]
+        #[pandora(deserialize_with_seed = "custom_deserialize_seed")]
         value4: String,
     }
 

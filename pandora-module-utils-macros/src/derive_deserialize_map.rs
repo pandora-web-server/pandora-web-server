@@ -34,7 +34,7 @@ impl TryFrom<&DeriveInput> for ContainerAttributes {
         let mut crate_path = None;
 
         for attr in &value.attrs {
-            if !attr.path().is_ident("module_utils") {
+            if !attr.path().is_ident("pandora") {
                 continue;
             }
 
@@ -75,7 +75,7 @@ impl TryFrom<&DeriveInput> for ContainerAttributes {
         let crate_path = if let Some(crate_path) = crate_path {
             crate_path
         } else {
-            syn::parse2(quote! {::module_utils})?
+            syn::parse2(quote! {::pandora_module_utils})?
         };
 
         Ok(Self {
@@ -111,7 +111,7 @@ impl FieldAttributes {
         };
 
         for attr in &field.attrs {
-            if !attr.path().is_ident("module_utils") {
+            if !attr.path().is_ident("pandora") {
                 continue;
             }
 

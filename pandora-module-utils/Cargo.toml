@@ -1,5 +1,5 @@
 [package]
-name = "module-utils"
+name = "pandora-module-utils"
 version = "0.2.0"
 authors = ["Wladimir Palant"]
 repository = "https://github.com/palant/pandora-web-server"
@@ -9,11 +9,11 @@ license = "Apache-2.0"
 edition = "2021"
 rust-version.workspace = true
 description = """
-Helpers for Pingora modules such as static-files-module crate.
+Helpers for Pandora Web Server and its modules
 """
 
 [lib]
-name = "module_utils"
+name = "pandora_module_utils"
 path = "src/lib.rs"
 
 [dependencies]
@@ -24,7 +24,7 @@ glob = "0.3.1"
 http.workspace = true
 log.workspace = true
 maud.workspace = true
-module-utils-macros.workspace = true
+pandora-module-utils-macros.workspace = true
 pingora = { workspace = true, features = ["proxy"] }
 serde.workspace = true
 serde_yaml = "0.8"

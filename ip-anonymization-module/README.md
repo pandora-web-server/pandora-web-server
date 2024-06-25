@@ -27,7 +27,7 @@ phase:
 
 ```rust
 use ip_anonymization_module::{IPAnonymizationHandler, IPAnonymizationOpt};
-use module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
+use pandora_module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
 use startup_module::{DefaultApp, StartupConf, StartupOpt};
 use static_files_module::{StaticFilesHandler, StaticFilesOpt};
 use structopt::StructOpt;

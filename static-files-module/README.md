@@ -28,12 +28,12 @@ You will typically create a [`StaticFilesHandler`] instance and make your server
 the `request_filter` stage. If configured and called unconditionally it will handle all requests
 so that subsequent stages won’t be reached at all.
 
-The `module-utils` and `startup-modules` provide helpers to simplify merging of configuration
-and the command-line options of various handlers as well as creating a server instance from the
-configuration:
+The `pandora-module-utils` and `startup-module` crates provide helpers to simplify merging of
+configuration and the command-line options of various handlers as well as creating a server
+instance from the configuration:
 
 ```rust
-use module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
+use pandora_module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
 use startup_module::{DefaultApp, StartupConf, StartupOpt};
 use static_files_module::{StaticFilesConf, StaticFilesHandler, StaticFilesOpt};
 use structopt::StructOpt;
@@ -87,7 +87,7 @@ compression via configuration file settings.
 
 ```rust
 use compression_module::CompressionHandler;
-use module_utils::RequestFilter;
+use pandora_module_utils::RequestFilter;
 use startup_module::DefaultApp;
 use static_files_module::StaticFilesHandler;
 

@@ -112,13 +112,13 @@
 //! ## Code example
 //!
 //! You would normally put this handler in front of other handlers, such as the Static Files
-//! Module. The `module-utils` and `startup-modules` provide helpers to simplify merging of
-//! configuration and the command-line options of various handlers as well as creating a server
-//! instance from the configuration:
+//! Module. The `pandora-module-utils` and `startup-module` crates provide helpers to simplify
+//! merging of configuration and the command-line options of various handlers as well as creating
+//! a server instance from the configuration:
 //!
 //! ```rust
 //! use auth_module::{AuthHandler, AuthOpt};
-//! use module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
+//! use pandora_module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
 //! use startup_module::{DefaultApp, StartupConf, StartupOpt};
 //! use static_files_module::{StaticFilesHandler, StaticFilesOpt};
 //! use structopt::StructOpt;
@@ -160,8 +160,8 @@ mod page;
 use async_trait::async_trait;
 use http::Uri;
 use log::{error, info};
-use module_utils::pingora::{Error, ErrorType, SessionWrapper};
-use module_utils::{DeserializeMap, RequestFilter, RequestFilterResult};
+use pandora_module_utils::pingora::{Error, ErrorType, SessionWrapper};
+use pandora_module_utils::{DeserializeMap, RequestFilter, RequestFilterResult};
 use serde::{de::Unexpected, Deserialize, Deserializer};
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -341,14 +341,14 @@ where
 #[derive(Debug, Clone, PartialEq, Eq, DeserializeMap)]
 pub struct AuthPageSession {
     /// URI path of the page to be used for logging in instead of the default login page.
-    #[module_utils(deserialize_with = "deserialize_uri")]
+    #[pandora(deserialize_with = "deserialize_uri")]
     pub login_page: Option<Uri>,
 
     /// Hex-encoded token secret
     ///
     /// If missing, a random token secret will be generated at startup. A server restart will
     /// invalidate all active sessions then.
-    #[module_utils(deserialize_with = "deserialize_hex")]
+    #[pandora(deserialize_with = "deserialize_hex")]
     pub token_secret: Option<Vec<u8>>,
 
     /// Name of the cookie to store the JWT token
@@ -364,7 +364,7 @@ pub struct AuthPageSession {
     ///
     /// In the configuration file this can be specified in days or in hours: `7d` (7 days), `2h`
     /// (2 hours).
-    #[module_utils(deserialize_with = "deserialize_interval")]
+    #[pandora(deserialize_with = "deserialize_interval")]
     pub session_expiration: Duration,
 }
 

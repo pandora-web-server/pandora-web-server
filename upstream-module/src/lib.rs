@@ -31,7 +31,7 @@
 //! retrieves the previously selected upstream peer.
 //!
 //! ```rust
-//! use module_utils::{merge_conf, merge_opt, FromYaml};
+//! use pandora_module_utils::{merge_conf, merge_opt, FromYaml};
 //! use startup_module::{DefaultApp, StartupConf, StartupOpt};
 //! use structopt::StructOpt;
 //! use upstream_module::{UpstreamConf, UpstreamHandler, UpstreamOpt};
@@ -62,8 +62,8 @@ use async_trait::async_trait;
 use http::header;
 use http::uri::{Scheme, Uri};
 use log::error;
-use module_utils::pingora::{Error, ErrorType, HttpPeer, SessionWrapper};
-use module_utils::{DeserializeMap, RequestFilter, RequestFilterResult};
+use pandora_module_utils::pingora::{Error, ErrorType, HttpPeer, SessionWrapper};
+use pandora_module_utils::{DeserializeMap, RequestFilter, RequestFilterResult};
 use serde::de::{Deserializer, Error as _};
 use serde::Deserialize as _;
 use std::net::{SocketAddr, ToSocketAddrs};
@@ -94,7 +94,7 @@ where
 pub struct UpstreamConf {
     /// http:// or https:// URL identifying the server that requests should be forwarded for.
     /// Path and query parts of the URL have no effect.
-    #[module_utils(deserialize_with = "deserialize_uri")]
+    #[pandora(deserialize_with = "deserialize_uri")]
     pub upstream: Option<Uri>,
 }
 
@@ -232,8 +232,8 @@ mod tests {
     use super::*;
 
     use http::HeaderValue;
-    use module_utils::pingora::{RequestHeader, TestSession};
-    use module_utils::FromYaml;
+    use pandora_module_utils::pingora::{RequestHeader, TestSession};
+    use pandora_module_utils::FromYaml;
     use test_log::test;
 
     fn make_handler(configured: bool) -> UpstreamHandler {

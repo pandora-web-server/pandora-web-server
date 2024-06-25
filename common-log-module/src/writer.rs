@@ -17,7 +17,7 @@
 use chrono::{DateTime, Local};
 use http::HeaderValue;
 use log::error;
-use module_utils::pingora::SocketAddr;
+use pandora_module_utils::pingora::SocketAddr;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{stdout, Write};

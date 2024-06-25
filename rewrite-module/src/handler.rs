@@ -17,11 +17,11 @@
 use async_trait::async_trait;
 use http::{HeaderValue, StatusCode};
 use log::{debug, error, trace};
-use module_utils::merger::Merger;
-use module_utils::pingora::{Error, SessionWrapper};
-use module_utils::router::{Path, Router};
-use module_utils::standard_response::redirect_response;
-use module_utils::{RequestFilter, RequestFilterResult};
+use pandora_module_utils::merger::Merger;
+use pandora_module_utils::pingora::{Error, SessionWrapper};
+use pandora_module_utils::router::{Path, Router};
+use pandora_module_utils::standard_response::redirect_response;
+use pandora_module_utils::{RequestFilter, RequestFilterResult};
 
 use crate::configuration::{RegexMatch, RewriteConf, RewriteType, VariableInterpolation};
 
@@ -177,8 +177,8 @@ impl RequestFilter for RewriteHandler {
 mod tests {
     use super::*;
 
-    use module_utils::pingora::{RequestHeader, TestSession};
-    use module_utils::FromYaml;
+    use pandora_module_utils::pingora::{RequestHeader, TestSession};
+    use pandora_module_utils::FromYaml;
     use test_log::test;
 
     fn make_handler(conf: &str) -> RewriteHandler {

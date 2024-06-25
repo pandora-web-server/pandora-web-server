@@ -150,9 +150,9 @@
 //! ## Code example
 //!
 //! You would normally combine the handler of this module with the handlers of other modules. The
-//! `module-utils` and `startup-modules` provide helpers to simplify merging of configuration and
-//! the command-line options of various handlers as well as creating a server instance from the
-//! configuration.
+//! `pandora-module-utils` and `startup-module` crates provide helpers to simplify merging of
+//! configuration and the command-line options of various handlers as well as creating a server
+//! instance from the configuration.
 //!
 //! `HeaderHandler` handles both the `request_filter` phase (compile the headers to be added and
 //! add them to handler responses if any) and the `upstream_response_filter` or `response_filter`
@@ -162,7 +162,7 @@
 //! ```rust
 //! use compression_module::{CompressionHandler, CompressionOpt};
 //! use headers_module::HeadersHandler;
-//! use module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
+//! use pandora_module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
 //! use startup_module::{DefaultApp, StartupConf, StartupOpt};
 //! use upstream_module::UpstreamHandler;
 //! use structopt::StructOpt;

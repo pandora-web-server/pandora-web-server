@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use module_utils::serde::Deserialize;
-use module_utils::{DeserializeMap, OneOrMany};
+use pandora_module_utils::serde::Deserialize;
+use pandora_module_utils::{DeserializeMap, OneOrMany};
 use std::collections::HashMap;
 
 /// Determines which paths a configuration should apply to
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash, Deserialize)]
-#[serde(crate = "module_utils::serde", from = "String")]
+#[serde(crate = "pandora_module_utils::serde", from = "String")]
 pub struct PathMatchRule {
     /// Path to match
     pub path: String,
@@ -59,7 +59,7 @@ pub struct SubPathConf<C: Default> {
     ///
     /// These settings are flattened and appear at the same level as `strip_prefix` in the
     /// configuration file.
-    #[module_utils(flatten)]
+    #[pandora(flatten)]
     pub config: C,
 }
 
@@ -77,7 +77,7 @@ pub struct VirtualHostConf<C: Default> {
     ///
     /// These settings are flattened and appear at the same level as `default` in the configuration
     /// file.
-    #[module_utils(flatten)]
+    #[pandora(flatten)]
     pub config: C,
 }
 

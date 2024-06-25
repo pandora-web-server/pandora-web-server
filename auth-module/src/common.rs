@@ -14,8 +14,8 @@
 
 use bcrypt::{hash, verify, DEFAULT_COST};
 use log::{error, info, trace};
-use module_utils::pingora::{SessionWrapper, SocketAddr};
 use once_cell::sync::Lazy;
+use pandora_module_utils::pingora::{SessionWrapper, SocketAddr};
 use pingora_limits::rate::Rate;
 use std::{net::Ipv4Addr, sync::Mutex, time::Duration};
 

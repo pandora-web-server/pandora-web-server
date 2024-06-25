@@ -46,12 +46,12 @@ matches are preferred over prefix matches.
 ## Code example
 
 You would normally combine the handler of this module with the handlers of other modules such
-as `static-files-module`. The `module-utils` and `startup-modules` provide helpers to simplify
-merging of configuration and the command-line options of various handlers as well as creating a
-server instance from the configuration:
+as `static-files-module`. The `pandora-module-utils` and `startup-module` crates provide
+helpers to simplify merging of configuration and the command-line options of various handlers
+as well as creating a server instance from the configuration:
 
 ```rust
-use module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
+use pandora_module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
 use rewrite_module::RewriteHandler;
 use startup_module::{DefaultApp, StartupConf, StartupOpt};
 use static_files_module::{StaticFilesHandler, StaticFilesOpt};

@@ -20,7 +20,7 @@ path = "src/lib.rs"
 async-trait.workspace = true
 http.workspace = true
 log.workspace = true
-module-utils.workspace = true
+pandora-module-utils.workspace = true
 
 [dev-dependencies]
 env_logger.workspace = true

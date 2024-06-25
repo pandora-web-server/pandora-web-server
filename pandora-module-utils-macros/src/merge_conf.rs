@@ -27,7 +27,7 @@ pub(crate) fn merge_conf(input: TokenStream) -> Result<TokenStream, Error> {
         #[derive(
             ::std::fmt::Debug,
             ::std::default::Default,
-            ::module_utils::DeserializeMap
+            ::pandora_module_utils::DeserializeMap
         )]
     };
     let attributes = Attribute::parse_outer.parse2(attributes)?;
@@ -36,7 +36,7 @@ pub(crate) fn merge_conf(input: TokenStream) -> Result<TokenStream, Error> {
     if let Some(fields) = get_fields_mut(&mut input) {
         // Mark all fields as flattened
         for field in fields.named.iter_mut() {
-            let attributes = quote! {#[module_utils(flatten)]};
+            let attributes = quote! {#[pandora(flatten)]};
             let attributes = Attribute::parse_outer.parse2(attributes)?;
             field.attrs.extend(attributes)
         }

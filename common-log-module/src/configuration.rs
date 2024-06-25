@@ -15,7 +15,7 @@
 //! Structures handling command line options and YAML deserialization for the Common Log Module
 
 use http::HeaderName;
-use module_utils::{DeserializeMap, OneOrMany};
+use pandora_module_utils::{DeserializeMap, OneOrMany};
 use serde::Deserialize;
 use std::path::PathBuf;
 use structopt::StructOpt;

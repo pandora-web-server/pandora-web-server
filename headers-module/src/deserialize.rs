@@ -15,7 +15,7 @@
 //! Custom deserialization code for the configuration
 
 use http::header::{HeaderName, HeaderValue};
-use module_utils::{DeserializeMap, MapVisitor};
+use pandora_module_utils::{DeserializeMap, MapVisitor};
 use serde::de::{Deserialize, DeserializeSeed, Deserializer, Error as _, MapAccess, Visitor};
 use std::collections::HashMap;
 
@@ -135,7 +135,7 @@ mod tests {
 
     use super::*;
 
-    use module_utils::{merger::HostPathMatcher, FromYaml, OneOrMany};
+    use pandora_module_utils::{merger::HostPathMatcher, FromYaml, OneOrMany};
 
     #[test]
     fn custom_headers_deserialization() {

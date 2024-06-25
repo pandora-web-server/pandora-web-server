@@ -1,7 +1,7 @@
 # Virtual Hosts Module for Pandora Web Server
 
 This module simplifies dealing with virtual hosts. It wraps any handler implementing
-`module_utils::RequestFilter` and its configuration, allowing to supply a different
+`pandora_module_utils::RequestFilter` and its configuration, allowing to supply a different
 configuration for that handler for each virtual host and paths of that host. For example, if
 Static Files Module is the wrapped handler, the configuration file might look like this:
 
@@ -59,11 +59,12 @@ example above to compensate. Upstream responses might have to be corrected via P
 
 Usually, the virtual hosts configuration will be read from a configuration file and used to
 instantiate the corresponding handler, pass it to the server app which in turn is used to
-create a server. The `module-utils` and `startup-modules` provide helpers to simplify merging
-of configuration options as well as creating a server instance from the configuration:
+create a server. The `pandora-module-utils` and `startup-module` crates provide helpers to
+simplify merging of configuration options as well as creating a server instance from the
+configuration:
 
 ```rust
-use module_utils::{merge_conf, FromYaml};
+use pandora_module_utils::{merge_conf, FromYaml};
 use startup_module::{DefaultApp, StartupConf, StartupOpt};
 use static_files_module::{StaticFilesConf, StaticFilesHandler};
 use structopt::StructOpt;

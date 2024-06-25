@@ -17,7 +17,7 @@
 use bytes::BytesMut;
 use http::status::StatusCode;
 use log::error;
-use module_utils::pingora::{Error, ErrorType, SessionWrapper};
+use pandora_module_utils::pingora::{Error, ErrorType, SessionWrapper};
 use std::cmp::min;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};

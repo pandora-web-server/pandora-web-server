@@ -16,7 +16,7 @@
 
 use bytes::Bytes;
 use http::{header, status::StatusCode};
-use module_utils::pingora::{Error, HttpTask, ResponseHeader, SessionWrapper};
+use pandora_module_utils::pingora::{Error, HttpTask, ResponseHeader, SessionWrapper};
 use std::path::{Path, PathBuf};
 
 use crate::compression_algorithm::{find_matches, CompressionAlgorithm};

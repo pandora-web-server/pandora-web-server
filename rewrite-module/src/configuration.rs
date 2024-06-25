@@ -14,8 +14,8 @@
 
 //! Structures required to deserialize Rewrite Module configuration from YAML configuration files.
 
-use module_utils::merger::PathMatcher;
-use module_utils::{DeserializeMap, OneOrMany};
+use pandora_module_utils::merger::PathMatcher;
+use pandora_module_utils::{DeserializeMap, OneOrMany};
 use regex::Regex;
 use serde::Deserialize;
 use std::default::Default;

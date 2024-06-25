@@ -17,9 +17,9 @@
 use async_trait::async_trait;
 use http::{method::Method, status::StatusCode};
 use log::{debug, info, warn};
-use module_utils::pingora::{Error, ErrorType, SessionWrapper};
-use module_utils::standard_response::{error_response, redirect_response};
-use module_utils::{RequestFilter, RequestFilterResult};
+use pandora_module_utils::pingora::{Error, ErrorType, SessionWrapper};
+use pandora_module_utils::standard_response::{error_response, redirect_response};
+use pandora_module_utils::{RequestFilter, RequestFilterResult};
 use std::io::ErrorKind;
 
 use crate::compression::Compression;

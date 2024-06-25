@@ -16,9 +16,9 @@ use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use http::{header, Method, StatusCode};
 use log::{info, trace};
 use maud::{html, DOCTYPE};
-use module_utils::pingora::{Error, ResponseHeader, SessionWrapper};
-use module_utils::standard_response::error_response;
-use module_utils::RequestFilterResult;
+use pandora_module_utils::pingora::{Error, ResponseHeader, SessionWrapper};
+use pandora_module_utils::standard_response::error_response;
+use pandora_module_utils::RequestFilterResult;
 
 use crate::{
     common::{is_rate_limited, validate_login},
@@ -137,9 +137,9 @@ pub(crate) async fn basic_auth(
 mod tests {
     use super::*;
 
-    use module_utils::pingora::{RequestHeader, TestSession};
-    use module_utils::standard_response::response_text;
-    use module_utils::{FromYaml, RequestFilter};
+    use pandora_module_utils::pingora::{RequestHeader, TestSession};
+    use pandora_module_utils::standard_response::response_text;
+    use pandora_module_utils::{FromYaml, RequestFilter};
     use test_log::test;
 
     use crate::AuthHandler;

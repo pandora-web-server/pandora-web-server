@@ -378,7 +378,7 @@ impl<Matcher, Conf> Default for MergerEntries<Matcher, Conf> {
 /// merged, producing a single configuration for each relevant path.
 ///
 /// ```rust
-/// use module_utils::merger::{Merger, HostPathMatcher};
+/// use pandora_module_utils::merger::{Merger, HostPathMatcher};
 ///
 /// let mut merger = Merger::new();
 /// merger.push(HostPathMatcher::from("localhost"), "a");

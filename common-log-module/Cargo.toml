@@ -9,7 +9,7 @@ license = "Apache-2.0"
 edition = "2021"
 rust-version.workspace = true
 description = """
-A module adding allowing to log accesses in common log format in Pingora.
+Access logging module for Pandora Web Server using Common Log Format
 """
 
 [lib]
@@ -21,7 +21,7 @@ async-trait.workspace = true
 chrono.workspace = true
 http.workspace = true
 log.workspace = true
-module-utils.workspace = true
+pandora-module-utils.workspace = true
 once_cell = "1.19.0"
 serde.workspace = true
 structopt.workspace = true

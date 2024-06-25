@@ -13,13 +13,13 @@ configuration options:
 ## Code example
 
 You would normally put this handler in front of other handlers, such as the Static Files
-Module. The `module-utils` and `startup-modules` provide helpers to simplify merging of
-configuration and the command-line options of various handlers as well as creating a server
-instance from the configuration:
+Module. The `pandora-module-utils` and `startup-module` crates provide helpers to simplify
+merging of configuration and the command-line options of various handlers as well as creating
+a server instance from the configuration:
 
 ```rust
 use compression_module::{CompressionConf, CompressionHandler, CompressionOpt};
-use module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
+use pandora_module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
 use startup_module::{DefaultApp, StartupConf, StartupOpt};
 use static_files_module::{StaticFilesHandler, StaticFilesOpt};
 use structopt::StructOpt;

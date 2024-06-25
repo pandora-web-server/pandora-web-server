@@ -22,9 +22,9 @@
 //! ## General configuration
 //!
 //! The Startup Module currently exposes all of the
-//! [Pingora configuration options](module_utils::pingora::ServerConf). In addition, it provides
-//! a `listen` configuration option, a list of IP address/port combinations that the server should
-//! listen on:
+//! [Pingora configuration options](pandora_module_utils::pingora::ServerConf). In addition, it
+//! provides a `listen` configuration option, a list of IP address/port combinations that the
+//! server should listen on:
 //!
 //! ```yaml
 //! listen:
@@ -146,8 +146,8 @@
 //!
 //! ```rust
 //! use async_trait::async_trait;
-//! use module_utils::pingora::{Error, HttpPeer, ProxyHttp, Session};
-//! use module_utils::FromYaml;
+//! use pandora_module_utils::pingora::{Error, HttpPeer, ProxyHttp, Session};
+//! use pandora_module_utils::FromYaml;
 //! use startup_module::{StartupConf, StartupOpt};
 //! use structopt::StructOpt;
 //!
@@ -181,8 +181,8 @@ use async_trait::async_trait;
 pub use configuration::{
     CertKeyConf, ListenAddr, StartupConf, StartupOpt, TlsConf, TlsRedirectorConf,
 };
-use module_utils::pingora::{Error, HttpPeer, ProxyHttp, ResponseHeader, Session};
-use module_utils::RequestFilter;
+use pandora_module_utils::pingora::{Error, HttpPeer, ProxyHttp, ResponseHeader, Session};
+use pandora_module_utils::RequestFilter;
 
 /// A trivial Pingora app implementation, to be passed to [`StartupConf::into_server`]
 ///

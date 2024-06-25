@@ -17,7 +17,7 @@ an upstream peer and modifies the request by adding the appropriate `Host` heade
 retrieves the previously selected upstream peer.
 
 ```rust
-use module_utils::{merge_conf, merge_opt, FromYaml};
+use pandora_module_utils::{merge_conf, merge_opt, FromYaml};
 use startup_module::{DefaultApp, StartupConf, StartupOpt};
 use structopt::StructOpt;
 use upstream_module::{UpstreamConf, UpstreamHandler, UpstreamOpt};

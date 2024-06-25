@@ -13,10 +13,10 @@
 // limitations under the License.
 
 use async_trait::async_trait;
-use module_utils::pingora::{
+use pandora_module_utils::pingora::{
     http_proxy_service, Error, ErrorType, ProxyHttp, Server, ServerConf, ServerOpt,
 };
-use module_utils::{DeserializeMap, OneOrMany};
+use pandora_module_utils::{DeserializeMap, OneOrMany};
 use pingora::listeners::{TcpSocketOptions, TlsAccept, TlsSettings};
 use pingora::services::Service;
 use pingora::tls::ext::ssl_add_chain_cert;
@@ -295,7 +295,7 @@ impl TlsRedirectorConf {
 #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
 pub struct TlsConf {
     /// Default certificate/key combination
-    #[module_utils(flatten)]
+    #[pandora(flatten)]
     pub default: CertKeyConf,
 
     /// Certificate/key combinations for particular server names
@@ -364,7 +364,7 @@ pub struct StartupConf {
     pub tls: TlsConf,
 
     /// Pingora’s default server configuration options
-    #[module_utils(flatten)]
+    #[pandora(flatten)]
     pub server: ServerConf,
 }
 

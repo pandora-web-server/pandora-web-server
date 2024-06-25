@@ -15,9 +15,9 @@
 use async_trait::async_trait;
 use http::uri::Uri;
 use log::warn;
-use module_utils::pingora::{Error, HttpPeer, ResponseHeader, SessionWrapper};
-use module_utils::router::{Path, Router};
-use module_utils::{RequestFilter, RequestFilterResult};
+use pandora_module_utils::pingora::{Error, HttpPeer, ResponseHeader, SessionWrapper};
+use pandora_module_utils::router::{Path, Router};
+use pandora_module_utils::{RequestFilter, RequestFilterResult};
 use std::collections::BTreeSet;
 use std::fmt::Debug;
 use std::marker::PhantomData;
@@ -267,8 +267,8 @@ where
 mod tests {
     use super::*;
 
-    use module_utils::pingora::{RequestHeader, TestSession};
-    use module_utils::{DeserializeMap, FromYaml};
+    use pandora_module_utils::pingora::{RequestHeader, TestSession};
+    use pandora_module_utils::{DeserializeMap, FromYaml};
     use test_log::test;
 
     #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]

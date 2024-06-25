@@ -17,9 +17,9 @@
 use async_trait::async_trait;
 use http::header;
 use log::error;
-use module_utils::pingora::{Error, ErrorType, SessionWrapper};
-use module_utils::{RequestFilter, RequestFilterResult};
 use once_cell::sync::Lazy;
+use pandora_module_utils::pingora::{Error, ErrorType, SessionWrapper};
+use pandora_module_utils::{RequestFilter, RequestFilterResult};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::SystemTime;

@@ -46,7 +46,7 @@ before it has been altered. Later the actual logging is performed during the `lo
 
 ```rust
 use common_log_module::{CommonLogHandler, CommonLogOpt};
-use module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
+use pandora_module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
 use startup_module::{DefaultApp, StartupConf, StartupOpt};
 use static_files_module::StaticFilesHandler;
 use structopt::StructOpt;
