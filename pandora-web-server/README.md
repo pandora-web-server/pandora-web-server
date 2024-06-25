@@ -34,7 +34,7 @@ This is a modular web server, supporting different configurations per host name 
 ## Configuration
 
 The default preset puts the configuration for Startup, IP Anonymization and Headers modules at
-the top level, all other modules are configured per host name. An configuration file could look
+the top level, all other modules are configured per host name. A configuration file could look
 like this then:
 
 ```yaml

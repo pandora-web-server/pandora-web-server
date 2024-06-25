@@ -48,7 +48,7 @@
 //! ## Configuration
 //!
 //! The default preset puts the configuration for Startup, IP Anonymization and Headers modules at
-//! the top level, all other modules are configured per host name. An configuration file could look
+//! the top level, all other modules are configured per host name. A configuration file could look
 //! like this then:
 //!
 //! ```yaml
@@ -207,7 +207,7 @@ struct HostHandler {
     static_files: static_files_module::StaticFilesHandler,
 }
 
-/// Run Pandor Web Server
+/// Run Pandora Web Server
 #[merge_opt]
 struct Opt {
     startup: StartupOpt,
@@ -223,7 +223,7 @@ struct Opt {
     static_files: static_files_module::StaticFilesOpt,
 }
 
-/// The combined configuration of Pingora server and [`VirtualHostsHandler`].
+/// The configuration of Pandora Web Server
 #[merge_conf]
 struct Conf {
     startup: StartupConf,
