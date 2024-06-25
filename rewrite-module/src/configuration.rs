@@ -15,7 +15,7 @@
 //! Structures required to deserialize Rewrite Module configuration from YAML configuration files.
 
 use module_utils::merger::PathMatcher;
-use module_utils::DeserializeMap;
+use module_utils::{DeserializeMap, OneOrMany};
 use regex::Regex;
 use serde::Deserialize;
 use std::default::Default;
@@ -244,7 +244,7 @@ impl Default for RewriteRule {
 #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
 pub struct RewriteConf {
     /// A list of rewrite rules
-    pub rewrite_rules: Vec<RewriteRule>,
+    pub rewrite_rules: OneOrMany<RewriteRule>,
 }
 
 #[cfg(test)]

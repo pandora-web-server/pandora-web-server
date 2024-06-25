@@ -199,7 +199,6 @@ mod tests {
         let handler = make_handler(
             r#"
                 rewrite_rules:
-                -
                     from: /path/*
                     to: /another${tail}
             "#,
@@ -340,7 +339,6 @@ mod tests {
         let handler = make_handler(
             r#"
                 rewrite_rules:
-                -
                     from: /path/*
                     to: /another${tail}?${query}&host=${http_host}&test=${http_test_header}
             "#,
