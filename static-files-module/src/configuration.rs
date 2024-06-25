@@ -14,7 +14,7 @@
 
 //! Data structures required for `StaticFilesHandler` configuration
 
-use module_utils::DeserializeMap;
+use module_utils::{DeserializeMap, OneOrMany};
 use std::path::PathBuf;
 use structopt::StructOpt;
 
@@ -61,7 +61,7 @@ pub struct StaticFilesConf {
     pub redirect_prefix: Option<String>,
 
     /// List of index files to look for in a directory.
-    pub index_file: Vec<String>,
+    pub index_file: OneOrMany<String>,
 
     /// URI path of the page to display instead of the default Not Found page, e.g. /404.html
     pub page_404: Option<String>,
@@ -69,7 +69,7 @@ pub struct StaticFilesConf {
     /// List of file extensions to check when looking for pre-compressed versions of a file.
     /// Supported file extensions are gz (gzip), zz (zlib deflate), z (compress), br (Brotli),
     /// zst (Zstandard).
-    pub precompressed: Vec<CompressionAlgorithm>,
+    pub precompressed: OneOrMany<CompressionAlgorithm>,
 }
 
 impl StaticFilesConf {
@@ -85,7 +85,7 @@ impl StaticFilesConf {
         }
 
         if let Some(index_file) = opt.index_file {
-            self.index_file = index_file;
+            self.index_file = index_file.into();
         }
 
         if opt.page_404.is_some() {
@@ -93,7 +93,7 @@ impl StaticFilesConf {
         }
 
         if let Some(precompressed) = opt.precompressed {
-            self.precompressed = precompressed;
+            self.precompressed = precompressed.into();
         }
     }
 }
@@ -104,9 +104,9 @@ impl Default for StaticFilesConf {
             root: None,
             canonicalize_uri: true,
             redirect_prefix: None,
-            index_file: Vec::new(),
+            index_file: Default::default(),
             page_404: None,
-            precompressed: Vec::new(),
+            precompressed: Default::default(),
         }
     }
 }
