@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use module_utils::serde::Deserialize;
-use module_utils::DeserializeMap;
+use module_utils::{DeserializeMap, OneOrMany};
 use std::collections::HashMap;
 
 /// Determines which paths a configuration should apply to
@@ -67,7 +67,7 @@ pub struct SubPathConf<C: Default> {
 #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
 pub struct VirtualHostConf<C: Default> {
     /// List of additional names for the virtual host
-    pub aliases: Vec<String>,
+    pub aliases: OneOrMany<String>,
     /// If true, this virtual host should be used as fallback when no other virtual host
     /// configuration applies
     pub default: bool,
