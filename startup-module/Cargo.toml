@@ -4,12 +4,12 @@ version = "0.2.0"
 authors = ["Wladimir Palant"]
 repository = "https://github.com/palant/pandora-web-server"
 categories = ["network-programming", "web-programming::http-server"]
-keywords = ["proxy", "web-server", "http", "pingora"]
+keywords = ["proxy", "web-server", "http", "pandora"]
 license = "Apache-2.0"
 edition = "2021"
 rust-version.workspace = true
 description = """
-A module simplifying configuring and starting a Pingora-based web server.
+A Pandora Web Server module taking care of IP address, port and TLS configuration
 """
 
 [lib]

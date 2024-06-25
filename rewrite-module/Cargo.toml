@@ -4,12 +4,12 @@ version = "0.2.0"
 authors = ["Wladimir Palant"]
 repository = "https://github.com/palant/pandora-web-server"
 categories = ["network-programming", "web-programming::http-server"]
-keywords = ["url-rewrite", "url", "web-server", "http", "pingora"]
+keywords = ["url-rewrite", "url", "web-server", "http", "pandora"]
 license = "Apache-2.0"
 edition = "2021"
 rust-version.workspace = true
 description = """
-A module pre-processing request URLs to rewrite or redirect them.
+A Pandora Web Server module pre-processing request URLs to rewrite or redirect them
 """
 
 [lib]

@@ -4,12 +4,12 @@ version = "0.2.0"
 authors = ["Wladimir Palant"]
 repository = "https://github.com/palant/pandora-web-server"
 categories = ["network-programming", "web-programming::http-server"]
-keywords = ["logging", "common-log", "web-server", "http", "pingora"]
+keywords = ["logging", "common-log", "web-server", "http", "pandora"]
 license = "Apache-2.0"
 edition = "2021"
 rust-version.workspace = true
 description = """
-Access logging module for Pandora Web Server using Common Log Format
+A Pandora Web Server module for access logging using Common Log Format
 """
 
 [lib]

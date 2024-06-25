@@ -4,12 +4,12 @@ version = "0.2.0"
 authors = ["Wladimir Palant"]
 repository = "https://github.com/palant/pandora-web-server"
 categories = ["network-programming", "web-programming::http-server"]
-keywords = ["proxy", "reverse-proxy", "web-server", "http", "pingora"]
+keywords = ["proxy", "reverse-proxy", "web-server", "http", "pandora"]
 license = "Apache-2.0"
 edition = "2021"
 rust-version.workspace = true
 description = """
-A helper module to configure Pingora's upstream selection.
+A Pandora Web Server module to select upstream servers to be proxied
 """
 
 [lib]

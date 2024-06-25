@@ -4,12 +4,12 @@ version = "0.2.0"
 authors = ["Wladimir Palant"]
 repository = "https://github.com/palant/pandora-web-server"
 categories = ["network-programming", "web-programming::http-server"]
-keywords = ["basic-auth", "auth", "web-server", "http", "pingora"]
+keywords = ["basic-auth", "auth", "web-server", "http", "pandora"]
 license = "Apache-2.0"
 edition = "2021"
 rust-version.workspace = true
 description = """
-A module implementing handling of HTTP authorization.
+A Pandora Web Server module for restricting access to a webspace or parts of it
 """
 
 [lib]

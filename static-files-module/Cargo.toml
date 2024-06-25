@@ -4,13 +4,13 @@ version = "0.2.0"
 authors = ["Wladimir Palant"]
 repository = "https://github.com/palant/pandora-web-server"
 categories = ["network-programming", "web-programming::http-server"]
-keywords = ["static", "static-files", "web-server", "http", "pingora"]
+keywords = ["static", "static-files", "web-server", "http", "pandora"]
 exclude = ["testdata/"]
 license = "Apache-2.0"
 edition = "2021"
 rust-version.workspace = true
 description = """
-A module for serving static files with Pingora.
+A Pandora Web Server module for serving static files
 """
 
 [lib]

@@ -9,7 +9,7 @@ license = "Apache-2.0"
 edition = "2021"
 rust-version.workspace = true
 description = """
-A fast and configurable web server based on Cloudflare’s Pingora framework.
+A fast and configurable web server based on Cloudflare’s Pingora framework
 """
 
 [dependencies]
