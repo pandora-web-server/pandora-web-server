@@ -23,6 +23,7 @@ use crate::utils::{generics_with_de, get_fields, type_name_short, where_clause};
 #[derive(Clone)]
 struct ContainerAttributes {
     rename_all: RenameRule,
+    crate_path: Path,
 }
 
 impl TryFrom<&DeriveInput> for ContainerAttributes {
@@ -30,6 +31,7 @@ impl TryFrom<&DeriveInput> for ContainerAttributes {
 
     fn try_from(value: &DeriveInput) -> Result<Self, Self::Error> {
         let mut rename_all = RenameRule::None;
+        let mut crate_path = None;
 
         for attr in &value.attrs {
             if !attr.path().is_ident("module_utils") {
@@ -57,13 +59,29 @@ impl TryFrom<&DeriveInput> for ContainerAttributes {
                     rename_all = RenameRule::from_str(&lit.value())
                         .map_err(|_| Error::new_spanned(lit, "invalid rename_all value"))?;
                     Ok(())
+                } else if meta.path.is_ident("crate") {
+                    if crate_path.is_some() {
+                        return Err(Error::new_spanned(meta.path, "duplicate crate"));
+                    }
+                    let lit: LitStr = meta.value()?.parse()?;
+                    crate_path = Some(lit.parse()?);
+                    Ok(())
                 } else {
                     Err(Error::new_spanned(meta.path, "unexpected parameter"))
                 }
             })?;
         }
 
-        Ok(Self { rename_all })
+        let crate_path = if let Some(crate_path) = crate_path {
+            crate_path
+        } else {
+            syn::parse2(quote! {::module_utils})?
+        };
+
+        Ok(Self {
+            rename_all,
+            crate_path,
+        })
     }
 }
 
@@ -184,10 +202,11 @@ impl FieldAttributes {
             }),
         );
 
+        let crate_path = &container_attrs.crate_path;
         let deserialize = deserialize_with.unwrap_or_else(|| {
             quote! {
                 {
-                    use ::module_utils::_private::DeserializeMerge;
+                    use #crate_path::_private::DeserializeMerge;
                     (&&&&::std::marker::PhantomData::<#ty>).deserialize_merge(self.#name, deserializer)
                 }
             }
@@ -220,26 +239,27 @@ fn collect_deserialize_names<'a>(attrs: &[&'a FieldAttributes]) -> Result<Vec<&'
 fn generate_deserialize_map_impl(
     input: &DeriveInput,
     fields: &FieldsNamed,
+    container_attrs: &ContainerAttributes,
 ) -> Result<TokenStream2, Error> {
     let vis = &input.vis;
     let struct_name = type_name_short(input);
     let (de, generics, generics_short) = generics_with_de(input);
-    let container_attrs = ContainerAttributes::try_from(input)?;
+    let crate_path = &container_attrs.crate_path;
     let where_clause = where_clause(input, fields, |field| {
-        let attrs = FieldAttributes::parse(field, &container_attrs).ok()?;
+        let attrs = FieldAttributes::parse(field, container_attrs).ok()?;
         if attrs.skip {
             None
         } else if attrs.flatten {
-            Some(quote! {::module_utils::DeserializeMap<#de>})
+            Some(quote! {#crate_path::DeserializeMap<#de>})
         } else {
-            Some(quote! {::module_utils::serde::Deserialize<#de>})
+            Some(quote! {#crate_path::serde::Deserialize<#de>})
         }
     });
 
     let field_attrs = fields
         .named
         .iter()
-        .map(|field| FieldAttributes::parse(field, &container_attrs))
+        .map(|field| FieldAttributes::parse(field, container_attrs))
         .collect::<Result<Vec<_>, _>>()?;
     let field_name = field_attrs
         .iter()
@@ -250,7 +270,7 @@ fn generate_deserialize_map_impl(
         .map(|attr| {
             let ty = &attr.ty;
             if attr.flatten {
-                quote! {<#ty as ::module_utils::DeserializeMap<#de>>::Visitor}
+                quote! {<#ty as #crate_path::DeserializeMap<#de>>::Visitor}
             } else {
                 quote! {#ty}
             }
@@ -310,7 +330,7 @@ fn generate_deserialize_map_impl(
                 __marker: ::std::marker::PhantomData<&#de ()>,
             }
 
-            impl<#generics> ::module_utils::MapVisitor<#de> for __Visitor<#generics_short>
+            impl<#generics> #crate_path::MapVisitor<#de> for __Visitor<#generics_short>
             #where_clause
             {
                 type Value = #struct_name;
@@ -337,7 +357,7 @@ fn generate_deserialize_map_impl(
                 fn visit_field<D>(mut self, field: &::std::primitive::str, deserializer: D)
                     -> ::std::result::Result<Self, D::Error>
                 where
-                    D: ::module_utils::serde::de::Deserializer<#de>
+                    D: #crate_path::serde::de::Deserializer<#de>
                 {
                     match field {
                         #(
@@ -361,7 +381,7 @@ fn generate_deserialize_map_impl(
                             // Error::unknown_field() won't accept non-static slices, so we
                             // duplicate its functionality here.
                             ::std::result::Result::Err(
-                                <D::Error as ::module_utils::serde::de::Error>::custom(
+                                <D::Error as #crate_path::serde::de::Error>::custom(
                                     ::std::format_args!(
                                         "unknown field `{field}`, expected one of `{}`",
                                         fields.join("`, `"),
@@ -374,7 +394,7 @@ fn generate_deserialize_map_impl(
 
                 fn finalize<E>(self) -> Result<Self::Value, E>
                 where
-                    E: ::module_utils::serde::de::Error
+                    E: #crate_path::serde::de::Error
                 {
                     ::std::result::Result::Ok(Self::Value {
                         #(
@@ -384,7 +404,7 @@ fn generate_deserialize_map_impl(
                 }
             }
 
-            impl<#generics> ::module_utils::DeserializeMap<#de> for #struct_name
+            impl<#generics> #crate_path::DeserializeMap<#de> for #struct_name
             #where_clause
             {
                 type Visitor = __Visitor<#generics_short>;
@@ -402,12 +422,16 @@ fn generate_deserialize_map_impl(
     })
 }
 
-fn generate_deserialize_impl(input: &DeriveInput) -> TokenStream2 {
+fn generate_deserialize_impl(
+    input: &DeriveInput,
+    container_attrs: &ContainerAttributes,
+) -> TokenStream2 {
     // This could be a blanket implementation for anything implementing DeserializeMap trait.
     // But it has to be an explicit implementation because blanket implementations for foreign
     // traits aren’t allowed.
     let struct_name = type_name_short(input);
     let (de, generics, generics_short) = generics_with_de(input);
+    let crate_path = &container_attrs.crate_path;
     let mut where_clause = input
         .generics
         .where_clause
@@ -416,34 +440,34 @@ fn generate_deserialize_impl(input: &DeriveInput) -> TokenStream2 {
         .unwrap_or_else(|| syn::parse2(quote! {where}).unwrap());
     where_clause.predicates.insert(
         0,
-        syn::parse2(quote! {#struct_name: ::module_utils::DeserializeMap<#de>}).unwrap(),
+        syn::parse2(quote! {#struct_name: #crate_path::DeserializeMap<#de>}).unwrap(),
     );
 
     quote! {
-        impl<#generics> ::module_utils::serde::Deserialize<#de> for #struct_name #where_clause {
+        impl<#generics> #crate_path::serde::Deserialize<#de> for #struct_name #where_clause {
             fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
             where
-                D: ::module_utils::serde::Deserializer<#de>
+                D: #crate_path::serde::Deserializer<#de>
             {
-                use ::module_utils::serde::de::DeserializeSeed;
+                use #crate_path::serde::de::DeserializeSeed;
                 <Self as ::std::default::Default>::default().deserialize(deserializer)
             }
         }
 
-        impl<#generics> ::module_utils::serde::de::DeserializeSeed<#de> for #struct_name #where_clause {
+        impl<#generics> #crate_path::serde::de::DeserializeSeed<#de> for #struct_name #where_clause {
             type Value = Self;
 
             fn deserialize<D>(self, deserializer: D) -> ::std::result::Result<Self::Value, D::Error>
             where
-                D: ::module_utils::serde::Deserializer<#de>
+                D: #crate_path::serde::Deserializer<#de>
             {
-                use ::module_utils::{DeserializeMap, MapVisitor};
+                use #crate_path::{DeserializeMap, MapVisitor};
 
                 struct __Visitor<#generics> #where_clause {
                     inner: <#struct_name as DeserializeMap<#de>>::Visitor,
                 }
 
-                impl<#generics> ::module_utils::serde::de::Visitor<#de>
+                impl<#generics> #crate_path::serde::de::Visitor<#de>
                 for __Visitor<#generics_short> #where_clause
                 {
                     type Value = #struct_name;
@@ -454,24 +478,24 @@ fn generate_deserialize_impl(input: &DeriveInput) -> TokenStream2 {
 
                     fn visit_map<A>(mut self, mut map: A) -> ::std::result::Result<Self::Value, A::Error>
                     where
-                        A: ::module_utils::serde::de::MapAccess<#de>
+                        A: #crate_path::serde::de::MapAccess<#de>
                     {
                         struct __DeserializeSeed<T> {
                             key: ::std::string::String,
                             inner: T,
                         }
 
-                        impl<#de, T> ::module_utils::serde::de::DeserializeSeed<#de>
+                        impl<#de, T> #crate_path::serde::de::DeserializeSeed<#de>
                         for __DeserializeSeed<T>
                         where
-                            T: ::module_utils::MapVisitor<#de>
+                            T: #crate_path::MapVisitor<#de>
                         {
                             type Value = T;
 
                             fn deserialize<D>(self, deserializer: D)
                                 -> ::std::result::Result<Self::Value, D::Error>
                             where
-                                D: ::module_utils::serde::de::Deserializer<#de>
+                                D: #crate_path::serde::de::Deserializer<#de>
                             {
                                 self.inner.visit_field(&self.key, deserializer)
                             }
@@ -500,9 +524,10 @@ fn generate_deserialize_impl(input: &DeriveInput) -> TokenStream2 {
 
 pub(crate) fn derive_deserialize_map(input: TokenStream) -> Result<TokenStream, Error> {
     let input: DeriveInput = syn::parse(input)?;
+    let container_attrs = ContainerAttributes::try_from(&input)?;
     if let Some(fields) = get_fields(&input) {
-        let deserialize_map = generate_deserialize_map_impl(&input, fields)?;
-        let deserialize = generate_deserialize_impl(&input);
+        let deserialize_map = generate_deserialize_map_impl(&input, fields, &container_attrs)?;
+        let deserialize = generate_deserialize_impl(&input, &container_attrs);
         Ok(quote! {
             #deserialize_map
             #deserialize

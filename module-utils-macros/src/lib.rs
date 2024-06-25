@@ -194,8 +194,7 @@ pub fn derive_request_filter(input: TokenStream) -> TokenStream {
 /// following field attributes are supported, striving for compatibility with the corresponding
 /// [Serde field attributes](https://serde.rs/field-attrs.html):
 ///
-/// * `#[module_utils(rename = "name")]` or
-///   `#[module_utils(rename(deserialize = "name"))]`
+/// * `#[module_utils(rename = "name")]` or `#[module_utils(rename(deserialize = "name"))]`
 ///
 ///   Deserialize this field with the given name instead of its Rust name.
 /// * `#[module_utils(alias = "name")]`
@@ -228,12 +227,21 @@ pub fn derive_request_filter(input: TokenStream) -> TokenStream {
 ///   Same as `deserialize_with` but `$module::deserialize` will be used as the `deserialize_with`
 ///   function.
 ///
-/// As far as [container attributes](https://serde.rs/container-attrs.html) are concerned, only
-/// `rename_all` is currently implemented. For example,
-/// `#[module_utils(rename_all = "kebab-case")]` or
-/// `#[module_utils(deserialize(rename_all = "kebab-case"))]` attribute on the container will
-/// expect fields like `field_name` to be present as `field-name` in the configuration file. If a
-/// field has an individual `rename` attribute, it takes precedence over `rename_all`.
+/// In addition, the following analogs of [Serde’s container
+/// attributes](https://serde.rs/container-attrs.html) are currently supported:
+///
+/// * `#[module_utils(rename_all = "convention")]` or
+///   `#[module_utils(rename_all(deserialize = "convention"))]`
+///
+///   Rename all the fields according to the given case convention. The possible values are
+///   `"lowercase"`, `"UPPERCASE"`, `"PascalCase"`, `"camelCase"`, `"snake_case"`,
+///   `"SCREAMING_SNAKE_CASE"`, `"kebab-case"`, `"SCREAMING-KEBAB-CASE"`. The field’s individual
+///   `rename` attribute takes precedence.
+/// * `#[module_utils(crate = "path")]`
+///
+///   Specify a path to the `module_utils` crate instance to use when referring to APIs from
+///   generated code. This is normally only applicable when `module_utils` isn’t accessible under
+///   its usual name but only as a re-exported name from a different crate.
 ///
 /// Unknown fields will cause a deserialization error, missing fields will be left at their initial
 /// value. This is similar to the behavior of
