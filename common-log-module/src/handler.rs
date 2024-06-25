@@ -82,7 +82,8 @@ impl TryFrom<CommonLogConf> for CommonLogHandler {
                 LogField::BytesSent,
                 LogField::RequestHeader(header::REFERER),
                 LogField::RequestHeader(header::USER_AGENT),
-            ];
+            ]
+            .into();
         }
 
         Ok(Self { conf })

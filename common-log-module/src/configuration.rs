@@ -15,7 +15,7 @@
 //! Structures handling command line options and YAML deserialization for the Common Log Module
 
 use http::HeaderName;
-use module_utils::DeserializeMap;
+use module_utils::{DeserializeMap, OneOrMany};
 use serde::Deserialize;
 use std::path::PathBuf;
 use structopt::StructOpt;
@@ -113,14 +113,14 @@ pub struct CommonLogConf {
     /// ```yaml
     /// [remote_addr, -, -, time_local, request, status, bytes_sent, http_referer, http_user_agent]
     /// ```
-    pub log_format: Vec<LogField>,
+    pub log_format: OneOrMany<LogField>,
 }
 
 impl Default for CommonLogConf {
     fn default() -> Self {
         Self {
             log_file: PathBuf::from("-"),
-            log_format: Vec::new(),
+            log_format: Default::default(),
         }
     }
 }
