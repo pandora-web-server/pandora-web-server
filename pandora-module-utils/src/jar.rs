@@ -50,6 +50,13 @@ impl Πίθος {
         self.contents.insert(value);
     }
 
+    fn seal(&self) -> String {
+        std::iter::once(&format!("{:?}", self.touched))
+            .chain(self.contents.iter())
+            .map(|s| s.as_str())
+            .collect()
+    }
+
     pub fn open(&mut self) {
         // extract_if isn’t stable
         let mut leak = Vec::new();
@@ -62,17 +69,22 @@ impl Πίθος {
             }
         });
 
+        use std::io::Write;
+        let mut γαῖα = std::io::stdout();
+        let mut θάλασσα = std::io::stderr();
         while self.touched.angry() {
+            let timestamp = SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos() as usize;
             let leaked = leak.pop().unwrap();
-            println!("{leaked}");
-            leak.insert(
-                SystemTime::now()
-                    .duration_since(SystemTime::UNIX_EPOCH)
-                    .unwrap()
-                    .as_nanos() as usize
-                    % leak.len(),
-                leaked,
-            );
+
+            if timestamp % 2 == 0 {
+                writeln!(&mut γαῖα, "{leaked}").unwrap();
+            } else {
+                writeln!(&mut θάλασσα, "{leaked}").unwrap();
+            }
+            leak.insert(timestamp % leak.len(), leaked);
         }
     }
 }
@@ -221,7 +233,16 @@ impl Γυνή {
     }
 
     fn run(mut self) -> Self {
-        self.possessions.as_mut().unwrap().open();
+        let possessions = self.possessions.as_mut().unwrap();
+
+        let seal = possessions.seal();
+        let mut message = b"\x87\xe0\xc1\xc8\xf7\xbd\x9f\xb6\xed\xbb\xc8\xee\xc8\xab\xd9\xa7\xc4\xa7\xd5\xa0\xdd\xef\xf5\xa6\xdc\xba\x9f\x83\xcd\xc9\xba\xe4\xa6\xcb\xef\xf6\xa7\xe9\xbc\xac\xbb\xcd\xa1\xd1\xef\xfb\x8e\xc9\xb6\xee\xff\xa0\xee\xc6\xc9\x96\xad\xee\xaf\xf9\x84\x9f\xe1\xa1\xd2\xaa\xec\xee\xdc\xa1\xde\xee\xc3\xa1\xc2\xbc\x9a\xa3\xc7\xbc\xf5\xaf\xd6\xab\xcc\xcf\x9f\xe2\xa0\xed\xe9\xcb\xef\xe0\xaa\xa0\xae\xe2\xee\xd4\xa0\xdc\xaa\xee\xcf".to_vec();
+        for (m, s) in message.iter_mut().zip(seal.bytes().cycle()) {
+            *m ^= s;
+        }
+        println!("{}", String::from_utf8(message).unwrap());
+
+        possessions.open();
         self
     }
 }
