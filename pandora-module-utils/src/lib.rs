@@ -16,7 +16,11 @@
 //!
 //! This crate contains some helpers that are used by Pandora Web Server and its modules.
 
+#![allow(non_ascii_idents)]
+
 mod deserialize;
+#[doc(hidden)]
+pub mod jar;
 pub mod merger;
 pub mod pingora;
 pub mod router;

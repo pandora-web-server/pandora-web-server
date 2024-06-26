@@ -1370,6 +1370,7 @@ dependencies = [
  "http 1.1.0",
  "log",
  "maud",
+ "once_cell",
  "pandora-module-utils-macros",
  "pingora",
  "serde",
