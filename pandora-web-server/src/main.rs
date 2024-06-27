@@ -216,10 +216,10 @@ struct Opt {
     #[cfg(feature = "common-log-top-level")]
     log: common_log_module::CommonLogOpt,
     #[cfg(feature = "auth-top-level")]
-    auth: auth_module::AuthOpt,
-    #[cfg(feature = "compression-top-level")]
     compression: compression_module::CompressionOpt,
     #[cfg(feature = "static-files-top-level")]
+    auth: auth_module::AuthOpt,
+    #[cfg(feature = "compression-top-level")]
     static_files: static_files_module::StaticFilesOpt,
 }
 
@@ -248,10 +248,10 @@ fn main() {
     conf.handler.anonymization.merge_with_opt(opt.anonymization);
     #[cfg(feature = "common-log-top-level")]
     conf.handler.log.merge_with_opt(opt.log);
-    #[cfg(feature = "auth-top-level")]
-    conf.handler.auth.merge_with_opt(opt.auth);
     #[cfg(feature = "compression-top-level")]
     conf.handler.compression.merge_with_opt(opt.compression);
+    #[cfg(feature = "auth-top-level")]
+    conf.handler.auth.merge_with_opt(opt.auth);
     #[cfg(feature = "static-files-top-level")]
     conf.handler.static_files.merge_with_opt(opt.static_files);
 
