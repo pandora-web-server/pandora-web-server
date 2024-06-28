@@ -10,7 +10,7 @@ this functionality.
 
 *Note*: due to [Pingora limitations](https://github.com/cloudflare/pingora/issues/270), the
 original IP address cannot be completely removed at the moment. Code that dereferences
-[`SessionWrapper`] into the original Pingora `Session` data structure or code accessing
+`SessionWrapper` into the original Pingora `Session` data structure or code accessing
 `session.digest()` directly will still get the unanonymized IP address. This will hopefully
 be addressed with a future Pingora version.
 

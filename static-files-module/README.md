@@ -24,7 +24,7 @@ This crate adds capability to serve static files from a directory to the Pandora
 
 ## Code example
 
-You will typically create a [`StaticFilesHandler`] instance and make your server call it during
+You will typically create a `StaticFilesHandler` instance and make your server call it during
 the `request_filter` stage. If configured and called unconditionally it will handle all requests
 so that subsequent stages won’t be reached at all.
 

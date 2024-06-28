@@ -99,8 +99,8 @@ the `auth_display_hash: true` setting now.
 
 You would normally put this handler in front of other handlers, such as the Static Files
 Module. The `pandora-module-utils` and `startup-module` crates provide helpers to simplify
-merging of configuration and the command-line options of various handlers as well as creating a
-server instance from the configuration:
+merging of configuration and the command-line options of various handlers as well as creating
+a server instance from the configuration:
 
 ```rust
 use auth_module::{AuthHandler, AuthOpt};
