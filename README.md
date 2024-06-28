@@ -1,8 +1,11 @@
 # Pandora Web Server
 
 This repository contains various crates related to the Pandora Web Server. You probably want to
-have a look at the [`pandora-web-server` crate](../../tree/main/pandora-web-server). Other than
-that, there are:
+have a look at the [`pandora-web-server` crate](../../tree/main/pandora-web-server). If you are
+interested in creating a custom web server build with your own modules, have a look at the
+[`custom-module` example](../../tree/main/examples/custom-module).
+
+Other than that, there are:
 
 * [Pandora Module Utils](../../tree/main/pandora-module-utils): Various useful helpers used by the
   server and its modules

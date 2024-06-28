@@ -1,0 +1,24 @@
+[package]
+name = "custom-module"
+version = "0.2.0"
+edition = "2021"
+publish = false
+rust-version.workspace = true
+
+[dependencies]
+async-trait = "0.1.80"
+auth-module.workspace = true
+common-log-module.workspace = true
+compression-module.workspace = true
+env_logger.workspace = true
+ip-anonymization-module.workspace = true
+log.workspace = true
+matchit = "0.8.2"
+pandora-module-utils.workspace = true
+regex = { version = "1.10.5", default-features = false, features = ["std"] }
+rewrite-module.workspace = true
+startup-module.workspace = true
+structopt.workspace = true
+
+[lints]
+workspace = true

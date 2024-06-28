@@ -492,6 +492,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "custom-module"
+version = "0.2.0"
+dependencies = [
+ "async-trait",
+ "auth-module",
+ "common-log-module",
+ "compression-module",
+ "env_logger",
+ "ip-anonymization-module",
+ "log",
+ "matchit",
+ "pandora-module-utils",
+ "regex",
+ "rewrite-module",
+ "startup-module",
+ "structopt",
+]
+
+[[package]]
 name = "daemonize"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1179,6 +1198,12 @@ name = "match_cfg"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ffbee8634e0d45d258acb448e7eaab3fce7a0a467395d4d9f228e3c1f01fb2e4"
+
+[[package]]
+name = "matchit"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "540f1c43aed89909c0cc0cc604e3bb2f7e7a341a3728a9e6cfe760e733cd11ed"
 
 [[package]]
 name = "maud"

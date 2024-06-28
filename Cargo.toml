@@ -14,6 +14,7 @@ members = [
   "static-files-module",
   "upstream-module",
   "virtual-hosts-module",
+  "examples/*",
 ]
 default-members = [
   "pandora-web-server",

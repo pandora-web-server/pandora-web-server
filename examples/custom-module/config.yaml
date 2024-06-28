@@ -1,0 +1,4 @@
+routes:
+  /: This is the index page.
+  /404: Nothing to see here, 404.
+  /user/{id}: Hello, {id}!
