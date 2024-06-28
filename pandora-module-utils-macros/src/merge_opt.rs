@@ -14,43 +14,27 @@
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse::Parser, Attribute, DeriveInput, Error, Field};
+use syn::{parse::Parser, Attribute, DeriveInput, Error};
 
 use crate::utils::get_fields_mut;
 
 pub(crate) fn merge_opt(input: TokenStream) -> Result<TokenStream, Error> {
     let mut input: DeriveInput = syn::parse(input)?;
 
-    // Derive Debug and StructOpt implicitly
-    let attributes =
-        quote! {#[derive(::std::fmt::Debug, ::pandora_module_utils::structopt::StructOpt)]};
+    // Derive Debug and Parser implicitly
+    let attributes = quote! {#[derive(::std::fmt::Debug, ::pandora_module_utils::clap::Parser)]};
     let attributes = Attribute::parse_outer.parse2(attributes)?;
     input.attrs.extend(attributes);
 
     if let Some(fields) = get_fields_mut(&mut input) {
-        // Make structopt flatten all fields
+        // Make clap flatten all fields
         for field in fields.named.iter_mut() {
-            let attributes = quote! {#[structopt(flatten)]};
+            let attributes = quote! {#[clap(flatten)]};
             let attributes = Attribute::parse_outer.parse2(attributes)?;
             field.attrs.extend(attributes)
         }
 
-        // Add a dummy field to the end (work-around for
-        // https://github.com/TeXitoi/structopt/issues/539)
-        fields.named.push(Field::parse_named.parse2(quote! {
-            #[structopt(flatten)]
-            _dummy: __Dummy
-        })?);
-
-        let attributes = &input.attrs;
-        Ok(quote! {
-            #input
-
-            #(#attributes)*
-            #[doc(hidden)]
-            struct __Dummy {}
-        }
-        .into())
+        Ok(quote! { #input }.into())
     } else {
         Err(Error::new_spanned(
             &input,

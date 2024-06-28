@@ -146,10 +146,10 @@
 //!
 //! ```rust
 //! use async_trait::async_trait;
+//! use clap::Parser;
 //! use pandora_module_utils::pingora::{Error, HttpPeer, ProxyHttp, Session};
 //! use pandora_module_utils::FromYaml;
 //! use startup_module::{StartupConf, StartupOpt};
-//! use structopt::StructOpt;
 //!
 //! pub struct MyServer;
 //!
@@ -167,7 +167,7 @@
 //!     }
 //! }
 //!
-//! let opt = StartupOpt::from_args();
+//! let opt = StartupOpt::parse();
 //! let conf = StartupConf::load_from_files(opt.conf.as_deref().unwrap_or(&[])).unwrap();
 //! let server = conf.into_server(MyServer {}, Some(opt)).unwrap();
 //!

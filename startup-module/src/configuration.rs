@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use async_trait::async_trait;
+use clap::Parser;
 use pandora_module_utils::pingora::{
     http_proxy_service, Error, ErrorType, ProxyHttp, Server, ServerConf, ServerOpt,
 };
@@ -32,28 +33,27 @@ use std::collections::HashMap;
 use std::fs::read;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use structopt::StructOpt;
 
 use crate::redirector::create_redirector;
 
 pub(crate) const TLS_CONF_ERR: ErrorType = ErrorType::Custom("TLSConfigError");
 
 /// Run a web server
-#[derive(Debug, Default, StructOpt)]
+#[derive(Debug, Default, Parser)]
 pub struct StartupOpt {
     /// Address and port to listen on, e.g. "127.0.0.1:8080". This command line flag can be
     /// specified multiple times.
-    #[structopt(short, long, parse(from_str))]
+    #[clap(short, long, value_parser = clap::value_parser!(String))]
     pub listen: Option<Vec<ListenAddr>>,
     /// Use this flag to make the server run in the background.
-    #[structopt(short, long)]
+    #[clap(short, long)]
     pub daemon: bool,
     /// Test the configuration and exit. This is useful to validate the configuration before
     /// restarting the process.
-    #[structopt(short, long)]
+    #[clap(short, long)]
     pub test: bool,
     /// The path to the configuration file. This command line flag can be specified multiple times.
-    #[structopt(short, long)]
+    #[clap(short, long)]
     pub conf: Option<Vec<String>>,
 }
 

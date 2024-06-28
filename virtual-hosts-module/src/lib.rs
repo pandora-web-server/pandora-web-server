@@ -78,10 +78,10 @@
 //! configuration:
 //!
 //! ```rust
+//! use clap::Parser;
 //! use pandora_module_utils::{merge_conf, FromYaml};
 //! use startup_module::{DefaultApp, StartupConf, StartupOpt};
 //! use static_files_module::{StaticFilesConf, StaticFilesHandler};
-//! use structopt::StructOpt;
 //! use virtual_hosts_module::{VirtualHostsConf, VirtualHostsHandler};
 //!
 //! // Combine statup configuration with virtual hosts wrapping static files configuration.
@@ -92,7 +92,7 @@
 //! }
 //!
 //! // Read command line options and configuration file.
-//! let opt = StartupOpt::from_args();
+//! let opt = StartupOpt::parse();
 //! let conf = Conf::load_from_files(opt.conf.as_deref().unwrap_or(&[])).unwrap();
 //!
 //! // Create a server from the configuration

@@ -27,25 +27,23 @@ mod utils;
 use proc_macro::TokenStream;
 
 /// This attribute macro merges the command-line arguments from all structs identified as field of
-/// the current struct. The result will implement `structopt::StructOpt` and `Debug` automatically.
-/// All field types are required to implement `structopt::StructOpt` and `Debug`.
+/// the current struct. The result will implement `clap::Parser` and `Debug` automatically.
+/// All field types are required to implement `clap::Parser` and `Debug`.
 ///
 /// ```rust
 /// use pandora_module_utils::merge_opt;
 /// use startup_module::StartupOpt;
 /// use static_files_module::StaticFilesOpt;
-/// use structopt::StructOpt;
+/// use clap::Parser;
 ///
-/// #[derive(Debug, StructOpt)]
+/// #[derive(Debug, Parser)]
 /// struct MyAppOpt {
 ///     /// Use to make the server roll over
-///     #[structopt(long)]
+///     #[clap(long)]
 ///     roll_over: bool,
 /// }
 ///
 /// /// Starts my great application.
-/// ///
-/// /// Additional application description just to make a structopt bug work-around work.
 /// #[merge_opt]
 /// struct Opt {
 ///     app: MyAppOpt,
@@ -53,7 +51,7 @@ use proc_macro::TokenStream;
 ///     static_files: StaticFilesOpt,
 /// }
 ///
-/// let opt = Opt::from_args();
+/// let opt = Opt::parse();
 /// println!("Application options: {:?}", opt.app);
 /// println!("Startup module options: {:?}", opt.startup);
 /// println!("Static files options: {:?}", opt.static_files);

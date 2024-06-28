@@ -118,10 +118,10 @@
 //!
 //! ```rust
 //! use auth_module::{AuthHandler, AuthOpt};
+//! use clap::Parser;
 //! use pandora_module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
 //! use startup_module::{DefaultApp, StartupConf, StartupOpt};
 //! use static_files_module::{StaticFilesHandler, StaticFilesOpt};
-//! use structopt::StructOpt;
 //!
 //! #[derive(Debug, RequestFilter)]
 //! struct Handler {
@@ -142,7 +142,7 @@
 //!     static_files: StaticFilesOpt,
 //! }
 //!
-//! let opt = Opt::from_args();
+//! let opt = Opt::parse();
 //! let mut conf = Conf::load_from_files(opt.startup.conf.as_deref().unwrap_or(&[])).unwrap();
 //! conf.handler.auth.merge_with_opt(opt.auth);
 //! conf.handler.static_files.merge_with_opt(opt.static_files);
@@ -158,6 +158,7 @@ mod common;
 mod page;
 
 use async_trait::async_trait;
+use clap::Parser;
 use http::Uri;
 use log::{error, info};
 use pandora_module_utils::pingora::{Error, ErrorType, SessionWrapper};
@@ -166,7 +167,6 @@ use serde::{de::Unexpected, Deserialize, Deserializer};
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::time::Duration;
-use structopt::StructOpt;
 
 use basic::basic_auth;
 use page::page_auth;
@@ -198,26 +198,26 @@ impl FromStr for AuthMode {
 }
 
 /// Command line options of the auth module
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Parser)]
 pub struct AuthOpt {
     /// Use to display a configuration suggestion for your failed login on the 401 Unauthorized
     /// page.
     ///
     /// This allows you to produce a hash for your password without using any third-party tools.
-    #[structopt(long)]
+    #[clap(long)]
     pub auth_display_hash: bool,
     /// Authorization credentials using the format user:hash. This command line flag can be
     /// specified multiple times.
     ///
     /// Supported hashes use the bcrypt format and start with $2b$ or $2y$. Use --auth-display-hash
     /// command line flag to generate a password hash without third-party tools.
-    #[structopt(long)]
+    #[clap(long)]
     pub auth_credentials: Option<Vec<String>>,
     /// Authentication mode, either "http" or "page"
-    #[structopt(long)]
+    #[clap(long)]
     pub auth_mode: Option<AuthMode>,
     /// The authentication realm to communicate to the browser (HTTP mode only)
-    #[structopt(long)]
+    #[clap(long)]
     pub auth_realm: Option<String>,
 }
 

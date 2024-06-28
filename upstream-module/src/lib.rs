@@ -31,9 +31,9 @@
 //! retrieves the previously selected upstream peer.
 //!
 //! ```rust
+//! use clap::Parser;
 //! use pandora_module_utils::{merge_conf, merge_opt, FromYaml};
 //! use startup_module::{DefaultApp, StartupConf, StartupOpt};
-//! use structopt::StructOpt;
 //! use upstream_module::{UpstreamConf, UpstreamHandler, UpstreamOpt};
 //!
 //! #[merge_conf]
@@ -48,7 +48,7 @@
 //!     upstream: UpstreamOpt,
 //! }
 //!
-//! let opt = Opt::from_args();
+//! let opt = Opt::parse();
 //! let mut conf = Conf::load_from_files(opt.startup.conf.as_deref().unwrap_or(&[])).unwrap();
 //! conf.upstream.merge_with_opt(opt.upstream);
 //!
@@ -59,6 +59,7 @@
 //! ```
 
 use async_trait::async_trait;
+use clap::{value_parser, Parser};
 use http::header;
 use http::uri::{Scheme, Uri};
 use log::error;
@@ -67,14 +68,13 @@ use pandora_module_utils::{DeserializeMap, RequestFilter, RequestFilterResult};
 use serde::de::{Deserializer, Error as _};
 use serde::Deserialize as _;
 use std::net::{SocketAddr, ToSocketAddrs};
-use structopt::StructOpt;
 
 /// Command line options of the compression module
-#[derive(Debug, Default, StructOpt)]
+#[derive(Debug, Default, Parser)]
 pub struct UpstreamOpt {
     /// http:// or https:// URL identifying the server that requests should be forwarded for.
     /// Path and query parts of the URL have no effect.
-    #[structopt(long, parse(try_from_str))]
+    #[clap(long, value_parser = value_parser!(String))]
     pub upstream: Option<Uri>,
 }
 

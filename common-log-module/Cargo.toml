@@ -19,19 +19,18 @@ path = "src/lib.rs"
 [dependencies]
 async-trait.workspace = true
 chrono.workspace = true
+clap.workspace = true
 http.workspace = true
 log.workspace = true
 pandora-module-utils.workspace = true
 once_cell = "1.19.0"
 serde.workspace = true
-structopt.workspace = true
 tokio.workspace = true
 
 [dev-dependencies]
 env_logger.workspace = true
 startup-module.workspace = true
 static-files-module.workspace = true
-structopt.workspace = true
 
 [lints]
 workspace = true

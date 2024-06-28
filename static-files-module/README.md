@@ -33,10 +33,10 @@ configuration and the command-line options of various handlers as well as creati
 instance from the configuration:
 
 ```rust
+use clap::Parser;
 use pandora_module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
 use startup_module::{DefaultApp, StartupConf, StartupOpt};
 use static_files_module::{StaticFilesConf, StaticFilesHandler, StaticFilesOpt};
-use structopt::StructOpt;
 
 #[merge_conf]
 struct Conf {
@@ -50,7 +50,7 @@ struct Opt {
     static_files: StaticFilesOpt,
 }
 
-let opt = Opt::from_args();
+let opt = Opt::parse();
 let mut conf = Conf::load_from_files(opt.startup.conf.as_deref().unwrap_or(&[])).unwrap();
 conf.static_files.merge_with_opt(opt.static_files);
 

@@ -14,19 +14,20 @@
 
 //! Structures handling command line options and YAML deserialization for the Common Log Module
 
+use clap::Parser;
 use http::HeaderName;
 use pandora_module_utils::{DeserializeMap, OneOrMany};
 use serde::Deserialize;
+use std::ffi::OsString;
 use std::path::PathBuf;
-use structopt::StructOpt;
 
 /// Command line options of the common log module
-#[derive(Debug, Default, StructOpt)]
+#[derive(Debug, Default, Parser)]
 pub struct CommonLogOpt {
     /// Access log file path
     ///
     /// Special values are an empty string (disable logging) and - (write to standard output).
-    #[structopt(long, parse(from_os_str))]
+    #[clap(long, value_parser = clap::value_parser!(OsString))]
     pub log_file: Option<PathBuf>,
 }
 

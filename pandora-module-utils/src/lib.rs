@@ -42,11 +42,11 @@ pub use pandora_module_utils_macros::{merge_conf, merge_opt, DeserializeMap, Req
 #[doc(hidden)]
 pub use async_trait;
 #[doc(hidden)]
+pub use clap;
+#[doc(hidden)]
 pub use serde;
 #[doc(hidden)]
 pub use serde_yaml;
-#[doc(hidden)]
-pub use structopt;
 
 /// Request filter result indicating how the current request should be processed further
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default, Deserialize)]

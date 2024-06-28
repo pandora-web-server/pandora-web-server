@@ -151,10 +151,10 @@
 //! module instances will interact with each other is a different question however. Such setups are
 //! unsupported.
 
+use clap::Parser;
 use log::error;
 use pandora_module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
 use startup_module::{DefaultApp, StartupConf, StartupOpt};
-use structopt::StructOpt;
 
 #[derive(Debug, Clone, PartialEq, Eq, RequestFilter)]
 struct Handler {
@@ -233,7 +233,7 @@ struct Conf {
 fn main() {
     env_logger::init();
 
-    let opt = Opt::from_args();
+    let opt = Opt::parse();
 
     #[allow(unused_mut)]
     let mut conf = match Conf::load_from_files(opt.startup.conf.as_deref().unwrap_or(&[])) {

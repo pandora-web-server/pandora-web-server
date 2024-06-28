@@ -25,12 +25,12 @@ syn = { version = "2.0.62", features = ["extra-traits", "full", "visit"] }
 
 [dev-dependencies]
 async-trait.workspace = true
+clap.workspace = true
 compression-module.workspace = true
 env_logger.workspace = true
 pandora-module-utils.workspace = true
 startup-module.workspace = true
 static-files-module.workspace = true
-structopt.workspace = true
 test-log.workspace = true
 tokio.workspace = true
 

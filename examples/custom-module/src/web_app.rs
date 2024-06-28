@@ -32,12 +32,12 @@
 //! ```
 
 use async_trait::async_trait;
+use clap::Parser;
 use matchit::Router;
 use pandora_module_utils::pingora::{Error, ErrorType, ResponseHeader, SessionWrapper};
 use pandora_module_utils::{DeserializeMap, RequestFilter, RequestFilterResult};
 use regex::{Captures, Regex};
 use std::collections::HashMap;
-use structopt::StructOpt;
 
 /// Configuration file options
 #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
@@ -57,10 +57,10 @@ impl WebAppConf {
 }
 
 /// Command line options
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Parser)]
 pub(crate) struct WebAppOpt {
     /// Add a route to be handled, e.g. "/user/{id}=Welcome, {id}!"
-    #[structopt(long, parse(try_from_str = WebAppOpt::parse_route))]
+    #[clap(long, value_parser = WebAppOpt::parse_route)]
     add_route: Option<Vec<(String, String)>>,
 }
 

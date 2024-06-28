@@ -21,6 +21,7 @@ async-trait.workspace = true
 base64 = "0.22.1"
 bcrypt = "0.15.1"
 bytes.workspace = true
+clap.workspace = true
 getrandom = "0.2.15"
 hmac = "0.12.1"
 http.workspace = true
@@ -33,13 +34,11 @@ pingora-limits.workspace = true
 serde.workspace = true
 serde_urlencoded = "0.7.1"
 sha2 = "0.10.8"
-structopt.workspace = true
 
 [dev-dependencies]
 env_logger.workspace = true
 startup-module.workspace = true
 static-files-module.workspace = true
-structopt.workspace = true
 test-log.workspace = true
 tokio.workspace = true
 

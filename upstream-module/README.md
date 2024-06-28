@@ -17,9 +17,9 @@ an upstream peer and modifies the request by adding the appropriate `Host` heade
 retrieves the previously selected upstream peer.
 
 ```rust
+use clap::Parser;
 use pandora_module_utils::{merge_conf, merge_opt, FromYaml};
 use startup_module::{DefaultApp, StartupConf, StartupOpt};
-use structopt::StructOpt;
 use upstream_module::{UpstreamConf, UpstreamHandler, UpstreamOpt};
 
 #[merge_conf]
@@ -34,7 +34,7 @@ struct Opt {
     upstream: UpstreamOpt,
 }
 
-let opt = Opt::from_args();
+let opt = Opt::parse();
 let mut conf = Conf::load_from_files(opt.startup.conf.as_deref().unwrap_or(&[])).unwrap();
 conf.upstream.merge_with_opt(opt.upstream);
 

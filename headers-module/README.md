@@ -146,12 +146,12 @@ phase (apply the headers to upstream responses). When `DefaultApp` is used, it w
 `handler.call_response_filter()` during the `upstream_response_filter` phase.
 
 ```rust
+use clap::Parser;
 use compression_module::{CompressionHandler, CompressionOpt};
 use headers_module::HeadersHandler;
 use pandora_module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
 use startup_module::{DefaultApp, StartupConf, StartupOpt};
 use upstream_module::UpstreamHandler;
-use structopt::StructOpt;
 
 #[derive(Debug, RequestFilter)]
 struct Handler {
@@ -172,7 +172,7 @@ struct Opt {
     compression: CompressionOpt,
 }
 
-let opt = Opt::from_args();
+let opt = Opt::parse();
 let mut conf = Conf::load_from_files(opt.startup.conf.as_deref().unwrap_or(&[])).unwrap();
 conf.handler.compression.merge_with_opt(opt.compression);
 

@@ -32,11 +32,11 @@
 //! a server instance from the configuration:
 //!
 //! ```rust
+//! use clap::Parser;
 //! use compression_module::{CompressionConf, CompressionHandler, CompressionOpt};
 //! use pandora_module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
 //! use startup_module::{DefaultApp, StartupConf, StartupOpt};
 //! use static_files_module::{StaticFilesHandler, StaticFilesOpt};
-//! use structopt::StructOpt;
 //!
 //! #[derive(Debug, RequestFilter)]
 //! struct Handler {
@@ -57,7 +57,7 @@
 //!     handler: <Handler as RequestFilter>::Conf,
 //! }
 //!
-//! let opt = Opt::from_args();
+//! let opt = Opt::parse();
 //! let mut conf = Conf::load_from_files(opt.startup.conf.as_deref().unwrap_or(&[])).unwrap();
 //! conf.handler.compression.merge_with_opt(opt.compression);
 //! conf.handler.static_files.merge_with_opt(opt.static_files);
@@ -69,19 +69,19 @@
 //! ```
 
 use async_trait::async_trait;
+use clap::Parser;
 use pandora_module_utils::pingora::{Error, SessionWrapper};
 use pandora_module_utils::{DeserializeMap, RequestFilter, RequestFilterResult};
-use structopt::StructOpt;
 
 /// Command line options of the compression module
-#[derive(Debug, Default, StructOpt)]
+#[derive(Debug, Default, Parser)]
 pub struct CompressionOpt {
     /// Compression level to be used for dynamic compression (omit to disable compression)
-    #[structopt(long)]
+    #[clap(long)]
     pub compression_level: Option<u32>,
 
     /// Decompress upstream responses before passing them on
-    #[structopt(long)]
+    #[clap(long)]
     pub decompress_upstream: bool,
 }
 

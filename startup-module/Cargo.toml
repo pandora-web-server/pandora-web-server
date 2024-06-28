@@ -18,11 +18,11 @@ path = "src/lib.rs"
 
 [dependencies]
 async-trait.workspace = true
+clap.workspace = true
 http.workspace = true
 pandora-module-utils.workspace = true
 pingora.workspace = true
 serde.workspace = true
-structopt.workspace = true
 
 [lints]
 workspace = true

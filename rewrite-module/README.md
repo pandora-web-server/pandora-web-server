@@ -51,11 +51,11 @@ helpers to simplify merging of configuration and the command-line options of var
 as well as creating a server instance from the configuration:
 
 ```rust
+use clap::Parser;
 use pandora_module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
 use rewrite_module::RewriteHandler;
 use startup_module::{DefaultApp, StartupConf, StartupOpt};
 use static_files_module::{StaticFilesHandler, StaticFilesOpt};
-use structopt::StructOpt;
 
 #[derive(Debug, RequestFilter)]
 struct Handler {
@@ -75,7 +75,7 @@ struct Opt {
     static_files: StaticFilesOpt,
 }
 
-let opt = Opt::from_args();
+let opt = Opt::parse();
 let mut conf = Conf::load_from_files(opt.startup.conf.as_deref().unwrap_or(&[])).unwrap();
 conf.handler.static_files.merge_with_opt(opt.static_files);
 

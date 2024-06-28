@@ -32,6 +32,7 @@
 mod web_app;
 
 use auth_module::{AuthHandler, AuthOpt};
+use clap::Parser;
 use common_log_module::{CommonLogHandler, CommonLogOpt};
 use compression_module::{CompressionHandler, CompressionOpt};
 use ip_anonymization_module::{IPAnonymizationHandler, IPAnonymizationOpt};
@@ -39,7 +40,6 @@ use log::error;
 use pandora_module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
 use rewrite_module::RewriteHandler;
 use startup_module::{DefaultApp, StartupConf, StartupOpt};
-use structopt::StructOpt;
 
 use web_app::{WebAppHandler, WebAppOpt};
 
@@ -74,7 +74,7 @@ struct Conf {
 fn main() {
     env_logger::init();
 
-    let opt = Opt::from_args();
+    let opt = Opt::parse();
 
     #[allow(unused_mut)]
     let mut conf = match Conf::load_from_files(opt.startup.conf.as_deref().unwrap_or(&[])) {

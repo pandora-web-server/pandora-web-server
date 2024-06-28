@@ -85,6 +85,55 @@ dependencies = [
 ]
 
 [[package]]
+name = "anstream"
+version = "0.6.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "418c75fa768af9c03be99d17643f93f79bbba589895012a80e3452a19ddda15b"
+dependencies = [
+ "anstyle",
+ "anstyle-parse",
+ "anstyle-query",
+ "anstyle-wincon",
+ "colorchoice",
+ "is_terminal_polyfill",
+ "utf8parse",
+]
+
+[[package]]
+name = "anstyle"
+version = "1.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "038dfcf04a5feb68e9c60b21c9625a54c2c0616e79b72b0fd87075a056ae1d1b"
+
+[[package]]
+name = "anstyle-parse"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c03a11a9034d92058ceb6ee011ce58af4a9bf61491aa7e1e59ecd24bd40d22d4"
+dependencies = [
+ "utf8parse",
+]
+
+[[package]]
+name = "anstyle-query"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ad186efb764318d35165f1758e7dcef3b10628e26d41a44bc5550652e6804391"
+dependencies = [
+ "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "anstyle-wincon"
+version = "3.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "61a38449feb7068f52bb06c12759005cf459ee52bb4adc1d5a7c4322d716fb19"
+dependencies = [
+ "anstyle",
+ "windows-sys 0.52.0",
+]
+
+[[package]]
 name = "arc-swap"
 version = "1.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -154,6 +203,7 @@ dependencies = [
  "base64 0.22.1",
  "bcrypt",
  "bytes",
+ "clap 4.5.7",
  "env_logger",
  "getrandom",
  "hmac",
@@ -169,7 +219,6 @@ dependencies = [
  "sha2",
  "startup-module",
  "static-files-module",
- "structopt",
  "test-log",
  "tokio",
 ]
@@ -355,11 +404,51 @@ dependencies = [
  "ansi_term",
  "atty",
  "bitflags 1.3.2",
- "strsim",
+ "strsim 0.8.0",
  "textwrap",
  "unicode-width",
  "vec_map",
 ]
+
+[[package]]
+name = "clap"
+version = "4.5.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5db83dced34638ad474f39f250d7fea9598bdd239eaced1bdf45d597da0f433f"
+dependencies = [
+ "clap_builder",
+ "clap_derive",
+]
+
+[[package]]
+name = "clap_builder"
+version = "4.5.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f7e204572485eb3fbf28f871612191521df159bc3e15a9f5064c66dba3a8c05f"
+dependencies = [
+ "anstream",
+ "anstyle",
+ "clap_lex",
+ "strsim 0.11.1",
+]
+
+[[package]]
+name = "clap_derive"
+version = "4.5.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c780290ccf4fb26629baa7a1081e68ced113f1d3ec302fa5948f1c381ebf06c6"
+dependencies = [
+ "heck 0.5.0",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.68",
+]
+
+[[package]]
+name = "clap_lex"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4b82cf0babdbd58558212896d1a4272303a57bdb245c2bf1147185fb45640e70"
 
 [[package]]
 name = "cmake"
@@ -371,11 +460,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "colorchoice"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b6a852b24ab71dffc585bcb46eaf7959d175cb865a7152e35b348d1b2960422"
+
+[[package]]
 name = "common-log-module"
 version = "0.2.0"
 dependencies = [
  "async-trait",
  "chrono",
+ "clap 4.5.7",
  "env_logger",
  "http 1.1.0",
  "log",
@@ -384,7 +480,6 @@ dependencies = [
  "serde",
  "startup-module",
  "static-files-module",
- "structopt",
  "tokio",
 ]
 
@@ -393,12 +488,12 @@ name = "compression-module"
 version = "0.2.0"
 dependencies = [
  "async-trait",
+ "clap 4.5.7",
  "env_logger",
  "log",
  "pandora-module-utils",
  "startup-module",
  "static-files-module",
- "structopt",
  "test-log",
  "tokio",
 ]
@@ -497,6 +592,7 @@ version = "0.2.0"
 dependencies = [
  "async-trait",
  "auth-module",
+ "clap 4.5.7",
  "common-log-module",
  "compression-module",
  "env_logger",
@@ -507,7 +603,6 @@ dependencies = [
  "regex",
  "rewrite-module",
  "startup-module",
- "structopt",
 ]
 
 [[package]]
@@ -860,6 +955,7 @@ name = "headers-module"
 version = "0.2.0"
 dependencies = [
  "async-trait",
+ "clap 4.5.7",
  "compression-module",
  "env_logger",
  "http 1.1.0",
@@ -867,7 +963,6 @@ dependencies = [
  "pandora-module-utils",
  "serde",
  "startup-module",
- "structopt",
  "test-log",
  "tokio",
  "upstream-module",
@@ -881,6 +976,12 @@ checksum = "6d621efb26863f0e9924c6ac577e8275e5e6b77455db64ffa6c65c904e9e132c"
 dependencies = [
  "unicode-segmentation",
 ]
+
+[[package]]
+name = "heck"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "hermit-abi"
@@ -1085,12 +1186,12 @@ name = "ip-anonymization-module"
 version = "0.2.0"
 dependencies = [
  "async-trait",
+ "clap 4.5.7",
  "env_logger",
  "log",
  "pandora-module-utils",
  "startup-module",
  "static-files-module",
- "structopt",
  "test-log",
  "tokio",
 ]
@@ -1100,6 +1201,12 @@ name = "ipnet"
 version = "2.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f518f335dce6725a761382244631d86cf0ccb2863413590b31338feb467f9c3"
+
+[[package]]
+name = "is_terminal_polyfill"
+version = "1.70.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f8478577c03552c21db0e2724ffb8986a5ce7af88107e6be5d2ee6e158c12800"
 
 [[package]]
 name = "itoa"
@@ -1390,6 +1497,7 @@ version = "0.2.0"
 dependencies = [
  "async-trait",
  "bytes",
+ "clap 4.5.7",
  "enumset",
  "glob",
  "http 1.1.0",
@@ -1400,7 +1508,6 @@ dependencies = [
  "pingora",
  "serde",
  "serde_yaml",
- "structopt",
 ]
 
 [[package]]
@@ -1408,6 +1515,7 @@ name = "pandora-module-utils-macros"
 version = "0.2.0"
 dependencies = [
  "async-trait",
+ "clap 4.5.7",
  "compression-module",
  "env_logger",
  "pandora-module-utils",
@@ -1416,7 +1524,6 @@ dependencies = [
  "serde_derive_internals",
  "startup-module",
  "static-files-module",
- "structopt",
  "syn 2.0.68",
  "test-log",
  "tokio",
@@ -1427,6 +1534,7 @@ name = "pandora-web-server"
 version = "0.2.0"
 dependencies = [
  "auth-module",
+ "clap 4.5.7",
  "common-log-module",
  "compression-module",
  "env_logger",
@@ -1437,7 +1545,6 @@ dependencies = [
  "rewrite-module",
  "startup-module",
  "static-files-module",
- "structopt",
  "upstream-module",
  "virtual-hosts-module",
 ]
@@ -1941,6 +2048,7 @@ name = "rewrite-module"
 version = "0.2.0"
 dependencies = [
  "async-trait",
+ "clap 4.5.7",
  "env_logger",
  "http 1.1.0",
  "log",
@@ -1949,7 +2057,6 @@ dependencies = [
  "serde",
  "startup-module",
  "static-files-module",
- "structopt",
  "test-log",
  "tokio",
 ]
@@ -2315,11 +2422,11 @@ name = "startup-module"
 version = "0.2.0"
 dependencies = [
  "async-trait",
+ "clap 4.5.7",
  "http 1.1.0",
  "pandora-module-utils",
  "pingora",
  "serde",
- "structopt",
 ]
 
 [[package]]
@@ -2328,6 +2435,7 @@ version = "0.2.0"
 dependencies = [
  "async-trait",
  "bytes",
+ "clap 4.5.7",
  "compression-module",
  "const_format",
  "env_logger",
@@ -2339,7 +2447,6 @@ dependencies = [
  "percent-encoding",
  "serde",
  "startup-module",
- "structopt",
  "test-log",
  "tokio",
 ]
@@ -2351,12 +2458,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ea5119cdb4c55b55d432abb513a0429384878c15dde60cc77b1c99de1a95a6a"
 
 [[package]]
+name = "strsim"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
+
+[[package]]
 name = "structopt"
 version = "0.3.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c6b5c64445ba8094a6ab0c3cd2ad323e07171012d9c98b0b15651daf1787a10"
 dependencies = [
- "clap",
+ "clap 2.34.0",
  "lazy_static",
  "structopt-derive",
 ]
@@ -2367,7 +2480,7 @@ version = "0.4.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dcb5ae327f9cc13b68763b5749770cb9e048a99bd9dfdfa58d0cf05d5f64afe0"
 dependencies = [
- "heck",
+ "heck 0.3.3",
  "proc-macro-error",
  "proc-macro2",
  "quote",
@@ -2766,13 +2879,13 @@ name = "upstream-module"
 version = "0.2.0"
 dependencies = [
  "async-trait",
+ "clap 4.5.7",
  "env_logger",
  "http 1.1.0",
  "log",
  "pandora-module-utils",
  "serde",
  "startup-module",
- "structopt",
  "test-log",
  "tokio",
 ]
@@ -2788,6 +2901,12 @@ dependencies = [
  "percent-encoding",
  "serde",
 ]
+
+[[package]]
+name = "utf8parse"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "uuid"
@@ -2822,13 +2941,13 @@ name = "virtual-hosts-module"
 version = "0.2.0"
 dependencies = [
  "async-trait",
+ "clap 4.5.7",
  "env_logger",
  "http 1.1.0",
  "log",
  "pandora-module-utils",
  "startup-module",
  "static-files-module",
- "structopt",
  "test-log",
  "tokio",
 ]

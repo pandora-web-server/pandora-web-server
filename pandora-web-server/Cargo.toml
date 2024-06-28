@@ -14,6 +14,7 @@ A fast and configurable web server based on Cloudflare’s Pingora framework
 
 [dependencies]
 auth-module = { workspace = true, optional = true }
+clap.workspace = true
 common-log-module = { workspace = true, optional = true }
 compression-module = { workspace = true, optional = true }
 env_logger.workspace = true
@@ -24,7 +25,6 @@ pandora-module-utils.workspace = true
 rewrite-module = { workspace = true, optional = true }
 startup-module.workspace = true
 static-files-module = { workspace = true, optional = true }
-structopt.workspace = true
 upstream-module = { workspace = true, optional = true }
 virtual-hosts-module = { workspace = true, optional = true }
 

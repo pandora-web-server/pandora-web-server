@@ -40,11 +40,11 @@
 //! phase:
 //!
 //! ```rust
+//! use clap::Parser;
 //! use ip_anonymization_module::{IPAnonymizationHandler, IPAnonymizationOpt};
 //! use pandora_module_utils::{merge_conf, merge_opt, FromYaml, RequestFilter};
 //! use startup_module::{DefaultApp, StartupConf, StartupOpt};
 //! use static_files_module::{StaticFilesHandler, StaticFilesOpt};
-//! use structopt::StructOpt;
 //!
 //! #[derive(Debug, RequestFilter)]
 //! struct Handler {
@@ -65,7 +65,7 @@
 //!     static_files: StaticFilesOpt,
 //! }
 //!
-//! let opt = Opt::from_args();
+//! let opt = Opt::parse();
 //! let mut conf = Conf::load_from_files(opt.startup.conf.as_deref().unwrap_or(&[])).unwrap();
 //! conf.handler.anonymization.merge_with_opt(opt.anonymization);
 //! conf.handler.static_files.merge_with_opt(opt.static_files);
@@ -79,15 +79,15 @@
 use std::net::IpAddr;
 
 use async_trait::async_trait;
+use clap::Parser;
 use pandora_module_utils::pingora::{Error, SessionWrapper, SocketAddr};
 use pandora_module_utils::{DeserializeMap, RequestFilter, RequestFilterResult};
-use structopt::StructOpt;
 
 /// Command line options of the IP anonymization module
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Parser)]
 pub struct IPAnonymizationOpt {
     /// Enables IP address anonymization
-    #[structopt(long)]
+    #[clap(long)]
     pub anonymization_enabled: bool,
 }
 

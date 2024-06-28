@@ -14,36 +14,37 @@
 
 //! Data structures required for `StaticFilesHandler` configuration
 
+use clap::Parser;
 use pandora_module_utils::{DeserializeMap, OneOrMany};
+use std::ffi::OsString;
 use std::path::PathBuf;
-use structopt::StructOpt;
 
 use crate::compression_algorithm::CompressionAlgorithm;
 
 /// Command line options of the static files module
-#[derive(Debug, Default, StructOpt)]
+#[derive(Debug, Default, Parser)]
 pub struct StaticFilesOpt {
     /// The root directory.
-    #[structopt(short, long, parse(from_os_str))]
+    #[clap(short, long, value_parser = clap::value_parser!(OsString))]
     pub root: Option<PathBuf>,
 
     /// Redirect /file%2e.txt to /file.txt and /dir to /dir/.
-    #[structopt(long)]
+    #[clap(long)]
     pub canonicalize_uri: Option<bool>,
 
     /// Index file to look for when displaying a directory. This command line flag can be specified
     /// multiple times.
-    #[structopt(long)]
+    #[clap(long)]
     pub index_file: Option<Vec<String>>,
 
     /// URI path of the page to display instead of the default Not Found page, e.g. /404.html
-    #[structopt(long)]
+    #[clap(long)]
     pub page_404: Option<String>,
 
     /// File extension to check when looking for pre-compressed versions of a file. This command
     /// line flag can be specified multiple times. Supported file extensions are gz (gzip),
     /// zz (zlib deflate), z (compress), br (Brotli), zst (Zstandard).
-    #[structopt(long)]
+    #[clap(long, value_parser = clap::value_parser!(String))]
     pub precompressed: Option<Vec<CompressionAlgorithm>>,
 }
 

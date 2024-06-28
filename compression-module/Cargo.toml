@@ -18,9 +18,9 @@ path = "src/lib.rs"
 
 [dependencies]
 async-trait.workspace = true
+clap.workspace = true
 log.workspace = true
 pandora-module-utils.workspace = true
-structopt.workspace = true
 
 [dev-dependencies]
 env_logger.workspace = true
