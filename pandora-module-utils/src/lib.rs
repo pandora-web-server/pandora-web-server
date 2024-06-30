@@ -94,9 +94,11 @@ pub trait RequestFilter: Sized {
     /// for the existence of multiple chained handlers.
     async fn request_filter(
         &self,
-        session: &mut impl SessionWrapper,
-        ctx: &mut Self::CTX,
-    ) -> Result<RequestFilterResult, Box<Error>>;
+        _session: &mut impl SessionWrapper,
+        _ctx: &mut Self::CTX,
+    ) -> Result<RequestFilterResult, Box<Error>> {
+        Ok(RequestFilterResult::Unhandled)
+    }
 
     /// Handler to run during Pingora’s `upstream_peer` phase, see
     /// [`pingora::ProxyHttp::upstream_peer`]. This uses a different return type to account
