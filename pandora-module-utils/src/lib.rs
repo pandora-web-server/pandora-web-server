@@ -150,6 +150,10 @@ pub trait RequestFilter: Sized {
     type CTX;
 
     /// Creates a new state object, see [`pingora::ProxyHttp::new_ctx`]
+    ///
+    /// Unlike Pingora’s method, this one is static. This is to accommodate the virtual hosts
+    /// scenario: the session isn’t available at this point, so it isn’t yet known which one of the
+    /// possible host-specific handlers will run.
     fn new_ctx() -> Self::CTX;
 
     /// Handler to run during Pingora’s `request_filter` phase, see
