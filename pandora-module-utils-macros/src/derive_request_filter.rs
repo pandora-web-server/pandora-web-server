@@ -118,17 +118,6 @@ fn generate_request_filter_impl(
                     ::std::result::Result::Ok(pandora_module_utils::RequestFilterResult::Unhandled)
                 }
 
-                fn request_filter_done(
-                    &self,
-                    _session: &mut impl ::pandora_module_utils::pingora::SessionWrapper,
-                    _ctx: &mut Self::CTX,
-                    _result: ::pandora_module_utils::RequestFilterResult,
-                ) {
-                    #(
-                        self.#field_name.request_filter_done(_session, &mut _ctx.#field_name, _result);
-                    )*
-                }
-
                 async fn upstream_peer(
                     &self,
                     _session: &mut impl ::pandora_module_utils::pingora::SessionWrapper,

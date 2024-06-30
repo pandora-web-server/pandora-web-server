@@ -181,10 +181,15 @@ use async_trait::async_trait;
 pub use configuration::{
     CertKeyConf, ListenAddr, StartupConf, StartupOpt, TlsConf, TlsRedirectorConf,
 };
-use pandora_module_utils::pingora::{Error, HttpPeer, ProxyHttp, ResponseHeader, Session};
-use pandora_module_utils::RequestFilter;
+use http::Extensions;
+use pandora_module_utils::pingora::{
+    Error, HttpPeer, ProxyHttp, ResponseHeader, Session, SessionWrapper,
+};
+use pandora_module_utils::{RequestFilter, RequestFilterResult};
+use pingora::ErrorType;
+use std::ops::{Deref, DerefMut};
 
-/// A trivial Pingora app implementation, to be passed to [`StartupConf::into_server`]
+/// A basic Pingora app implementation, to be passed to [`StartupConf::into_server`]
 ///
 /// This app will only handle the `request_filter`, `upstream_peer`, `upstream_response_filter` and
 /// `logging` phases. All processing will be delegated to the respective `RequestFilter` methods.
@@ -210,16 +215,26 @@ impl<H> DefaultApp<H> {
     }
 }
 
+/// Context for the default app
+#[derive(Debug, Clone)]
+pub struct DefaultCtx<C> {
+    extensions: Extensions,
+    handler: C,
+}
+
 #[async_trait]
 impl<H> ProxyHttp for DefaultApp<H>
 where
     H: RequestFilter + Sync,
     H::CTX: Send,
 {
-    type CTX = <H as RequestFilter>::CTX;
+    type CTX = DefaultCtx<<H as RequestFilter>::CTX>;
 
     fn new_ctx(&self) -> Self::CTX {
-        H::new_ctx()
+        Self::CTX {
+            extensions: Extensions::new(),
+            handler: H::new_ctx(),
+        }
     }
 
     async fn request_filter(
@@ -227,7 +242,12 @@ where
         session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> Result<bool, Box<Error>> {
-        self.handler.call_request_filter(session, ctx).await
+        let mut session = SessionWrapperImpl::new(session, &self.handler, &mut ctx.extensions);
+        Ok(self
+            .handler
+            .request_filter(&mut session, &mut ctx.handler)
+            .await?
+            == RequestFilterResult::ResponseSent)
     }
 
     async fn upstream_peer(
@@ -235,7 +255,16 @@ where
         session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> Result<Box<HttpPeer>, Box<Error>> {
-        self.handler.call_upstream_peer(session, ctx).await
+        let mut session = SessionWrapperImpl::new(session, &self.handler, &mut ctx.extensions);
+        let result = self
+            .handler
+            .upstream_peer(&mut session, &mut ctx.handler)
+            .await?;
+        if let Some(result) = result {
+            Ok(result)
+        } else {
+            Err(Error::new(ErrorType::HTTPStatus(404)))
+        }
     }
 
     fn upstream_response_filter(
@@ -244,10 +273,77 @@ where
         response: &mut ResponseHeader,
         ctx: &mut Self::CTX,
     ) {
-        self.handler.call_response_filter(session, response, ctx)
+        let mut session = SessionWrapperImpl::new(session, &self.handler, &mut ctx.extensions);
+        self.handler
+            .response_filter(&mut session, response, Some(&mut ctx.handler))
     }
 
     async fn logging(&self, session: &mut Session, e: Option<&Error>, ctx: &mut Self::CTX) {
-        self.handler.call_logging(session, e, ctx).await
+        let mut session = SessionWrapperImpl::new(session, &self.handler, &mut ctx.extensions);
+        self.handler
+            .logging(&mut session, e, &mut ctx.handler)
+            .await
+    }
+}
+
+struct SessionWrapperImpl<'a, H> {
+    inner: &'a mut Session,
+    handler: &'a H,
+    extensions: &'a mut Extensions,
+}
+
+impl<'a, H> SessionWrapperImpl<'a, H> {
+    /// Creates a new session wrapper for the given Pingora session.
+    fn new(inner: &'a mut Session, handler: &'a H, extensions: &'a mut Extensions) -> Self
+    where
+        H: RequestFilter,
+    {
+        Self {
+            inner,
+            handler,
+            extensions,
+        }
+    }
+}
+
+#[async_trait]
+impl<H> SessionWrapper for SessionWrapperImpl<'_, H>
+where
+    H: RequestFilter,
+    for<'a> &'a H: Send,
+{
+    fn extensions(&self) -> &Extensions {
+        self.extensions
+    }
+
+    fn extensions_mut(&mut self) -> &mut Extensions {
+        self.extensions
+    }
+
+    async fn write_response_header(
+        &mut self,
+        mut resp: Box<ResponseHeader>,
+    ) -> Result<(), Box<Error>> {
+        self.handler.response_filter(self, &mut resp, None);
+
+        self.deref_mut().write_response_header(resp).await
+    }
+
+    async fn write_response_header_ref(&mut self, resp: &ResponseHeader) -> Result<(), Box<Error>> {
+        self.write_response_header(Box::new(resp.clone())).await
+    }
+}
+
+impl<H> Deref for SessionWrapperImpl<'_, H> {
+    type Target = Session;
+
+    fn deref(&self) -> &Self::Target {
+        self.inner
+    }
+}
+
+impl<H> DerefMut for SessionWrapperImpl<'_, H> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.inner
     }
 }

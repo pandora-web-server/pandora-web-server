@@ -28,7 +28,7 @@ pub mod standard_response;
 mod trie;
 
 use log::{error, info, trace};
-use pingora::{wrap_session, Error, ErrorType, HttpPeer, ResponseHeader, Session, SessionWrapper};
+use pingora::{Error, ErrorType, HttpPeer, ResponseHeader, SessionWrapper};
 use serde::{de::DeserializeSeed, Deserialize};
 use std::fmt::Debug;
 use std::fs::File;
@@ -79,73 +79,6 @@ pub trait RequestFilter: Sized {
         conf.try_into()
     }
 
-    /// Handles the `request_filter` phase of the current request.
-    ///
-    /// This will wrap the current session and call `request_filter` and `request_filter_done`
-    /// methods of the handler. The result of this method can be returned in the `request_filter`
-    /// phase without further conversion.
-    async fn call_request_filter(
-        &self,
-        session: &mut Session,
-        ctx: &mut Self::CTX,
-    ) -> Result<bool, Box<Error>>
-    where
-        Self::CTX: Send,
-    {
-        let mut session = wrap_session(session, self);
-        let result = self.request_filter(&mut session, ctx).await?;
-        self.request_filter_done(&mut session, ctx, result);
-        Ok(result == RequestFilterResult::ResponseSent)
-    }
-
-    /// Handles the `upstream_peer` phase of the current request.
-    ///
-    /// This will wrap the current session and call `upstream_peer` method of the handler. The
-    /// result of this method can be returned in the `upstream_peer` phase without further
-    /// conversion.
-    async fn call_upstream_peer(
-        &self,
-        session: &mut Session,
-        ctx: &mut Self::CTX,
-    ) -> Result<Box<HttpPeer>, Box<Error>>
-    where
-        Self::CTX: Send,
-    {
-        let mut session = wrap_session(session, self);
-        let result = self.upstream_peer(&mut session, ctx).await?;
-        if let Some(result) = result {
-            Ok(result)
-        } else {
-            Err(Error::new(ErrorType::HTTPStatus(404)))
-        }
-    }
-
-    /// Handles the `upstream_response_filter` or `response_filter` phase of the current request.
-    ///
-    /// This will wrap the current session and call `response_filter` method of the handler then.
-    fn call_response_filter(
-        &self,
-        session: &mut Session,
-        response: &mut ResponseHeader,
-        ctx: &mut Self::CTX,
-    ) where
-        Self: Sync,
-    {
-        let mut session = wrap_session(session, self);
-        self.response_filter(&mut session, response, Some(ctx))
-    }
-
-    /// Handles the `logging` phase of the current request.
-    ///
-    /// This will wrap the current session and call `logging` method of the handler then.
-    async fn call_logging(&self, session: &mut Session, e: Option<&Error>, ctx: &mut Self::CTX)
-    where
-        Self::CTX: Send,
-    {
-        let mut session = wrap_session(session, self);
-        self.logging(&mut session, e, ctx).await
-    }
-
     /// Per-request state of this handler, see [`pingora::ProxyHttp::CTX`]
     type CTX;
 
@@ -164,16 +97,6 @@ pub trait RequestFilter: Sized {
         session: &mut impl SessionWrapper,
         ctx: &mut Self::CTX,
     ) -> Result<RequestFilterResult, Box<Error>>;
-
-    /// Called after `request_filter` was called for all handlers and a result was produced. This
-    /// allows the handler to perform some post-processing.
-    fn request_filter_done(
-        &self,
-        _session: &mut impl SessionWrapper,
-        _ctx: &mut Self::CTX,
-        _result: RequestFilterResult,
-    ) {
-    }
 
     /// Handler to run during Pingora’s `upstream_peer` phase, see
     /// [`pingora::ProxyHttp::upstream_peer`]. This uses a different return type to account

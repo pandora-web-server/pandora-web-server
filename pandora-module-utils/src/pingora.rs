@@ -30,8 +30,6 @@ use std::borrow::Cow;
 use std::io::{Cursor, Seek, SeekFrom, Write};
 use std::ops::{Deref, DerefMut};
 
-use crate::RequestFilter;
-
 /// A trait implemented by wrappers around Pingora’s session
 ///
 /// All the usual methods and fields of [`Session`] are available as well.
@@ -81,15 +79,9 @@ pub trait SessionWrapper: Send + Deref<Target = Session> + DerefMut {
     }
 
     /// Returns a reference to the associated extensions.
-    ///
-    /// *Note*: The extensions are only present for the lifetime of the wrapper. Unlike `Session`
-    /// or `CTX` data, they don’t survive across Pingora phases.
     fn extensions(&self) -> &Extensions;
 
     /// Returns a mutable reference to the associated extensions.
-    ///
-    /// *Note*: The extensions are only present for the lifetime of the wrapper. Unlike `Session`
-    /// or `CTX` data, they don’t survive across Pingora phases.
     fn extensions_mut(&mut self) -> &mut Extensions;
 
     /// See [`Session::write_response_header`](pingora::protocols::http::server::Session::write_response_header)
@@ -111,78 +103,6 @@ pub trait SessionWrapper: Send + Deref<Target = Session> + DerefMut {
     async fn write_response_body(&mut self, data: Bytes) -> Result<(), Box<Error>> {
         self.deref_mut().write_response_body(data).await
     }
-}
-
-struct SessionWrapperImpl<'a, H> {
-    inner: &'a mut Session,
-    handler: &'a H,
-    extensions: Extensions,
-}
-
-impl<'a, H> SessionWrapperImpl<'a, H> {
-    fn from(inner: &'a mut Session, handler: &'a H) -> Self
-    where
-        H: RequestFilter,
-    {
-        Self {
-            inner,
-            handler,
-            extensions: Extensions::new(),
-        }
-    }
-}
-
-#[async_trait]
-impl<H> SessionWrapper for SessionWrapperImpl<'_, H>
-where
-    H: RequestFilter,
-    for<'a> &'a H: Send,
-{
-    fn extensions(&self) -> &Extensions {
-        &self.extensions
-    }
-
-    fn extensions_mut(&mut self) -> &mut Extensions {
-        &mut self.extensions
-    }
-
-    async fn write_response_header(
-        &mut self,
-        mut resp: Box<ResponseHeader>,
-    ) -> Result<(), Box<Error>> {
-        self.handler.response_filter(self, &mut resp, None);
-
-        self.deref_mut().write_response_header(resp).await
-    }
-
-    async fn write_response_header_ref(&mut self, resp: &ResponseHeader) -> Result<(), Box<Error>> {
-        self.write_response_header(Box::new(resp.clone())).await
-    }
-}
-
-impl<H> Deref for SessionWrapperImpl<'_, H> {
-    type Target = Session;
-
-    fn deref(&self) -> &Self::Target {
-        self.inner
-    }
-}
-
-impl<H> DerefMut for SessionWrapperImpl<'_, H> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.inner
-    }
-}
-
-/// Creates a new session wrapper for the given Pingora session.
-pub(crate) fn wrap_session<'a, H>(
-    session: &'a mut Session,
-    handler: &'a H,
-) -> impl SessionWrapper + 'a
-where
-    H: RequestFilter + Sized + Sync,
-{
-    SessionWrapperImpl::from(session, handler)
 }
 
 /// A `SessionWrapper` implementation used for tests.

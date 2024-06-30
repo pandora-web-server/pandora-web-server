@@ -232,11 +232,12 @@ mod tests {
     use super::*;
 
     use http::HeaderValue;
-    use pandora_module_utils::pingora::{RequestHeader, TestSession};
+    use pandora_module_utils::pingora::{Error, ProxyHttp, RequestHeader, TestSession};
     use pandora_module_utils::FromYaml;
+    use startup_module::DefaultApp;
     use test_log::test;
 
-    fn make_handler(configured: bool) -> UpstreamHandler {
+    fn make_app(configured: bool) -> DefaultApp<UpstreamHandler> {
         let conf = if configured {
             UpstreamConf::from_yaml(
                 r#"
@@ -247,7 +248,7 @@ mod tests {
         } else {
             UpstreamConf::default()
         };
-        conf.try_into().unwrap()
+        DefaultApp::new(conf.try_into().unwrap())
     }
 
     async fn make_session() -> TestSession {
@@ -257,31 +258,29 @@ mod tests {
 
     #[test(tokio::test)]
     async fn unconfigured() -> Result<(), Box<Error>> {
-        let handler = make_handler(false);
+        let app = make_app(false);
         let mut session = make_session().await;
-        let mut ctx = UpstreamHandler::new_ctx();
-        assert!(!handler.call_request_filter(&mut session, &mut ctx).await?);
-        assert!(handler
-            .upstream_peer(&mut session, &mut ctx)
-            .await
-            .unwrap()
-            .is_none());
+        let mut ctx = app.new_ctx();
+        assert!(!app.request_filter(&mut session, &mut ctx).await?);
+        assert!(matches!(
+            app.upstream_peer(&mut session, &mut ctx)
+                .await
+                .unwrap_err()
+                .etype,
+            ErrorType::HTTPStatus(404)
+        ));
 
         Ok(())
     }
 
     #[test(tokio::test)]
     async fn handled() -> Result<(), Box<Error>> {
-        let handler = make_handler(true);
+        let app = make_app(true);
         let mut session = make_session().await;
-        let mut ctx = UpstreamHandler::new_ctx();
-        assert!(!handler.call_request_filter(&mut session, &mut ctx).await?);
+        let mut ctx = app.new_ctx();
+        assert!(!app.request_filter(&mut session, &mut ctx).await?);
 
-        let peer = handler
-            .upstream_peer(&mut session, &mut ctx)
-            .await
-            .unwrap()
-            .unwrap();
+        let peer = app.upstream_peer(&mut session, &mut ctx).await.unwrap();
         assert_eq!(peer.scheme.to_string(), "HTTPS".to_owned());
         assert_eq!(peer.sni, "example.com");
         assert_eq!(
@@ -294,15 +293,17 @@ mod tests {
 
     #[test(tokio::test)]
     async fn not_called() -> Result<(), Box<Error>> {
-        let handler = make_handler(true);
+        let app = make_app(true);
         let mut session = make_session().await;
-        let mut ctx = UpstreamHandler::new_ctx();
+        let mut ctx = app.new_ctx();
 
-        assert!(handler
-            .upstream_peer(&mut session, &mut ctx)
-            .await
-            .unwrap()
-            .is_none());
+        assert!(matches!(
+            app.upstream_peer(&mut session, &mut ctx)
+                .await
+                .unwrap_err()
+                .etype,
+            ErrorType::HTTPStatus(404)
+        ));
 
         Ok(())
     }

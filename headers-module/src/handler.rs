@@ -116,34 +116,18 @@ impl RequestFilter for HeadersHandler {
         Ok(RequestFilterResult::Unhandled)
     }
 
-    fn request_filter_done(
-        &self,
-        session: &mut impl SessionWrapper,
-        ctx: &mut Self::CTX,
-        result: RequestFilterResult,
-    ) {
-        if result != RequestFilterResult::ResponseSent {
-            // Response hasn’t been sent, move the stored headers into context so that we can still
-            // access them in the response_filter phase.
-            if let Some(mut headers) = session.extensions_mut().remove() {
-                trace!("Copying headers from extensions to context: {headers:?}");
-                ctx.append(&mut headers);
-            }
-        }
-    }
-
     fn response_filter(
         &self,
         session: &mut impl SessionWrapper,
         response: &mut ResponseHeader,
-        ctx: Option<&mut <Self as RequestFilter>::CTX>,
+        _ctx: Option<&mut <Self as RequestFilter>::CTX>,
     ) {
-        if let Some(list) = ctx.or_else(|| session.extensions_mut().get_mut()) {
-            trace!("Added headers to response: {list:?}");
+        if let Some(list) = session.extensions_mut().get_mut::<Vec<Header>>() {
             for (name, value) in list.iter() {
                 // Conversion from HeaderName/HeaderValue is infallible, ignore errors.
                 let _ = response.insert_header(name, value);
             }
+            trace!("Added headers to response: {list:?}");
         }
     }
 }
@@ -153,9 +137,10 @@ mod tests {
     use super::*;
 
     use http::header;
-    use pandora_module_utils::pingora::{RequestHeader, TestSession};
+    use pandora_module_utils::pingora::{ProxyHttp, RequestHeader, TestSession};
     use pandora_module_utils::{DeserializeMap, FromYaml};
-    use std::ops::{Deref, DerefMut};
+    use startup_module::DefaultApp;
+    use std::ops::Deref;
     use test_log::test;
 
     #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
@@ -204,9 +189,10 @@ mod tests {
         test: TestHandler,
     }
 
-    fn make_handler(send_response: bool) -> Handler {
-        <Handler as RequestFilter>::Conf::from_yaml(format!(
-            r#"
+    fn make_app(send_response: bool) -> DefaultApp<Handler> {
+        DefaultApp::new(
+            <Handler as RequestFilter>::Conf::from_yaml(format!(
+                r#"
                 send_response: {send_response}
                 response_headers:
                     cache_control:
@@ -251,10 +237,11 @@ mod tests {
                     -
                         Server: My very own web server
             "#,
-        ))
-        .unwrap()
-        .try_into()
-        .unwrap()
+            ))
+            .unwrap()
+            .try_into()
+            .unwrap(),
+        )
     }
 
     async fn make_session(path: &str) -> TestSession {
@@ -298,14 +285,10 @@ mod tests {
 
     #[test(tokio::test)]
     async fn request_filter() -> Result<(), Box<Error>> {
-        let handler = make_handler(true);
+        let app = make_app(true);
 
         let mut session = make_session("https://localhost/").await;
-        assert!(
-            handler
-                .call_request_filter(session.deref_mut(), &mut Handler::new_ctx())
-                .await?
-        );
+        assert!(app.request_filter(&mut session, &mut app.new_ctx()).await?);
         assert_headers(
             session.deref().response_written().unwrap(),
             vec![
@@ -321,11 +304,7 @@ mod tests {
         );
 
         let mut session = make_session("https://localhost/subdir/file.txt").await;
-        assert!(
-            handler
-                .call_request_filter(session.deref_mut(), &mut Handler::new_ctx())
-                .await?
-        );
+        assert!(app.request_filter(&mut session, &mut app.new_ctx()).await?);
         assert_headers(
             session.deref().response_written().unwrap(),
             vec![
@@ -340,11 +319,7 @@ mod tests {
         );
 
         let mut session = make_session("https://localhost/subdir2").await;
-        assert!(
-            handler
-                .call_request_filter(session.deref_mut(), &mut Handler::new_ctx())
-                .await?
-        );
+        assert!(app.request_filter(&mut session, &mut app.new_ctx()).await?);
         assert_headers(
             session.deref().response_written().unwrap(),
             vec![
@@ -360,11 +335,7 @@ mod tests {
         );
 
         let mut session = make_session("https://example.com/whatever").await;
-        assert!(
-            handler
-                .call_request_filter(session.deref_mut(), &mut Handler::new_ctx())
-                .await?
-        );
+        assert!(app.request_filter(&mut session, &mut app.new_ctx()).await?);
         assert_headers(
             session.deref().response_written().unwrap(),
             vec![
@@ -379,11 +350,7 @@ mod tests {
         );
 
         let mut session = make_session("https://example.com/subdir/whatever").await;
-        assert!(
-            handler
-                .call_request_filter(session.deref_mut(), &mut Handler::new_ctx())
-                .await?
-        );
+        assert!(app.request_filter(&mut session, &mut app.new_ctx()).await?);
         assert_headers(
             session.deref().response_written().unwrap(),
             vec![
@@ -395,11 +362,7 @@ mod tests {
         );
 
         let mut session = make_session("https://example.com/subdir/file.txt").await;
-        assert!(
-            handler
-                .call_request_filter(session.deref_mut(), &mut Handler::new_ctx())
-                .await?
-        );
+        assert!(app.request_filter(&mut session, &mut app.new_ctx()).await?);
         assert_headers(
             session.deref().response_written().unwrap(),
             vec![
@@ -411,11 +374,7 @@ mod tests {
         );
 
         let mut session = make_session("https://example.com/subdir/subsub/file.txt").await;
-        assert!(
-            handler
-                .call_request_filter(session.deref_mut(), &mut Handler::new_ctx())
-                .await?
-        );
+        assert!(app.request_filter(&mut session, &mut app.new_ctx()).await?);
         assert_headers(
             session.deref().response_written().unwrap(),
             vec![
@@ -426,11 +385,7 @@ mod tests {
         );
 
         let mut session = make_session("https://example.net/whatever").await;
-        assert!(
-            handler
-                .call_request_filter(session.deref_mut(), &mut Handler::new_ctx())
-                .await?
-        );
+        assert!(app.request_filter(&mut session, &mut app.new_ctx()).await?);
         assert_headers(
             session.deref().response_written().unwrap(),
             vec![
@@ -443,11 +398,7 @@ mod tests {
         );
 
         let mut session = make_session("https://example.info/whatever").await;
-        assert!(
-            handler
-                .call_request_filter(session.deref_mut(), &mut Handler::new_ctx())
-                .await?
-        );
+        assert!(app.request_filter(&mut session, &mut app.new_ctx()).await?);
         assert_headers(
             session.deref().response_written().unwrap(),
             vec![
@@ -462,11 +413,7 @@ mod tests {
         );
 
         let mut session = make_session("https://example.info/subdir/whatever").await;
-        assert!(
-            handler
-                .call_request_filter(session.deref_mut(), &mut Handler::new_ctx())
-                .await?
-        );
+        assert!(app.request_filter(&mut session, &mut app.new_ctx()).await?);
         assert_headers(
             session.deref().response_written().unwrap(),
             vec![
@@ -486,17 +433,13 @@ mod tests {
 
     #[test(tokio::test)]
     async fn upstream() -> Result<(), Box<Error>> {
-        let handler = make_handler(false);
+        let app = make_app(false);
 
         let mut session = make_session("https://localhost/").await;
-        let mut ctx = Handler::new_ctx();
-        assert!(
-            !handler
-                .call_request_filter(session.deref_mut(), &mut ctx)
-                .await?
-        );
+        let mut ctx = app.new_ctx();
+        assert!(!app.request_filter(&mut session, &mut ctx).await?);
         let mut header = make_response_header().unwrap();
-        handler.call_response_filter(session.deref_mut(), &mut header, &mut ctx);
+        app.upstream_response_filter(&mut session, &mut header, &mut ctx);
         assert_headers(
             &header,
             vec![
@@ -512,14 +455,10 @@ mod tests {
         );
 
         let mut session = make_session("https://localhost/subdir/file.txt").await;
-        let mut ctx = Handler::new_ctx();
-        assert!(
-            !handler
-                .call_request_filter(session.deref_mut(), &mut ctx)
-                .await?
-        );
+        let mut ctx = app.new_ctx();
+        assert!(!app.request_filter(&mut session, &mut ctx).await?);
         let mut header = make_response_header().unwrap();
-        handler.call_response_filter(session.deref_mut(), &mut header, &mut ctx);
+        app.upstream_response_filter(&mut session, &mut header, &mut ctx);
         assert_headers(
             &header,
             vec![
@@ -534,14 +473,10 @@ mod tests {
         );
 
         let mut session = make_session("https://localhost/subdir2").await;
-        let mut ctx = Handler::new_ctx();
-        assert!(
-            !handler
-                .call_request_filter(session.deref_mut(), &mut ctx)
-                .await?
-        );
+        let mut ctx = app.new_ctx();
+        assert!(!app.request_filter(&mut session, &mut ctx).await?);
         let mut header = make_response_header().unwrap();
-        handler.call_response_filter(session.deref_mut(), &mut header, &mut ctx);
+        app.upstream_response_filter(&mut session, &mut header, &mut ctx);
         assert_headers(
             &header,
             vec![
@@ -557,14 +492,10 @@ mod tests {
         );
 
         let mut session = make_session("https://example.com/whatever").await;
-        let mut ctx = Handler::new_ctx();
-        assert!(
-            !handler
-                .call_request_filter(session.deref_mut(), &mut ctx)
-                .await?
-        );
+        let mut ctx = app.new_ctx();
+        assert!(!app.request_filter(&mut session, &mut ctx).await?);
         let mut header = make_response_header().unwrap();
-        handler.call_response_filter(session.deref_mut(), &mut header, &mut ctx);
+        app.upstream_response_filter(&mut session, &mut header, &mut ctx);
         assert_headers(
             &header,
             vec![
@@ -579,14 +510,10 @@ mod tests {
         );
 
         let mut session = make_session("https://example.com/subdir/whatever").await;
-        let mut ctx = Handler::new_ctx();
-        assert!(
-            !handler
-                .call_request_filter(session.deref_mut(), &mut ctx)
-                .await?
-        );
+        let mut ctx = app.new_ctx();
+        assert!(!app.request_filter(&mut session, &mut ctx).await?);
         let mut header = make_response_header().unwrap();
-        handler.call_response_filter(session.deref_mut(), &mut header, &mut ctx);
+        app.upstream_response_filter(&mut session, &mut header, &mut ctx);
         assert_headers(
             &header,
             vec![
@@ -598,14 +525,10 @@ mod tests {
         );
 
         let mut session = make_session("https://example.com/subdir/file.txt").await;
-        let mut ctx = Handler::new_ctx();
-        assert!(
-            !handler
-                .call_request_filter(session.deref_mut(), &mut ctx)
-                .await?
-        );
+        let mut ctx = app.new_ctx();
+        assert!(!app.request_filter(&mut session, &mut ctx).await?);
         let mut header = make_response_header().unwrap();
-        handler.call_response_filter(session.deref_mut(), &mut header, &mut ctx);
+        app.upstream_response_filter(&mut session, &mut header, &mut ctx);
         assert_headers(
             &header,
             vec![
@@ -617,14 +540,10 @@ mod tests {
         );
 
         let mut session = make_session("https://example.com/subdir/subsub/file.txt").await;
-        let mut ctx = Handler::new_ctx();
-        assert!(
-            !handler
-                .call_request_filter(session.deref_mut(), &mut ctx)
-                .await?
-        );
+        let mut ctx = app.new_ctx();
+        assert!(!app.request_filter(&mut session, &mut ctx).await?);
         let mut header = make_response_header().unwrap();
-        handler.call_response_filter(session.deref_mut(), &mut header, &mut ctx);
+        app.upstream_response_filter(&mut session, &mut header, &mut ctx);
         assert_headers(
             &header,
             vec![
@@ -635,14 +554,10 @@ mod tests {
         );
 
         let mut session = make_session("https://example.net/whatever").await;
-        let mut ctx = Handler::new_ctx();
-        assert!(
-            !handler
-                .call_request_filter(session.deref_mut(), &mut ctx)
-                .await?
-        );
+        let mut ctx = app.new_ctx();
+        assert!(!app.request_filter(&mut session, &mut ctx).await?);
         let mut header = make_response_header().unwrap();
-        handler.call_response_filter(session.deref_mut(), &mut header, &mut ctx);
+        app.upstream_response_filter(&mut session, &mut header, &mut ctx);
         assert_headers(
             &header,
             vec![
@@ -655,14 +570,10 @@ mod tests {
         );
 
         let mut session = make_session("https://example.info/whatever").await;
-        let mut ctx = Handler::new_ctx();
-        assert!(
-            !handler
-                .call_request_filter(session.deref_mut(), &mut ctx)
-                .await?
-        );
+        let mut ctx = app.new_ctx();
+        assert!(!app.request_filter(&mut session, &mut ctx).await?);
         let mut header = make_response_header().unwrap();
-        handler.call_response_filter(session.deref_mut(), &mut header, &mut ctx);
+        app.upstream_response_filter(&mut session, &mut header, &mut ctx);
         assert_headers(
             &header,
             vec![
@@ -677,14 +588,10 @@ mod tests {
         );
 
         let mut session = make_session("https://example.info/subdir/whatever").await;
-        let mut ctx = Handler::new_ctx();
-        assert!(
-            !handler
-                .call_request_filter(session.deref_mut(), &mut ctx)
-                .await?
-        );
+        let mut ctx = app.new_ctx();
+        assert!(!app.request_filter(&mut session, &mut ctx).await?);
         let mut header = make_response_header().unwrap();
-        handler.call_response_filter(session.deref_mut(), &mut header, &mut ctx);
+        app.upstream_response_filter(&mut session, &mut header, &mut ctx);
         assert_headers(
             &header,
             vec![
