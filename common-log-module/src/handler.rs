@@ -19,7 +19,7 @@ use http::header;
 use log::error;
 use once_cell::sync::Lazy;
 use pandora_module_utils::pingora::{Error, ErrorType, SessionWrapper};
-use pandora_module_utils::{RequestFilter, RequestFilterResult};
+use pandora_module_utils::{RemoteUser, RequestFilter, RequestFilterResult};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -75,7 +75,7 @@ impl TryFrom<CommonLogConf> for CommonLogHandler {
             conf.log_format = vec![
                 LogField::RemoteAddr,
                 LogField::None,
-                LogField::None,
+                LogField::RemoteName,
                 LogField::TimeLocal,
                 LogField::Request,
                 LogField::Status,
@@ -160,7 +160,8 @@ impl RequestFilter for CommonLogHandler {
                         LogToken::None
                     }
                 }
-                LogField::Status
+                LogField::RemoteName
+                | LogField::Status
                 | LogField::BytesSent
                 | LogField::ProcessingTime
                 | LogField::ResponseHeader(_) => continue,
@@ -196,6 +197,13 @@ impl RequestFilter for CommonLogHandler {
                     // This is a token we’ve added previously. Panic if we don’t have one, it’s
                     // a bug that needs investigating.
                     existing_tokens.next().unwrap()
+                }
+                LogField::RemoteName => {
+                    if let Some(RemoteUser(remote_name)) = session.extensions().get() {
+                        LogToken::RemoteName(remote_name.clone())
+                    } else {
+                        LogToken::None
+                    }
                 }
                 LogField::Status => {
                     if let Some(header) = session.response_written() {

@@ -21,7 +21,7 @@
 //! ```yaml
 //! log_file: access.log
 //! log_format: [
-//!     remote_addr, -, -, time_local, request, status, bytes_sent, http_referer, http_user_agent
+//!     remote_addr, -, remote_name, time_local, request, status, bytes_sent, http_referer, http_user_agent
 //! ]
 //! ```
 //!
@@ -32,6 +32,7 @@
 //! * `-`: Verbatim `-` character (for unsupported fields)
 //! * `remote_addr`: client’s IP address
 //! * `remote_port`: client’s TCP port
+//! * `remote_name`: name of the authorized user if any
 //! * `time_local`: date and time of the request, e.g. `[10/Oct/2000:13:55:36 -0700]`
 //! * `time_iso8601`: date and time in the ISO 8601 format, e.g. `[2000-10-10T13:55:36-07:00]`
 //! * `request`: quoted request line, e.g. `"GET / HTTP/1.1"`

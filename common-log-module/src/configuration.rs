@@ -41,6 +41,8 @@ pub enum LogField {
     RemoteAddr,
     /// Client port, `remote_port` in config file
     RemotePort,
+    /// Name of the authorized user
+    RemoteName,
     /// Local time in the Common Log Format, `time_local` in config file
     TimeLocal,
     /// Local time in the ISO 8601 format, `time_iso8601` in config file
@@ -67,6 +69,7 @@ impl TryFrom<&str> for LogField {
             "-" => Ok(Self::None),
             "remote_addr" => Ok(Self::RemoteAddr),
             "remote_port" => Ok(Self::RemotePort),
+            "remote_name" => Ok(Self::RemoteName),
             "time_local" => Ok(Self::TimeLocal),
             "time_iso8601" => Ok(Self::TimeISO),
             "request" => Ok(Self::Request),
@@ -144,7 +147,7 @@ mod tests {
 
     #[test]
     fn log_field_parsing() {
-        let log_fields: Vec<_> = "remote_addr - - time_local request status bytes_sent http_referer http_user_agent processing_time sent_http_content_type remote_port time_iso8601".split_ascii_whitespace().map(|s| {
+        let log_fields: Vec<_> = "remote_addr - remote_name time_local request status bytes_sent http_referer http_user_agent processing_time sent_http_content_type remote_port time_iso8601".split_ascii_whitespace().map(|s| {
             LogField::try_from(s).unwrap()
         }).collect();
         assert_eq!(
@@ -152,7 +155,7 @@ mod tests {
             vec![
                 LogField::RemoteAddr,
                 LogField::None,
-                LogField::None,
+                LogField::RemoteName,
                 LogField::TimeLocal,
                 LogField::Request,
                 LogField::Status,

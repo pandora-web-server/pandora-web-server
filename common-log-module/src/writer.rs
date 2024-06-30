@@ -30,6 +30,7 @@ pub(crate) enum LogToken {
     None,
     RemoteAddr(SocketAddr),
     RemotePort(SocketAddr),
+    RemoteName(String),
     TimeLocal,
     TimeISO,
     Request(String),
@@ -118,6 +119,7 @@ fn stringify_data(buf: &mut Vec<u8>, time: SystemTime, tokens: Vec<LogToken>) {
                 write!(buf, "{}", addr.port())
             }
             LogToken::RemotePort(SocketAddr::Unix(_)) => write!(buf, "-"),
+            LogToken::RemoteName(remote_name) => write_escaped(buf, remote_name),
             LogToken::TimeLocal => {
                 let time = DateTime::<Local>::from(time).format("%d/%b/%Y:%H:%M:%S %z");
                 write!(buf, "[{time}]")
@@ -184,7 +186,7 @@ mod tests {
         let tokens = vec![
             LogToken::RemoteAddr(SocketAddr::Inet("127.0.0.1:8080".parse().unwrap())),
             LogToken::None,
-            LogToken::None,
+            LogToken::RemoteName("me".to_owned()),
             LogToken::TimeLocal,
             LogToken::Request("GET /test\n/\" HTTP/1.1".into()),
             LogToken::Status(200),
@@ -205,7 +207,7 @@ mod tests {
         stringify_data(&mut buf, time, tokens);
         assert_eq!(
             String::from_utf8(buf).unwrap(),
-            "127.0.0.1 - - [29/May/2024:09:53:19 -0100] \"GET /test\\x0a/\\x22 HTTP/1.1\" 200 876 \"https://example.com/\" \"Mozilla/1.0 \\x5c\\x22invalid data\\x80\" 1.235 8080 [2024-05-29T09:53:19-01:00]\n"
+            "127.0.0.1 - \"me\" [29/May/2024:09:53:19 -0100] \"GET /test\\x0a/\\x22 HTTP/1.1\" 200 876 \"https://example.com/\" \"Mozilla/1.0 \\x5c\\x22invalid data\\x80\" 1.235 8080 [2024-05-29T09:53:19-01:00]\n"
         );
     }
 }

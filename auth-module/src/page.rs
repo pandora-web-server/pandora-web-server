@@ -20,7 +20,7 @@ use log::{error, trace, warn};
 use maud::{html, DOCTYPE};
 use pandora_module_utils::pingora::{Error, ErrorType, ResponseHeader, SessionWrapper};
 use pandora_module_utils::standard_response::{error_response, redirect_response_with_cookie};
-use pandora_module_utils::RequestFilterResult;
+use pandora_module_utils::{RemoteUser, RequestFilterResult};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use std::time::{Duration, SystemTime};
@@ -167,6 +167,7 @@ pub(crate) async fn page_auth(
 
                     if SystemTime::now() < from_unix_timestamp(claim.exp) {
                         trace!("Found cookie with valid JWT token, allowing request");
+                        session.extensions_mut().insert(RemoteUser(claim.sub));
                         return Ok(RequestFilterResult::Unhandled);
                     }
                 }
@@ -245,6 +246,10 @@ pub(crate) async fn page_auth(
             .unwrap_or(""),
     );
     trace!("Login successful, redirecting to {}", redirect_target);
+
+    session
+        .extensions_mut()
+        .insert(RemoteUser(request.username.clone()));
 
     let claim = JwtClaim {
         sub: request.username,
@@ -362,6 +367,7 @@ auth_page_session:
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::Unhandled
         );
+        assert_eq!(session.extensions().get::<RemoteUser>(), None);
         Ok(())
     }
 
@@ -373,6 +379,7 @@ auth_page_session:
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::ResponseSent
         );
+        assert_eq!(session.extensions().get::<RemoteUser>(), None);
         check_login_page_response(&session, false, false);
         Ok(())
     }
@@ -388,6 +395,7 @@ auth_page_session:
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::ResponseSent
         );
+        assert_eq!(session.extensions().get::<RemoteUser>(), None);
         check_login_page_response(&session, false, false);
         Ok(())
     }
@@ -403,6 +411,7 @@ auth_page_session:
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::ResponseSent
         );
+        assert_eq!(session.extensions().get::<RemoteUser>(), None);
         check_login_page_response(&session, false, false);
         Ok(())
     }
@@ -418,6 +427,7 @@ auth_page_session:
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::ResponseSent
         );
+        assert_eq!(session.extensions().get::<RemoteUser>(), None);
         check_login_page_response(&session, false, false);
         Ok(())
     }
@@ -433,6 +443,7 @@ auth_page_session:
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::ResponseSent
         );
+        assert_eq!(session.extensions().get::<RemoteUser>(), None);
         check_login_page_response(&session, false, false);
         Ok(())
     }
@@ -448,6 +459,10 @@ auth_page_session:
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::Unhandled
         );
+        assert_eq!(
+            session.extensions().get::<RemoteUser>(),
+            Some(&RemoteUser("me".to_owned()))
+        );
         Ok(())
     }
 
@@ -461,6 +476,10 @@ auth_page_session:
         assert_eq!(
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::Unhandled
+        );
+        assert_eq!(
+            session.extensions().get::<RemoteUser>(),
+            Some(&RemoteUser("me".to_owned()))
         );
         Ok(())
     }
@@ -477,6 +496,7 @@ auth_page_session:
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::ResponseSent
         );
+        assert_eq!(session.extensions().get::<RemoteUser>(), None);
         check_login_page_response(&session, false, false);
         Ok(())
     }
@@ -493,6 +513,7 @@ auth_page_session:
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::ResponseSent
         );
+        assert_eq!(session.extensions().get::<RemoteUser>(), None);
         check_login_page_response(&session, false, false);
         Ok(())
     }
@@ -509,6 +530,7 @@ auth_page_session:
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::ResponseSent
         );
+        assert_eq!(session.extensions().get::<RemoteUser>(), None);
         check_login_page_response(&session, true, false);
         Ok(())
     }
@@ -525,6 +547,7 @@ auth_page_session:
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::ResponseSent
         );
+        assert_eq!(session.extensions().get::<RemoteUser>(), None);
         check_login_page_response(&session, true, false);
         Ok(())
     }
@@ -540,6 +563,10 @@ auth_page_session:
         assert_eq!(
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::ResponseSent
+        );
+        assert_eq!(
+            session.extensions().get::<RemoteUser>(),
+            Some(&RemoteUser("me".to_owned()))
         );
 
         let response = session.response_written().unwrap();
@@ -588,6 +615,10 @@ auth_page_session:
                 handler.request_filter(&mut session, &mut ()).await?,
                 RequestFilterResult::Unhandled
             );
+            assert_eq!(
+                session.extensions().get::<RemoteUser>(),
+                Some(&RemoteUser("me".to_owned()))
+            );
         } else {
             panic!("auth_cookie cookie wasn't set")
         }
@@ -609,6 +640,7 @@ auth_page_session:
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::ResponseSent
         );
+        assert_eq!(session.extensions().get::<RemoteUser>(), None);
         check_login_page_response(&session, true, true);
         Ok(())
     }
@@ -642,6 +674,7 @@ auth_rate_limits:
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::ResponseSent
         );
+        assert_eq!(session.extensions().get::<RemoteUser>(), None);
         assert_eq!(
             session.response_written().unwrap().status,
             StatusCode::TOO_MANY_REQUESTS
@@ -662,6 +695,10 @@ auth_rate_limits:
         assert_eq!(
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::ResponseSent
+        );
+        assert_eq!(
+            session.extensions().get::<RemoteUser>(),
+            Some(&RemoteUser("me".to_owned()))
         );
 
         let response = session.response_written().unwrap();
@@ -695,6 +732,7 @@ auth_page_session:
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::Unhandled
         );
+        assert_eq!(session.extensions().get::<RemoteUser>(), None);
 
         assert_eq!(session.req_header().method, Method::GET);
         assert_eq!(session.req_header().uri.path(), "/login.html");
@@ -718,6 +756,7 @@ auth_page_session:
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::Unhandled
         );
+        assert_eq!(session.extensions().get::<RemoteUser>(), None);
 
         assert_eq!(session.req_header().method, Method::HEAD);
         assert_eq!(session.req_header().uri.path(), "/login.html");
