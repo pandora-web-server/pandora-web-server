@@ -101,8 +101,9 @@ pub trait RequestFilter: Sized {
     }
 
     /// Handler to run during Pingora’s `upstream_peer` phase, see
-    /// [`pingora::ProxyHttp::upstream_peer`]. This uses a different return type to account
-    /// for the existence of multiple chained handlers.
+    /// [`pingora::ProxyHttp::upstream_peer`]. Unlike Pingora’s method, here returning a result is
+    /// optional. If `None` is returned, other handlers in the chain will be called. If all of them
+    /// return `None`, an error will be returned to Pingora.
     async fn upstream_peer(
         &self,
         _session: &mut impl SessionWrapper,
