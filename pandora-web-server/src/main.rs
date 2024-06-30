@@ -160,10 +160,10 @@ use startup_module::{DefaultApp, StartupConf, StartupOpt};
 struct Handler {
     #[cfg(feature = "ip-anonymization-top-level")]
     anonymization: ip_anonymization_module::IPAnonymizationHandler,
-    #[cfg(feature = "compression-top-level")]
-    compression: compression_module::CompressionHandler,
     #[cfg(feature = "common-log-top-level")]
     log: common_log_module::CommonLogHandler,
+    #[cfg(feature = "compression-top-level")]
+    compression: compression_module::CompressionHandler,
     #[cfg(feature = "headers-top-level")]
     headers: headers_module::HeadersHandler,
     #[cfg(feature = "auth-top-level")]
