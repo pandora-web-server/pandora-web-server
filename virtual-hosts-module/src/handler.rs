@@ -20,7 +20,6 @@ use pandora_module_utils::router::{Path, Router};
 use pandora_module_utils::{RequestFilter, RequestFilterResult};
 use std::collections::BTreeSet;
 use std::fmt::Debug;
-use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
 use crate::configuration::VirtualHostsConf;
@@ -82,8 +81,8 @@ impl<H: Debug> VirtualHostsHandler<H> {
     }
 }
 
-struct Marker;
-type IndexEntry = (usize, PhantomData<Marker>);
+#[derive(Debug, Clone)]
+struct IndexEntry(usize);
 
 #[async_trait]
 impl<H> RequestFilter for VirtualHostsHandler<H>
@@ -119,9 +118,7 @@ where
             ctx.index = Some(index);
 
             // Save ctx.index in session as well, response_filter could be called without context
-            session
-                .extensions_mut()
-                .insert::<IndexEntry>((index, PhantomData::<Marker>));
+            session.extensions_mut().insert(IndexEntry(index));
 
             if let Some(new_path) = new_path {
                 // Capture original URI, logging might need it
@@ -158,7 +155,7 @@ where
         let handler = ctx
             .as_ref()
             .and_then(|ctx| ctx.index)
-            .or_else(|| session.extensions().get::<IndexEntry>().map(|(i, _)| *i))
+            .or_else(|| session.extensions().get::<IndexEntry>().map(|i| i.0))
             .and_then(|index| self.handlers.retrieve(index))
             .map(|(_, h)| h);
         if let Some(handler) = handler {

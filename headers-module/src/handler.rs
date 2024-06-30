@@ -39,6 +39,9 @@ where
     })
 }
 
+#[derive(Debug, Clone)]
+struct HeadersList(Vec<Header>);
+
 /// Handler for Pingora’s `request_filter` phase
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HeadersHandler {
@@ -110,7 +113,7 @@ impl RequestFilter for HeadersHandler {
             return Ok(RequestFilterResult::Unhandled);
         };
 
-        session.extensions_mut().insert(list.clone());
+        session.extensions_mut().insert(HeadersList(list.clone()));
         trace!("Prepared headers for response: {list:?}");
 
         Ok(RequestFilterResult::Unhandled)
@@ -122,7 +125,7 @@ impl RequestFilter for HeadersHandler {
         response: &mut ResponseHeader,
         _ctx: Option<&mut <Self as RequestFilter>::CTX>,
     ) {
-        if let Some(list) = session.extensions_mut().get_mut::<Vec<Header>>() {
+        if let Some(HeadersList(list)) = session.extensions().get() {
             for (name, value) in list.iter() {
                 // Conversion from HeaderName/HeaderValue is infallible, ignore errors.
                 let _ = response.insert_header(name, value);
