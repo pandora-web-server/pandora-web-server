@@ -47,6 +47,7 @@ async fn login_response(
     suggestion: Option<String>,
 ) -> Result<RequestFilterResult, Box<Error>> {
     if let Some(login_page) = &conf.auth_page_session.login_page {
+        session.save_original_uri();
         session.req_header_mut().set_uri(login_page.clone());
         if session.req_header().method != Method::HEAD {
             session.req_header_mut().set_method(Method::GET);
@@ -694,7 +695,8 @@ auth_page_session:
         assert_eq!(session.remote_user(), None);
 
         assert_eq!(session.req_header().method, Method::GET);
-        assert_eq!(session.req_header().uri.path(), "/login.html");
+        assert_eq!(session.req_header().uri, "/login.html");
+        assert_eq!(session.original_uri(), "/file");
 
         Ok(())
     }
