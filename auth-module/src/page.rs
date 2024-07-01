@@ -32,6 +32,7 @@ use crate::AuthConf;
 struct AuthRequest {
     username: String,
     password: String,
+    r#type: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -115,6 +116,45 @@ async fn login_response(
     header.append_header(header::CONTENT_LENGTH, text.len().to_string())?;
     header.append_header(header::CONTENT_TYPE, "text/html; charset=utf-8")?;
     header.append_header(header::CACHE_CONTROL, "no-store")?;
+    session.write_response_header(Box::new(header)).await?;
+
+    if session.req_header().method != Method::HEAD {
+        session.write_response_body(text.into()).await?;
+    }
+
+    Ok(RequestFilterResult::ResponseSent)
+}
+
+async fn login_response_json(
+    session: &mut impl SessionWrapper,
+    suggestion: Option<String>,
+    cookie: Option<String>,
+) -> Result<RequestFilterResult, Box<Error>> {
+    let mut text = String::from("{");
+    if cookie.is_some() {
+        text.push_str("\"success\":true");
+    } else {
+        text.push_str("\"success\":false");
+    }
+    if let Some(suggestion) = suggestion {
+        text.push_str(&format!(
+            ",\"suggestion\":\"{}\"",
+            // String::escape_default() almost matches JSON escaping, it merely escapes single
+            // quotation marks unnecessarily.
+            suggestion
+                .escape_default()
+                .collect::<String>()
+                .replace("\\'", "'")
+        ));
+    }
+    text.push('}');
+
+    let mut header = ResponseHeader::build(StatusCode::OK, Some(3))?;
+    header.append_header(header::CONTENT_LENGTH, text.len().to_string())?;
+    header.append_header(header::CONTENT_TYPE, "application/json; charset=utf-8")?;
+    if let Some(cookie) = cookie {
+        header.append_header(header::SET_COOKIE, cookie)?;
+    }
     session.write_response_header(Box::new(header)).await?;
 
     if session.req_header().method != Method::HEAD {
@@ -233,18 +273,14 @@ pub(crate) async fn page_auth(
 
     let (valid, suggestion) = validate_login(conf, &request.username, request.password.as_bytes());
     if !valid {
-        return login_response(session, conf, true, suggestion).await;
+        return if request.r#type.is_some_and(|t| t == "json") {
+            login_response_json(session, suggestion, None).await
+        } else {
+            login_response(session, conf, true, suggestion).await
+        };
     }
 
     session.set_remote_user(request.username.clone());
-
-    let redirect_target = session
-        .original_uri()
-        .path_and_query()
-        .map(|path| path.as_str())
-        .unwrap_or("/")
-        .to_owned();
-    trace!("Login successful, redirecting to {}", redirect_target);
 
     let claim = JwtClaim {
         sub: request.username,
@@ -267,7 +303,21 @@ pub(crate) async fn page_auth(
         conf.auth_page_session.session_expiration.as_secs(),
         if secure { "; Secure" } else { "" }
     );
-    redirect_response_with_cookie(session, StatusCode::FOUND, &redirect_target, &cookie).await?;
+
+    if request.r#type.is_some_and(|t| t == "json") {
+        login_response_json(session, None, Some(cookie)).await?;
+    } else {
+        let redirect_target = session
+            .original_uri()
+            .path_and_query()
+            .map(|path| path.as_str())
+            .unwrap_or("/")
+            .to_owned();
+        trace!("Login successful, redirecting to {}", redirect_target);
+
+        redirect_response_with_cookie(session, StatusCode::FOUND, &redirect_target, &cookie)
+            .await?;
+    };
 
     Ok(RequestFilterResult::ResponseSent)
 }
@@ -331,6 +381,17 @@ auth_page_session:
         expect_suggestion: bool,
     ) {
         assert_eq!(session.response_written().unwrap().status, 200);
+        assert_eq!(
+            session
+                .response_written()
+                .unwrap()
+                .headers
+                .get("Content-Type")
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            "text/html; charset=utf-8"
+        );
 
         let response = String::from_utf8_lossy(&session.response_body);
         assert!(response.contains("%%title%%"));
@@ -343,6 +404,31 @@ auth_page_session:
         assert!(response.contains("%%username_label%%"));
         assert!(response.contains("%%password_label%%"));
         assert!(response.contains("%%button_text%%"));
+    }
+
+    fn check_json_response(session: &TestSession, expect_error: bool, expect_suggestion: bool) {
+        assert_eq!(session.response_written().unwrap().status, 200);
+        assert_eq!(
+            session
+                .response_written()
+                .unwrap()
+                .headers
+                .get("Content-Type")
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            "application/json; charset=utf-8"
+        );
+
+        #[derive(Deserialize)]
+        struct JsonResponse {
+            success: bool,
+            suggestion: Option<String>,
+        }
+
+        let response: JsonResponse = serde_json::from_slice(&session.response_body).unwrap();
+        assert_eq!(response.success, !expect_error);
+        assert_eq!(response.suggestion.is_some(), expect_suggestion);
     }
 
     #[test(tokio::test)]
@@ -533,6 +619,24 @@ auth_page_session:
     }
 
     #[test(tokio::test)]
+    async fn wrong_user_name_json() -> Result<(), Box<Error>> {
+        let handler = make_handler(default_conf());
+        let mut session =
+            make_session_with_body("/", "username=notme&password=test&type=json").await;
+        session
+            .req_header_mut()
+            .insert_header("Content-Type", "application/x-www-form-urlencoded")?;
+        session.req_header_mut().set_method(Method::POST);
+        assert_eq!(
+            handler.request_filter(&mut session, &mut ()).await?,
+            RequestFilterResult::ResponseSent
+        );
+        assert_eq!(session.remote_user(), None);
+        check_json_response(&session, true, false);
+        Ok(())
+    }
+
+    #[test(tokio::test)]
     async fn wrong_password() -> Result<(), Box<Error>> {
         let handler = make_handler(default_conf());
         let mut session = make_session_with_body("/", "username=me&password=nottest").await;
@@ -546,6 +650,24 @@ auth_page_session:
         );
         assert_eq!(session.remote_user(), None);
         check_login_page_response(&session, true, false);
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn wrong_password_json() -> Result<(), Box<Error>> {
+        let handler = make_handler(default_conf());
+        let mut session =
+            make_session_with_body("/", "username=me&password=nottest&type=json").await;
+        session
+            .req_header_mut()
+            .insert_header("Content-Type", "application/x-www-form-urlencoded")?;
+        session.req_header_mut().set_method(Method::POST);
+        assert_eq!(
+            handler.request_filter(&mut session, &mut ()).await?,
+            RequestFilterResult::ResponseSent
+        );
+        assert_eq!(session.remote_user(), None);
+        check_json_response(&session, true, false);
         Ok(())
     }
 
@@ -615,6 +737,32 @@ auth_page_session:
     }
 
     #[test(tokio::test)]
+    async fn correct_credentials_json() -> Result<(), Box<Error>> {
+        let handler = make_handler(default_conf());
+        let mut session = make_session_with_body("/", "username=me&password=test&type=json").await;
+        session
+            .req_header_mut()
+            .insert_header("Content-Type", "application/x-www-form-urlencoded")?;
+        session.req_header_mut().set_method(Method::POST);
+        assert_eq!(
+            handler.request_filter(&mut session, &mut ()).await?,
+            RequestFilterResult::ResponseSent
+        );
+        assert_eq!(session.remote_user(), Some("me"));
+
+        check_json_response(&session, false, false);
+
+        assert!(session
+            .response_written()
+            .unwrap()
+            .headers
+            .get("Set-Cookie")
+            .is_some());
+
+        Ok(())
+    }
+
+    #[test(tokio::test)]
     async fn display_hash() -> Result<(), Box<Error>> {
         let mut conf = default_conf().to_owned();
         conf.push_str("\nauth_display_hash: true");
@@ -630,6 +778,26 @@ auth_page_session:
         );
         assert_eq!(session.remote_user(), None);
         check_login_page_response(&session, true, true);
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn display_hash_json() -> Result<(), Box<Error>> {
+        let mut conf = default_conf().to_owned();
+        conf.push_str("\nauth_display_hash: true");
+        let handler = make_handler(&conf);
+        let mut session =
+            make_session_with_body("/", "username='<me>'&password=nottest&type=json").await;
+        session
+            .req_header_mut()
+            .insert_header("Content-Type", "application/x-www-form-urlencoded")?;
+        session.req_header_mut().set_method(Method::POST);
+        assert_eq!(
+            handler.request_filter(&mut session, &mut ()).await?,
+            RequestFilterResult::ResponseSent
+        );
+        assert_eq!(session.remote_user(), None);
+        check_json_response(&session, true, true);
         Ok(())
     }
 
