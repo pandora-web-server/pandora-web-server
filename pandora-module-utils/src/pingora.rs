@@ -17,7 +17,7 @@
 
 use async_trait::async_trait;
 use bytes::{Bytes, BytesMut};
-use http::{header, Extensions};
+use http::{header, Extensions, Uri};
 pub use pingora::http::{IntoCaseHeaderName, RequestHeader, ResponseHeader};
 pub use pingora::protocols::http::HttpTask;
 pub use pingora::protocols::l4::socket::SocketAddr;
@@ -84,6 +84,22 @@ pub trait SessionWrapper: Send + Deref<Target = Session> + DerefMut {
     /// Returns a mutable reference to the associated extensions.
     fn extensions_mut(&mut self) -> &mut Extensions;
 
+    /// Returns the original URI of the request which might have been modified by e.g.
+    /// `strip_prefix` setting afterwards.
+    fn original_uri(&self) -> &Uri {
+        if let Some(OriginalUri(uri)) = self.extensions().get() {
+            uri
+        } else {
+            &self.req_header().uri
+        }
+    }
+
+    /// Saves the original URI of the request before it is modified.
+    fn save_original_uri(&mut self) {
+        let current_uri = OriginalUri(self.req_header().uri.clone());
+        self.extensions_mut().get_or_insert(current_uri);
+    }
+
     /// Returns the name of the authorized user if any
     fn remote_user(&self) -> Option<&str> {
         if let Some(RemoteUser(remote_user)) = self.extensions().get() {
@@ -119,9 +135,13 @@ pub trait SessionWrapper: Send + Deref<Target = Session> + DerefMut {
     }
 }
 
-/// Type used to store remote user’s name in `SessionWrapper::extensions`.
+/// Type used to store remote user’s name in `SessionWrapper::extensions`
 #[derive(Debug, Clone)]
 struct RemoteUser(String);
+
+/// Type used to store original request URI in `SessionWrapper::extensions`
+#[derive(Debug, Clone)]
+struct OriginalUri(Uri);
 
 /// A `SessionWrapper` implementation used for tests.
 pub struct TestSession {

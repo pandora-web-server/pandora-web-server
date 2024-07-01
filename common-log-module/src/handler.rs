@@ -141,12 +141,8 @@ impl RequestFilter for CommonLogHandler {
                     let header = session.req_header();
                     let method = &header.method;
 
-                    // Try getting URI from extensions first, virtual-hosts-module will store
-                    // original URI there before stripping prefix.
                     let uri = session
-                        .extensions()
-                        .get()
-                        .unwrap_or(&header.uri)
+                        .original_uri()
                         .path_and_query()
                         .map(|p| p.as_str())
                         .unwrap_or("");

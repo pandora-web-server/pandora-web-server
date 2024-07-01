@@ -121,9 +121,7 @@ where
             session.extensions_mut().insert(IndexEntry(index));
 
             if let Some(new_path) = new_path {
-                // Capture original URI, logging might need it
-                let orig_uri = session.req_header().uri.clone();
-                session.extensions_mut().insert(orig_uri);
+                session.save_original_uri();
 
                 let header = session.req_header_mut();
                 header.set_uri(set_uri_path(&header.uri, &new_path));
@@ -439,7 +437,7 @@ mod tests {
             RequestFilterResult::Unhandled
         );
         assert_eq!(session.req_header().uri, "/");
-        assert_eq!(session.extensions().get::<Uri>().unwrap(), "/subdir/");
+        assert_eq!(session.original_uri(), "/subdir/");
         Ok(())
     }
 
@@ -452,7 +450,7 @@ mod tests {
             RequestFilterResult::Unhandled
         );
         assert_eq!(session.req_header().uri, "/");
-        assert_eq!(session.extensions().get::<Uri>().unwrap(), "/subdir");
+        assert_eq!(session.original_uri(), "/subdir");
         Ok(())
     }
 
@@ -465,10 +463,7 @@ mod tests {
             RequestFilterResult::Unhandled
         );
         assert_eq!(session.req_header().uri, "/xyz?abc");
-        assert_eq!(
-            session.extensions().get::<Uri>().unwrap(),
-            "/subdir/xyz?abc"
-        );
+        assert_eq!(session.original_uri(), "/subdir/xyz?abc");
         Ok(())
     }
 
@@ -481,10 +476,7 @@ mod tests {
             RequestFilterResult::Unhandled
         );
         assert_eq!(session.req_header().uri, "///xyz//");
-        assert_eq!(
-            session.extensions().get::<Uri>().unwrap(),
-            "//subdir///xyz//"
-        );
+        assert_eq!(session.original_uri(), "//subdir///xyz//");
         Ok(())
     }
 
@@ -497,7 +489,7 @@ mod tests {
             RequestFilterResult::ResponseSent
         );
         assert_eq!(session.req_header().uri, "/subdir_xyz");
-        assert!(session.extensions().get::<Uri>().is_none());
+        assert_eq!(session.original_uri(), "/subdir_xyz");
         Ok(())
     }
 
@@ -510,7 +502,7 @@ mod tests {
             RequestFilterResult::Handled
         );
         assert_eq!(session.req_header().uri, "/subdir/subsub/xyz");
-        assert!(session.extensions().get::<Uri>().is_none());
+        assert_eq!(session.original_uri(), "/subdir/subsub/xyz");
         Ok(())
     }
 
@@ -523,10 +515,7 @@ mod tests {
             RequestFilterResult::Unhandled
         );
         assert_eq!(session.req_header().uri, "/xyz?abc");
-        assert_eq!(
-            session.extensions().get::<Uri>().unwrap(),
-            "/subdir/xyz?abc"
-        );
+        assert_eq!(session.original_uri(), "/subdir/xyz?abc");
         Ok(())
     }
 
@@ -539,10 +528,7 @@ mod tests {
             RequestFilterResult::Unhandled
         );
         assert_eq!(session.req_header().uri, "/xyz?abc");
-        assert_eq!(
-            session.extensions().get::<Uri>().unwrap(),
-            "/subdir/xyz?abc"
-        );
+        assert_eq!(session.original_uri(), "/subdir/xyz?abc");
         Ok(())
     }
 
@@ -579,10 +565,7 @@ mod tests {
             RequestFilterResult::Unhandled
         );
         assert_eq!(session.req_header().uri, "/file.txt/xyz");
-        assert_eq!(
-            session.extensions().get::<Uri>().unwrap(),
-            "/subdir/file.txt/xyz"
-        );
+        assert_eq!(session.original_uri(), "/subdir/file.txt/xyz");
         Ok(())
     }
 }
