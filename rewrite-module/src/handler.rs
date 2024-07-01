@@ -147,6 +147,7 @@ impl RequestFilter for RewriteHandler {
                             return Ok(RequestFilterResult::Unhandled);
                         }
                     };
+                    session.save_original_uri();
                     session.req_header_mut().set_uri(uri);
                     break;
                 }
@@ -211,7 +212,8 @@ mod tests {
                 .await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.req_header().uri.to_string(), "/");
+        assert_eq!(session.req_header().uri, "/");
+        assert_eq!(session.original_uri(), "/");
 
         let mut session = make_session("/path").await;
         assert_eq!(
@@ -220,7 +222,8 @@ mod tests {
                 .await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.req_header().uri.to_string(), "/another/");
+        assert_eq!(session.req_header().uri, "/another/");
+        assert_eq!(session.original_uri(), "/path");
 
         let mut session = make_session("/path/").await;
         assert_eq!(
@@ -229,7 +232,8 @@ mod tests {
                 .await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.req_header().uri.to_string(), "/another/");
+        assert_eq!(session.req_header().uri, "/another/");
+        assert_eq!(session.original_uri(), "/path/");
 
         let mut session = make_session("/path/file.txt").await;
         assert_eq!(
@@ -238,7 +242,8 @@ mod tests {
                 .await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.req_header().uri.to_string(), "/another/file.txt");
+        assert_eq!(session.req_header().uri, "/another/file.txt");
+        assert_eq!(session.original_uri(), "/path/file.txt");
 
         Ok(())
     }
@@ -275,7 +280,7 @@ mod tests {
                 .await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.req_header().uri.to_string(), "/another/image.jpg");
+        assert_eq!(session.req_header().uri, "/another/image.jpg");
 
         let mut session = make_session("/path/?a=b").await;
         assert_eq!(
@@ -284,7 +289,7 @@ mod tests {
                 .await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.req_header().uri.to_string(), "/different?a=b");
+        assert_eq!(session.req_header().uri, "/different?a=b");
 
         let mut session = make_session("/path/image.png?a=b&file=c").await;
         assert_eq!(
@@ -293,10 +298,7 @@ mod tests {
                 .await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(
-            session.req_header().uri.to_string(),
-            "/different?a=b&file=c"
-        );
+        assert_eq!(session.req_header().uri, "/different?a=b&file=c");
 
         let mut session = make_session("/path/image.png?file=c").await;
         assert_eq!(
@@ -305,10 +307,7 @@ mod tests {
                 .await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(
-            session.req_header().uri.to_string(),
-            "/path/image.png?file=c"
-        );
+        assert_eq!(session.req_header().uri, "/path/image.png?file=c");
 
         let mut session = make_session("/file.txt").await;
         assert_eq!(
@@ -317,7 +316,7 @@ mod tests {
                 .await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.req_header().uri.to_string(), "/other.txt");
+        assert_eq!(session.req_header().uri, "/other.txt");
 
         let mut session = make_session("/file.txt?no_redirect").await;
         assert_eq!(
@@ -326,10 +325,7 @@ mod tests {
                 .await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(
-            session.req_header().uri.to_string(),
-            "/file.txt?no_redirect"
-        );
+        assert_eq!(session.req_header().uri, "/file.txt?no_redirect");
 
         Ok(())
     }
@@ -351,10 +347,7 @@ mod tests {
                 .await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(
-            session.req_header().uri.to_string(),
-            "/another/file.txt?&host=&test="
-        );
+        assert_eq!(session.req_header().uri, "/another/file.txt?&host=&test=");
 
         let mut session = make_session("/path/file.txt?a=b").await;
         assert_eq!(
@@ -364,7 +357,7 @@ mod tests {
             RequestFilterResult::Unhandled
         );
         assert_eq!(
-            session.req_header().uri.to_string(),
+            session.req_header().uri,
             "/another/file.txt?a=b&host=&test="
         );
 
@@ -382,7 +375,7 @@ mod tests {
             RequestFilterResult::Unhandled
         );
         assert_eq!(
-            session.req_header().uri.to_string(),
+            session.req_header().uri,
             "/another/file.txt?a=b&host=localhost&test=successful"
         );
 
@@ -481,7 +474,7 @@ mod tests {
                 .await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.req_header().uri.to_string(), "/4");
+        assert_eq!(session.req_header().uri, "/4");
 
         let mut session = make_session("/path?1235").await;
         assert_eq!(
@@ -490,7 +483,7 @@ mod tests {
                 .await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.req_header().uri.to_string(), "/5");
+        assert_eq!(session.req_header().uri, "/5");
 
         let mut session = make_session("/path?123").await;
         assert_eq!(
@@ -499,7 +492,7 @@ mod tests {
                 .await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.req_header().uri.to_string(), "/2");
+        assert_eq!(session.req_header().uri, "/2");
 
         let mut session = make_session("/path?13").await;
         assert_eq!(
@@ -508,7 +501,7 @@ mod tests {
                 .await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.req_header().uri.to_string(), "/3");
+        assert_eq!(session.req_header().uri, "/3");
 
         let mut session = make_session("/path?1").await;
         assert_eq!(
@@ -517,7 +510,7 @@ mod tests {
                 .await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.req_header().uri.to_string(), "/1");
+        assert_eq!(session.req_header().uri, "/1");
 
         Ok(())
     }
