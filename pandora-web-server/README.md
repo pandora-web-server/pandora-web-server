@@ -84,13 +84,13 @@ cargo build --release
 You can also run a debug build with the example configuration files from this directory:
 
 ```sh
-cargo run -- -c config/*.yaml
+cargo run -- -c "config/*.yaml"
 ```
 
 To enable debugging output you can use the `RUST_LOG` environment variable:
 
 ```sh
-RUST_LOG=debug cargo run -- -c config/*.yaml
+RUST_LOG=debug cargo run -- -c "config/*.yaml"
 ```
 
 You can find more information on the `RUST_LOG` environment variable in the [documentation of
