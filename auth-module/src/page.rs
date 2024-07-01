@@ -37,7 +37,7 @@ struct AuthRequest {
 #[derive(Debug, Serialize, Deserialize)]
 struct JwtClaim {
     sub: String,
-    exp: i64,
+    iat: i64,
 }
 
 async fn login_response(
@@ -165,7 +165,11 @@ pub(crate) async fn page_auth(
                         Err(_) => continue,
                     };
 
-                    if SystemTime::now() < from_unix_timestamp(claim.exp) {
+                    let now = SystemTime::now();
+                    let issued_at = from_unix_timestamp(claim.iat);
+                    if now >= issued_at
+                        && now < issued_at + conf.auth_page_session.session_expiration
+                    {
                         trace!("Found cookie with valid JWT token, allowing request");
                         session.set_remote_user(claim.sub);
                         return Ok(RequestFilterResult::Unhandled);
@@ -244,7 +248,7 @@ pub(crate) async fn page_auth(
 
     let claim = JwtClaim {
         sub: request.username,
-        exp: to_unix_timestamp(SystemTime::now() + conf.auth_page_session.session_expiration),
+        iat: to_unix_timestamp(SystemTime::now()),
     };
     let token = claim
         .sign_with_key(&key)
@@ -300,7 +304,7 @@ auth_rate_limits:
 auth_page_session:
     token_secret: abcd
     cookie_name: auth_cookie
-    session_expiration: 2h
+    session_expiration: 200000d
         "#
     }
 
@@ -372,7 +376,7 @@ auth_page_session:
         let mut session = make_session("/").await;
         session
             .req_header_mut()
-            .insert_header("Cookie", "auth_cookie2=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtZSIsImV4cCI6OTk5OTk5OTk5OX0.y26HX3oPP_u_HO9TA5h9AG_UjKd6Wx5p-KbJriDasro")?;
+            .insert_header("Cookie", "auth_cookie2=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtZSIsImlhdCI6MTIzNDV9.oo4uMH-cKddfcmh14kEyXGDUeWObNEXht3lBymUjWlw")?;
         assert_eq!(
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::ResponseSent
@@ -388,7 +392,7 @@ auth_page_session:
         let mut session = make_session("/").await;
         session
             .req_header_mut()
-            .insert_header("Cookie", "auth_cookie=fyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtZSIsImV4cCI6OTk5OTk5OTk5OX0.y26HX3oPP_u_HO9TA5h9AG_UjKd6Wx5p-KbJriDasro")?;
+            .insert_header("Cookie", "auth_cookie=fyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtZSIsImlhdCI6MTIzNDV9.oo4uMH-cKddfcmh14kEyXGDUeWObNEXht3lBymUjWlw")?;
         assert_eq!(
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::ResponseSent
@@ -404,7 +408,7 @@ auth_page_session:
         let mut session = make_session("/").await;
         session
             .req_header_mut()
-            .insert_header("Cookie", "auth_cookie=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtZSIsImV4cCI6OTk5OTk5OTk5OX0.y26HX3oPP_u_HO9TA5h9AG_UjKd6Wx5p-KbJriDasrp")?;
+            .insert_header("Cookie", "auth_cookie=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtZSIsImlhdCI6MTIzNDV9.oo4uMH-cKddfcmh14kEyXGDUeWObNEXht3lBymUjWlv")?;
         assert_eq!(
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::ResponseSent
@@ -416,11 +420,28 @@ auth_page_session:
 
     #[test(tokio::test)]
     async fn cookie_expired_token() -> Result<(), Box<Error>> {
+        let conf = default_conf().replace("200000d", "2h");
+        let handler = make_handler(&conf);
+        let mut session = make_session("/").await;
+        session
+            .req_header_mut()
+            .insert_header("Cookie", "auth_cookie=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtZSIsImlhdCI6MTIzNDV9.oo4uMH-cKddfcmh14kEyXGDUeWObNEXht3lBymUjWlw")?;
+        assert_eq!(
+            handler.request_filter(&mut session, &mut ()).await?,
+            RequestFilterResult::ResponseSent
+        );
+        assert_eq!(session.remote_user(), None);
+        check_login_page_response(&session, false, false);
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn cookie_issued_in_future() -> Result<(), Box<Error>> {
         let handler = make_handler(default_conf());
         let mut session = make_session("/").await;
         session
             .req_header_mut()
-            .insert_header("Cookie", "auth_cookie=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtZSIsImV4cCI6MTIzNDV9.EZJXcyXRcZMu9exZWWOAuz6YwwmX7MK3UAKtNSjevLs")?;
+            .insert_header("Cookie", "auth_cookie=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtZSIsImlhdCI6OTk5OTk5OTk5OX0.rHg--l9K83j5LUResMAa4lutm5Gz9jAk5zvWZAEARdM")?;
         assert_eq!(
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::ResponseSent
@@ -436,7 +457,7 @@ auth_page_session:
         let mut session = make_session("/").await;
         session
             .req_header_mut()
-            .insert_header("Cookie", "auth_cookie=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtZSIsImV4cCI6OTk5OTk5OTk5OX0.y26HX3oPP_u_HO9TA5h9AG_UjKd6Wx5p-KbJriDasro")?;
+            .insert_header("Cookie", "auth_cookie=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtZSIsImlhdCI6MTIzNDV9.oo4uMH-cKddfcmh14kEyXGDUeWObNEXht3lBymUjWlw")?;
         assert_eq!(
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::Unhandled
@@ -451,7 +472,7 @@ auth_page_session:
         let mut session = make_session("/").await;
         session
             .req_header_mut()
-            .insert_header("Cookie", "auth=abcd; auth_cookie=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtZSIsImV4cCI6OTk5OTk5OTk5OX0.y26HX3oPP_u_HO9TA5h9AG_UjKd6Wx5p-KbJriDasro; another=dcba")?;
+            .insert_header("Cookie", "auth=abcd; auth_cookie=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtZSIsImlhdCI6MTIzNDV9.oo4uMH-cKddfcmh14kEyXGDUeWObNEXht3lBymUjWlw; another=dcba")?;
         assert_eq!(
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::Unhandled
@@ -566,12 +587,12 @@ auth_page_session:
                 let (param, value) = param.split_once('=').unwrap();
                 match param.to_ascii_lowercase().as_str() {
                     "auth_cookie" => token = Some(value.to_owned()),
-                    "max-age" => exp = Some(value.parse::<u32>().unwrap()),
+                    "max-age" => exp = Some(value.parse::<u64>().unwrap()),
                     other => panic!("unexpected cookie parameter {other}"),
                 }
             }
         }
-        assert_eq!(exp, Some(2 * 60 * 60));
+        assert_eq!(exp, Some(200000 * 24 * 60 * 60));
         assert!(http_only);
         assert!(!secure);
 
