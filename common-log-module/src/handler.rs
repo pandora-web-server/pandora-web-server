@@ -19,7 +19,7 @@ use http::header;
 use log::error;
 use once_cell::sync::Lazy;
 use pandora_module_utils::pingora::{Error, ErrorType, SessionWrapper};
-use pandora_module_utils::{RemoteUser, RequestFilter, RequestFilterResult};
+use pandora_module_utils::{RequestFilter, RequestFilterResult};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -199,8 +199,8 @@ impl RequestFilter for CommonLogHandler {
                     existing_tokens.next().unwrap()
                 }
                 LogField::RemoteName => {
-                    if let Some(RemoteUser(remote_name)) = session.extensions().get() {
-                        LogToken::RemoteName(remote_name.clone())
+                    if let Some(remote_name) = session.remote_user() {
+                        LogToken::RemoteName(remote_name.to_owned())
                     } else {
                         LogToken::None
                     }

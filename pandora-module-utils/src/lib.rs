@@ -134,11 +134,6 @@ pub trait RequestFilter: Sized {
     }
 }
 
-/// Type that can be retrieve via `SessionWrapper::extensions`. If present, it will contain the
-/// authorized remote user’s name.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RemoteUser(pub String);
-
 /// Trait for configuration structures that can be loaded from YAML files. This trait has a blanket
 /// implementation for any structure implementing [`serde::Deserialize`].
 pub trait FromYaml {

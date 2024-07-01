@@ -18,7 +18,7 @@ use log::{info, trace};
 use maud::{html, DOCTYPE};
 use pandora_module_utils::pingora::{Error, ResponseHeader, SessionWrapper};
 use pandora_module_utils::standard_response::error_response;
-use pandora_module_utils::{RemoteUser, RequestFilterResult};
+use pandora_module_utils::RequestFilterResult;
 
 use crate::{
     common::{is_rate_limited, validate_login},
@@ -126,7 +126,7 @@ pub(crate) async fn basic_auth(
 
     let (valid, suggestion) = validate_login(conf, &user, password);
     if valid {
-        session.extensions_mut().insert(RemoteUser(user));
+        session.set_remote_user(user);
         Ok(RequestFilterResult::Unhandled)
     } else {
         unauthorized_response(session, &conf.auth_realm, suggestion).await?;
@@ -221,7 +221,7 @@ auth_rate_limits:
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.extensions().get::<RemoteUser>(), None);
+        assert_eq!(session.remote_user(), None);
         Ok(())
     }
 
@@ -233,7 +233,7 @@ auth_rate_limits:
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::ResponseSent
         );
-        assert_eq!(session.extensions().get::<RemoteUser>(), None);
+        assert_eq!(session.remote_user(), None);
         check_unauthorized_response(&session);
         Ok(())
     }
@@ -249,7 +249,7 @@ auth_rate_limits:
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::ResponseSent
         );
-        assert_eq!(session.extensions().get::<RemoteUser>(), None);
+        assert_eq!(session.remote_user(), None);
         check_unauthorized_response(&session);
         Ok(())
     }
@@ -265,7 +265,7 @@ auth_rate_limits:
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::ResponseSent
         );
-        assert_eq!(session.extensions().get::<RemoteUser>(), None);
+        assert_eq!(session.remote_user(), None);
         check_unauthorized_response(&session);
         Ok(())
     }
@@ -282,7 +282,7 @@ auth_rate_limits:
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::ResponseSent
         );
-        assert_eq!(session.extensions().get::<RemoteUser>(), None);
+        assert_eq!(session.remote_user(), None);
         check_unauthorized_response(&session);
         Ok(())
     }
@@ -298,7 +298,7 @@ auth_rate_limits:
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::ResponseSent
         );
-        assert_eq!(session.extensions().get::<RemoteUser>(), None);
+        assert_eq!(session.remote_user(), None);
         check_unauthorized_response(&session);
         Ok(())
     }
@@ -314,7 +314,7 @@ auth_rate_limits:
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::ResponseSent
         );
-        assert_eq!(session.extensions().get::<RemoteUser>(), None);
+        assert_eq!(session.remote_user(), None);
         check_unauthorized_response(&session);
         Ok(())
     }
@@ -330,10 +330,7 @@ auth_rate_limits:
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(
-            session.extensions().get::<RemoteUser>(),
-            Some(&RemoteUser("me".to_owned()))
-        );
+        assert_eq!(session.remote_user(), Some("me"));
         Ok(())
     }
 
@@ -350,7 +347,7 @@ auth_rate_limits:
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::ResponseSent
         );
-        assert_eq!(session.extensions().get::<RemoteUser>(), None);
+        assert_eq!(session.remote_user(), None);
         assert!(String::from_utf8_lossy(&session.response_body)
             .contains("&quot;'&lt;me&gt;'&quot;: $2b$"));
 
@@ -384,7 +381,7 @@ auth_rate_limits:
             handler.request_filter(&mut session, &mut ()).await?,
             RequestFilterResult::ResponseSent
         );
-        assert_eq!(session.extensions().get::<RemoteUser>(), None);
+        assert_eq!(session.remote_user(), None);
         assert_eq!(
             session.response_written().unwrap().status,
             StatusCode::TOO_MANY_REQUESTS

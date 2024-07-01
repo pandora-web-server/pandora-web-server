@@ -84,6 +84,20 @@ pub trait SessionWrapper: Send + Deref<Target = Session> + DerefMut {
     /// Returns a mutable reference to the associated extensions.
     fn extensions_mut(&mut self) -> &mut Extensions;
 
+    /// Returns the name of the authorized user if any
+    fn remote_user(&self) -> Option<&str> {
+        if let Some(RemoteUser(remote_user)) = self.extensions().get() {
+            Some(remote_user)
+        } else {
+            None
+        }
+    }
+
+    /// Sets the name of the authorized user
+    fn set_remote_user(&mut self, remote_user: String) {
+        self.extensions_mut().insert(RemoteUser(remote_user));
+    }
+
     /// See [`Session::write_response_header`](pingora::protocols::http::server::Session::write_response_header)
     async fn write_response_header(&mut self, resp: Box<ResponseHeader>) -> Result<(), Box<Error>> {
         self.deref_mut().write_response_header(resp).await
@@ -104,6 +118,10 @@ pub trait SessionWrapper: Send + Deref<Target = Session> + DerefMut {
         self.deref_mut().write_response_body(data).await
     }
 }
+
+/// Type used to store remote user’s name in `SessionWrapper::extensions`.
+#[derive(Debug, Clone)]
+struct RemoteUser(String);
 
 /// A `SessionWrapper` implementation used for tests.
 pub struct TestSession {
