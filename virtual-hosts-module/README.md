@@ -23,7 +23,6 @@ vhosts:
             /test/*:
                 strip_prefix: true
                 root: ./local-debug-root
-                redirect_prefix: /test
             /test/file.txt:
                 root: ./production-root
 ```
@@ -51,9 +50,8 @@ configuration will be used.
 
 *Note*: When the `strip_prefix` option is used, the subsequent handlers will receive a URI
 which doesn’t match the actual URI of the request. This might result in wrong links or
-redirects. When using Static Files Module you can set `redirect_prefix` setting like in the
-example above to compensate. Upstream responses might have to be corrected via Pingora’s
-`upstream_response_filter`.
+redirects. The Static Files and Auth modules know how to compensate. Upstream responses might
+have to be corrected via Pingora’s `upstream_response_filter` phase.
 
 ## Code example
 

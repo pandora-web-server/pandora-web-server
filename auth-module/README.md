@@ -66,9 +66,6 @@ In `page` mode several additional settings apply:
   * `session_expiration`: The time interval after which a login session will expire, requiring
     the user to log in again. This interval can be specified in hours (e.g. `2h`) or days (e.g.
     `7d`).
-* `auth_redirect_prefix`: This setting should be specified when using Virtual Hosts Module with
-  `strip_prefix` set to `true`. It should be set to the subdirectory that Authentication Module
-  applies to, to ensure correct redirects after logging in.
 
 ## Password hashes
 

@@ -222,10 +222,9 @@ async fn no_trailing_slash() -> Result<(), Box<Error>> {
     );
     assert_body(&session, &text);
 
-    // Add redirect prefix
-    let handler = make_handler(extended_conf("redirect_prefix: /static"));
-
-    let mut session = make_session("GET", "/subdir?xyz").await;
+    // Scenario where prefix has been stripped from URI
+    let mut session = make_session("GET", "/static/subdir?xyz").await;
+    session.set_uri("/subdir?xyz".try_into().unwrap());
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
@@ -281,6 +280,24 @@ async fn unnecessary_percent_encoding() -> Result<(), Box<Error>> {
             ("Content-Length", &text.len().to_string()),
             ("Content-Type", "text/html; charset=utf-8"),
             ("location", "/file.txt"),
+        ],
+    );
+    assert_body(&session, &text);
+
+    // Scenario where prefix has been stripped from URI
+    let mut session = make_session("GET", "/static/file%2Etxt").await;
+    session.set_uri("/file%2Etxt".try_into().unwrap());
+    assert_eq!(
+        handler.request_filter(&mut session, &mut ()).await?,
+        RequestFilterResult::ResponseSent
+    );
+    assert_status(&session, 308);
+    assert_headers(
+        &session,
+        vec![
+            ("Content-Length", &text.len().to_string()),
+            ("Content-Type", "text/html; charset=utf-8"),
+            ("location", "/static/file.txt"),
         ],
     );
     assert_body(&session, &text);

@@ -57,10 +57,6 @@ pub struct StaticFilesConf {
     /// Redirect /file%2e.txt to /file.txt and /dir to /dir/.
     pub canonicalize_uri: bool,
 
-    /// When `canonicalize_uri` is used, prefix redirect targets with the given string. This is
-    /// useful when the static files handler is applied to a subdirectory of the actual webspace.
-    pub redirect_prefix: Option<String>,
-
     /// List of index files to look for in a directory.
     pub index_file: OneOrMany<String>,
 
@@ -104,7 +100,6 @@ impl Default for StaticFilesConf {
         Self {
             root: None,
             canonicalize_uri: true,
-            redirect_prefix: None,
             index_file: Default::default(),
             page_404: None,
             precompressed: Default::default(),

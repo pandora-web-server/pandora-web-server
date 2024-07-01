@@ -114,8 +114,16 @@ impl RequestFilter for StaticFilesHandler {
                         canonical.push('?');
                         canonical.push_str(query);
                     }
-                    if let Some(redirect_prefix) = &self.conf.redirect_prefix {
-                        canonical.insert_str(0, redirect_prefix);
+
+                    if let Some(prefix) = session
+                        .original_uri()
+                        .path()
+                        .strip_suffix(uri.path())
+                        .filter(|p| !p.is_empty())
+                    {
+                        // A prefix has been removed from the original URI, insert it for the
+                        // redirect.
+                        canonical.insert_str(0, prefix);
                     }
                     info!("redirecting to canonical URI: {canonical}");
                     redirect_response(session, StatusCode::PERMANENT_REDIRECT, &canonical).await?;

@@ -36,7 +36,6 @@ vhosts:
         root: ../static-files-module/testdata/root
         index_file:
         - index.html
-        redirect_prefix: /uncompressed
       /reindexed/*:
         strip_prefix: true
         log_file: localhost.access.log
