@@ -47,8 +47,7 @@ async fn login_response(
     suggestion: Option<String>,
 ) -> Result<RequestFilterResult, Box<Error>> {
     if let Some(login_page) = &conf.auth_page_session.login_page {
-        session.save_original_uri();
-        session.req_header_mut().set_uri(login_page.clone());
+        session.set_uri(login_page.clone());
         if session.req_header().method != Method::HEAD {
             session.req_header_mut().set_method(Method::GET);
         }
@@ -654,10 +653,7 @@ auth_rate_limits:
     async fn redirect_after_uri_modified() -> Result<(), Box<Error>> {
         let handler = make_handler(default_conf());
         let mut session = make_session_with_body("/subdir/file", "username=me&password=test").await;
-        session.save_original_uri();
-        session
-            .req_header_mut()
-            .set_uri("/file".try_into().unwrap());
+        session.set_uri("/file".try_into().unwrap());
         session
             .req_header_mut()
             .insert_header("Content-Type", "application/x-www-form-urlencoded")?;
@@ -695,7 +691,7 @@ auth_page_session:
         assert_eq!(session.remote_user(), None);
 
         assert_eq!(session.req_header().method, Method::GET);
-        assert_eq!(session.req_header().uri, "/login.html");
+        assert_eq!(session.uri(), "/login.html");
         assert_eq!(session.original_uri(), "/file");
 
         Ok(())
@@ -720,7 +716,7 @@ auth_page_session:
         assert_eq!(session.remote_user(), None);
 
         assert_eq!(session.req_header().method, Method::HEAD);
-        assert_eq!(session.req_header().uri.path(), "/login.html");
+        assert_eq!(session.uri().path(), "/login.html");
 
         Ok(())
     }

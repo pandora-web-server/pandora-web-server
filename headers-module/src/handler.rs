@@ -100,7 +100,7 @@ impl RequestFilter for HeadersHandler {
         session: &mut impl SessionWrapper,
         _ctx: &mut Self::CTX,
     ) -> Result<RequestFilterResult, Box<Error>> {
-        let path = session.req_header().uri.path();
+        let path = session.uri().path();
         trace!(
             "Determining response headers for host/path combination {:?}{path}",
             session.host()

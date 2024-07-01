@@ -46,7 +46,7 @@ pub trait SessionWrapper: Send + Deref<Target = Session> + DerefMut {
         }
 
         fn host_from_uri(session: &impl SessionWrapper) -> Option<Cow<'_, str>> {
-            let uri = &session.req_header().uri;
+            let uri = session.uri();
             let host = uri.host()?;
             if let Some(port) = uri.port() {
                 let mut host = host.to_owned();
@@ -84,20 +84,30 @@ pub trait SessionWrapper: Send + Deref<Target = Session> + DerefMut {
     /// Returns a mutable reference to the associated extensions.
     fn extensions_mut(&mut self) -> &mut Extensions;
 
+    /// Returns the request URI.
+    ///
+    /// This might not be the original request URI but manipulated by Rewrite module for example.
+    fn uri(&self) -> &Uri {
+        &self.req_header().uri
+    }
+
+    /// Changes the request URI and saves the original URI.
+    ///
+    /// This method should be used instead of manipulating the request URI in the header.
+    fn set_uri(&mut self, uri: Uri) {
+        let current_uri = OriginalUri(self.uri().clone());
+        self.extensions_mut().get_or_insert(current_uri);
+        self.req_header_mut().set_uri(uri);
+    }
+
     /// Returns the original URI of the request which might have been modified by e.g.
-    /// `strip_prefix` setting afterwards.
+    /// by Rewrite module afterwards.
     fn original_uri(&self) -> &Uri {
         if let Some(OriginalUri(uri)) = self.extensions().get() {
             uri
         } else {
-            &self.req_header().uri
+            self.uri()
         }
-    }
-
-    /// Saves the original URI of the request before it is modified.
-    fn save_original_uri(&mut self) {
-        let current_uri = OriginalUri(self.req_header().uri.clone());
-        self.extensions_mut().get_or_insert(current_uri);
     }
 
     /// Returns the name of the authorized user if any

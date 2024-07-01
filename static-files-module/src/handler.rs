@@ -55,7 +55,7 @@ impl RequestFilter for StaticFilesHandler {
             return Ok(RequestFilterResult::Unhandled);
         };
 
-        let uri = &session.req_header().uri;
+        let uri = session.uri();
         debug!("received URI path {}", uri.path());
 
         let (mut path, not_found) = match resolve_uri(uri.path(), root) {

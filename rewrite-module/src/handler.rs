@@ -85,7 +85,7 @@ impl RequestFilter for RewriteHandler {
         session: &mut impl SessionWrapper,
         _ctx: &mut Self::CTX,
     ) -> Result<RequestFilterResult, Box<Error>> {
-        let path = session.req_header().uri.path();
+        let path = session.uri().path();
         trace!("Determining rewrite rules for path {path}");
 
         let list = if let Some(list) = self.router.lookup("", path) {
@@ -100,13 +100,13 @@ impl RequestFilter for RewriteHandler {
         // Iterate in reverse order, merging puts rules in reverse order of precedence.
         for (rule_path, rule) in list.iter().rev() {
             if let Some(from_regex) = &rule.from_regex {
-                if !from_regex.matches(session.req_header().uri.path()) {
+                if !from_regex.matches(session.uri().path()) {
                     continue;
                 }
             }
 
             if let Some(query_regex) = &rule.query_regex {
-                if !query_regex.matches(session.req_header().uri.query().unwrap_or("")) {
+                if !query_regex.matches(session.uri().query().unwrap_or("")) {
                     continue;
                 }
             }
@@ -121,7 +121,7 @@ impl RequestFilter for RewriteHandler {
 
             let target = rule.to.interpolate(|name| match name {
                 "tail" => Some(&tail),
-                "query" => Some(session.req_header().uri.query().unwrap_or("").as_bytes()),
+                "query" => Some(session.uri().query().unwrap_or("").as_bytes()),
                 name => {
                     if let Some(name) = name.strip_prefix("http_") {
                         Some(
@@ -147,8 +147,7 @@ impl RequestFilter for RewriteHandler {
                             return Ok(RequestFilterResult::Unhandled);
                         }
                     };
-                    session.save_original_uri();
-                    session.req_header_mut().set_uri(uri);
+                    session.set_uri(uri);
                     break;
                 }
                 RewriteType::Redirect | RewriteType::Permanent => {
@@ -212,7 +211,7 @@ mod tests {
                 .await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.req_header().uri, "/");
+        assert_eq!(session.uri(), "/");
         assert_eq!(session.original_uri(), "/");
 
         let mut session = make_session("/path").await;
@@ -222,7 +221,7 @@ mod tests {
                 .await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.req_header().uri, "/another/");
+        assert_eq!(session.uri(), "/another/");
         assert_eq!(session.original_uri(), "/path");
 
         let mut session = make_session("/path/").await;
@@ -232,7 +231,7 @@ mod tests {
                 .await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.req_header().uri, "/another/");
+        assert_eq!(session.uri(), "/another/");
         assert_eq!(session.original_uri(), "/path/");
 
         let mut session = make_session("/path/file.txt").await;
@@ -242,7 +241,7 @@ mod tests {
                 .await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.req_header().uri, "/another/file.txt");
+        assert_eq!(session.uri(), "/another/file.txt");
         assert_eq!(session.original_uri(), "/path/file.txt");
 
         Ok(())
@@ -280,7 +279,7 @@ mod tests {
                 .await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.req_header().uri, "/another/image.jpg");
+        assert_eq!(session.uri(), "/another/image.jpg");
 
         let mut session = make_session("/path/?a=b").await;
         assert_eq!(
@@ -289,7 +288,7 @@ mod tests {
                 .await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.req_header().uri, "/different?a=b");
+        assert_eq!(session.uri(), "/different?a=b");
 
         let mut session = make_session("/path/image.png?a=b&file=c").await;
         assert_eq!(
@@ -298,7 +297,7 @@ mod tests {
                 .await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.req_header().uri, "/different?a=b&file=c");
+        assert_eq!(session.uri(), "/different?a=b&file=c");
 
         let mut session = make_session("/path/image.png?file=c").await;
         assert_eq!(
@@ -307,7 +306,7 @@ mod tests {
                 .await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.req_header().uri, "/path/image.png?file=c");
+        assert_eq!(session.uri(), "/path/image.png?file=c");
 
         let mut session = make_session("/file.txt").await;
         assert_eq!(
@@ -316,7 +315,7 @@ mod tests {
                 .await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.req_header().uri, "/other.txt");
+        assert_eq!(session.uri(), "/other.txt");
 
         let mut session = make_session("/file.txt?no_redirect").await;
         assert_eq!(
@@ -325,7 +324,7 @@ mod tests {
                 .await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.req_header().uri, "/file.txt?no_redirect");
+        assert_eq!(session.uri(), "/file.txt?no_redirect");
 
         Ok(())
     }
@@ -347,7 +346,7 @@ mod tests {
                 .await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.req_header().uri, "/another/file.txt?&host=&test=");
+        assert_eq!(session.uri(), "/another/file.txt?&host=&test=");
 
         let mut session = make_session("/path/file.txt?a=b").await;
         assert_eq!(
@@ -356,10 +355,7 @@ mod tests {
                 .await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(
-            session.req_header().uri,
-            "/another/file.txt?a=b&host=&test="
-        );
+        assert_eq!(session.uri(), "/another/file.txt?a=b&host=&test=");
 
         let mut session = make_session("/path/file.txt?a=b").await;
         session
@@ -375,7 +371,7 @@ mod tests {
             RequestFilterResult::Unhandled
         );
         assert_eq!(
-            session.req_header().uri,
+            session.uri(),
             "/another/file.txt?a=b&host=localhost&test=successful"
         );
 
@@ -474,7 +470,7 @@ mod tests {
                 .await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.req_header().uri, "/4");
+        assert_eq!(session.uri(), "/4");
 
         let mut session = make_session("/path?1235").await;
         assert_eq!(
@@ -483,7 +479,7 @@ mod tests {
                 .await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.req_header().uri, "/5");
+        assert_eq!(session.uri(), "/5");
 
         let mut session = make_session("/path?123").await;
         assert_eq!(
@@ -492,7 +488,7 @@ mod tests {
                 .await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.req_header().uri, "/2");
+        assert_eq!(session.uri(), "/2");
 
         let mut session = make_session("/path?13").await;
         assert_eq!(
@@ -501,7 +497,7 @@ mod tests {
                 .await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.req_header().uri, "/3");
+        assert_eq!(session.uri(), "/3");
 
         let mut session = make_session("/path?1").await;
         assert_eq!(
@@ -510,7 +506,7 @@ mod tests {
                 .await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.req_header().uri, "/1");
+        assert_eq!(session.uri(), "/1");
 
         Ok(())
     }

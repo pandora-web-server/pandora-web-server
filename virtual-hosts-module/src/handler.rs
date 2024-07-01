@@ -107,7 +107,7 @@ where
         session: &mut impl SessionWrapper,
         ctx: &mut Self::CTX,
     ) -> Result<RequestFilterResult, Box<Error>> {
-        let path = session.req_header().uri.path();
+        let path = session.uri().path();
         let host = session.host().unwrap_or_default();
 
         if let Some(result) = self.handlers.lookup(host.as_ref(), &path) {
@@ -121,10 +121,7 @@ where
             session.extensions_mut().insert(IndexEntry(index));
 
             if let Some(new_path) = new_path {
-                session.save_original_uri();
-
-                let header = session.req_header_mut();
-                header.set_uri(set_uri_path(&header.uri, &new_path));
+                session.set_uri(set_uri_path(session.uri(), &new_path));
             }
             handler.request_filter(session, ctx).await
         } else {
@@ -436,7 +433,7 @@ mod tests {
             handler.request_filter(&mut session, &mut ctx).await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.req_header().uri, "/");
+        assert_eq!(session.uri(), "/");
         assert_eq!(session.original_uri(), "/subdir/");
         Ok(())
     }
@@ -449,7 +446,7 @@ mod tests {
             handler.request_filter(&mut session, &mut ctx).await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.req_header().uri, "/");
+        assert_eq!(session.uri(), "/");
         assert_eq!(session.original_uri(), "/subdir");
         Ok(())
     }
@@ -462,7 +459,7 @@ mod tests {
             handler.request_filter(&mut session, &mut ctx).await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.req_header().uri, "/xyz?abc");
+        assert_eq!(session.uri(), "/xyz?abc");
         assert_eq!(session.original_uri(), "/subdir/xyz?abc");
         Ok(())
     }
@@ -475,7 +472,7 @@ mod tests {
             handler.request_filter(&mut session, &mut ctx).await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.req_header().uri, "///xyz//");
+        assert_eq!(session.uri(), "///xyz//");
         assert_eq!(session.original_uri(), "//subdir///xyz//");
         Ok(())
     }
@@ -488,7 +485,7 @@ mod tests {
             handler.request_filter(&mut session, &mut ctx).await?,
             RequestFilterResult::ResponseSent
         );
-        assert_eq!(session.req_header().uri, "/subdir_xyz");
+        assert_eq!(session.uri(), "/subdir_xyz");
         assert_eq!(session.original_uri(), "/subdir_xyz");
         Ok(())
     }
@@ -501,7 +498,7 @@ mod tests {
             handler.request_filter(&mut session, &mut ctx).await?,
             RequestFilterResult::Handled
         );
-        assert_eq!(session.req_header().uri, "/subdir/subsub/xyz");
+        assert_eq!(session.uri(), "/subdir/subsub/xyz");
         assert_eq!(session.original_uri(), "/subdir/subsub/xyz");
         Ok(())
     }
@@ -514,7 +511,7 @@ mod tests {
             handler.request_filter(&mut session, &mut ctx).await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.req_header().uri, "/xyz?abc");
+        assert_eq!(session.uri(), "/xyz?abc");
         assert_eq!(session.original_uri(), "/subdir/xyz?abc");
         Ok(())
     }
@@ -527,7 +524,7 @@ mod tests {
             handler.request_filter(&mut session, &mut ctx).await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.req_header().uri, "/xyz?abc");
+        assert_eq!(session.uri(), "/xyz?abc");
         assert_eq!(session.original_uri(), "/subdir/xyz?abc");
         Ok(())
     }
@@ -540,7 +537,7 @@ mod tests {
             handler.request_filter(&mut session, &mut ctx).await?,
             RequestFilterResult::ResponseSent
         );
-        assert_eq!(session.req_header().uri, "/subdir/file.txt");
+        assert_eq!(session.uri(), "/subdir/file.txt");
         Ok(())
     }
 
@@ -552,7 +549,7 @@ mod tests {
             handler.request_filter(&mut session, &mut ctx).await?,
             RequestFilterResult::ResponseSent
         );
-        assert_eq!(session.req_header().uri, "/subdir/file.txt/");
+        assert_eq!(session.uri(), "/subdir/file.txt/");
         Ok(())
     }
 
@@ -564,7 +561,7 @@ mod tests {
             handler.request_filter(&mut session, &mut ctx).await?,
             RequestFilterResult::Unhandled
         );
-        assert_eq!(session.req_header().uri, "/file.txt/xyz");
+        assert_eq!(session.uri(), "/file.txt/xyz");
         assert_eq!(session.original_uri(), "/subdir/file.txt/xyz");
         Ok(())
     }

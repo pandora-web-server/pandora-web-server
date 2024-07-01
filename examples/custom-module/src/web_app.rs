@@ -103,7 +103,7 @@ impl RequestFilter for WebAppHandler {
         session: &mut impl SessionWrapper,
         _ctx: &mut Self::CTX,
     ) -> Result<RequestFilterResult, Box<Error>> {
-        let match_ = match self.router.at(session.req_header().uri.path()) {
+        let match_ = match self.router.at(session.uri().path()) {
             Ok(value) => value,
             Err(_) => return Ok(RequestFilterResult::Unhandled),
         };
