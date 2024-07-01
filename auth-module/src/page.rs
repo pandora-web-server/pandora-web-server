@@ -232,22 +232,15 @@ pub(crate) async fn page_auth(
         return login_response(session, conf, true, suggestion).await;
     }
 
-    let mut redirect_target = if let Some(prefix) = &conf.auth_redirect_prefix {
-        prefix.trim_end_matches('/').to_owned()
-    } else {
-        String::new()
-    };
-    redirect_target.push_str(
-        session
-            .req_header()
-            .uri
-            .path_and_query()
-            .map(|path| path.as_str())
-            .unwrap_or(""),
-    );
-    trace!("Login successful, redirecting to {}", redirect_target);
-
     session.set_remote_user(request.username.clone());
+
+    let redirect_target = session
+        .original_uri()
+        .path_and_query()
+        .map(|path| path.as_str())
+        .unwrap_or("/")
+        .to_owned();
+    trace!("Login successful, redirecting to {}", redirect_target);
 
     let claim = JwtClaim {
         sub: request.username,
@@ -257,15 +250,6 @@ pub(crate) async fn page_auth(
         .sign_with_key(&key)
         .map_err(|err| Error::because(ErrorType::InternalError, "failed signing JTW token", err))?;
 
-    let mut path = conf
-        .auth_redirect_prefix
-        .as_ref()
-        .map_or("", String::as_str)
-        .trim_end_matches('/');
-    if path.is_empty() {
-        path = "/";
-    }
-
     let secure = conf.auth_page_session.secure_cookie.unwrap_or_else(|| {
         session
             .digest()
@@ -274,7 +258,7 @@ pub(crate) async fn page_auth(
     });
 
     let cookie = format!(
-        "{}={token}; Path={path}; Max-Age={}; HttpOnly{}",
+        "{}={token}; Max-Age={}; HttpOnly{}",
         conf.auth_page_session.cookie_name,
         conf.auth_page_session.session_expiration.as_secs(),
         if secure { "; Secure" } else { "" }
@@ -569,7 +553,6 @@ auth_page_session:
             .to_str()
             .unwrap();
         let mut token = None;
-        let mut path = None;
         let mut exp = None;
         let mut http_only = false;
         let mut secure = false;
@@ -583,13 +566,11 @@ auth_page_session:
                 let (param, value) = param.split_once('=').unwrap();
                 match param.to_ascii_lowercase().as_str() {
                     "auth_cookie" => token = Some(value.to_owned()),
-                    "path" => path = Some(value.to_owned()),
                     "max-age" => exp = Some(value.parse::<u32>().unwrap()),
                     other => panic!("unexpected cookie parameter {other}"),
                 }
             }
         }
-        assert_eq!(path, Some("/".to_owned()));
         assert_eq!(exp, Some(2 * 60 * 60));
         assert!(http_only);
         assert!(!secure);
@@ -669,11 +650,13 @@ auth_rate_limits:
     }
 
     #[test(tokio::test)]
-    async fn redirect_prefix() -> Result<(), Box<Error>> {
-        let mut conf = default_conf().to_owned();
-        conf.push_str("\nauth_redirect_prefix: /subdir//");
-        let handler = make_handler(&conf);
-        let mut session = make_session_with_body("/file", "username=me&password=test").await;
+    async fn redirect_after_uri_modified() -> Result<(), Box<Error>> {
+        let handler = make_handler(default_conf());
+        let mut session = make_session_with_body("/subdir/file", "username=me&password=test").await;
+        session.save_original_uri();
+        session
+            .req_header_mut()
+            .set_uri("/file".try_into().unwrap());
         session
             .req_header_mut()
             .insert_header("Content-Type", "application/x-www-form-urlencoded")?;
@@ -687,14 +670,7 @@ auth_rate_limits:
         let response = session.response_written().unwrap();
         assert_eq!(response.status, 302);
         assert_eq!(response.headers.get("Location").unwrap(), "/subdir/file");
-
-        let cookie = response
-            .headers
-            .get("Set-Cookie")
-            .unwrap()
-            .to_str()
-            .unwrap();
-        assert!(cookie.to_ascii_lowercase().contains("path=/subdir;"));
+        assert!(response.headers.get("Set-Cookie").is_some());
 
         Ok(())
     }

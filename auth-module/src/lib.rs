@@ -406,10 +406,6 @@ pub struct AuthConf {
 
     /// Session settings (page mode only)
     pub auth_page_session: AuthPageSession,
-
-    /// When redirecting the user after login, prefix redirect targets with the given string. This
-    /// is useful when the auth handler is applied to a subdirectory of the actual webspace.
-    pub auth_redirect_prefix: Option<String>,
 }
 
 impl AuthConf {
@@ -452,7 +448,6 @@ impl Default for AuthConf {
             auth_realm: "Server authentication".to_owned(),
             auth_page_strings: Default::default(),
             auth_page_session: Default::default(),
-            auth_redirect_prefix: None,
         }
     }
 }
