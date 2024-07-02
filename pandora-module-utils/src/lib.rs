@@ -12,10 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! # Module helpers for Pandora Web Server
-//!
-//! This crate contains some helpers that are used by Pandora Web Server and its modules.
-
+#![doc = include_str!("../README.md")]
 #![allow(non_ascii_idents)]
 
 mod deserialize;

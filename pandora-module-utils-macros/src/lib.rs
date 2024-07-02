@@ -12,9 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! # Macros for pandora-module-utils crate
-//!
-//! You normally shouldn’t use this crate directly but the `pandora-module-utils` crate instead.
+#![doc = include_str!("../README.md")]
 
 mod derive_deserialize_map;
 mod derive_request_filter;

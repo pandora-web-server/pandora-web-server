@@ -53,20 +53,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - name: Install toolchain
-      uses: actions-rust-lang/setup-rust-toolchain@v1
-      with:
-        toolchain: stable
-    - name: Install readme tool
-      run: cargo install cargo-readme
     - name: Check README.md files
       run: |
-        dirs=$(find * -type f -name README.md -exec dirname "{}" \; | sort | tail -n +2)
-        for dir in $dirs; do
-          cargo readme --project-root $dir --no-badges --no-indent-headings --no-license --no-title | sed -E \
-            -e 's/\[(`.*?`)\] /\1 /g' \
-            -e 's!\(pandora_module_utils::pingora::ServerConf\)!(https://docs.rs/pingora/0.2.0/pingora/server/configuration/struct.ServerConf.html)!g' \
-            > "$dir/README.md"
+        for file in docs/*-module.md; do
+          target=$(echo $file | sed -e 's!^docs/!!' -e 's!\.md!/README.md!')
+          cp $file $target
         done
 
         status=0
