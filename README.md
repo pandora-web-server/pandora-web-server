@@ -9,7 +9,7 @@ Other than that, there are:
 
 * [Pandora Module Utils](../../tree/main/pandora-module-utils): Various useful helpers used by the
   server and its modules
-* [Auth module](../../tree/main/auth-module): Authentication support
+* [Authentication module](../../tree/main/auth-module): Authentication support
 * [Common Log module](../../tree/main/common-log-module): Creation of access logs in the [Common
   Log Format](https://en.wikipedia.org/wiki/Common_Log_Format)
 * [Compression module](../../tree/main/compression-module): Configured dynamic response compression
