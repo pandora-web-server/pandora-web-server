@@ -179,40 +179,42 @@ where
 
     fn try_from(conf: VirtualHostsConf<C>) -> Result<Self, Box<Error>> {
         let mut handlers = Router::builder();
-        let mut default = None;
-        for (host, host_conf) in conf.vhosts.into_iter() {
-            if host.is_empty() {
-                warn!("ignoring empty host name in virtual hosts configuration, please use `default` setting instead");
-                continue;
-            }
+        let mut default: Option<Vec<String>> = None;
+        for (mut hosts, host_conf) in conf.vhosts.into_iter() {
+            let handler = host_conf.config.try_into()?;
 
-            let mut aliases = BTreeSet::new();
-            for alias in host_conf.aliases {
-                if alias.is_empty() {
-                    warn!("ignoring empty alias for host name {host}, please use `default` setting instead");
-                } else {
-                    aliases.insert(alias);
-                }
-            }
+            let mut names = BTreeSet::new();
             if host_conf.default {
                 if let Some(previous) = &default {
-                    warn!("both {previous} and {host} are marked as default virtual host, ignoring the latter");
+                    warn!(
+                        "both [{}] and [{}] are marked as default virtual host, ignoring the latter",
+                        previous.join(", "),
+                        hosts.join(", ")
+                    );
                 } else {
-                    default = Some(host.clone());
-                    aliases.insert(String::new());
+                    default = Some(hosts.clone().into());
+                    names.insert(String::new());
                 }
             }
 
-            let handler = host_conf.config.try_into()?;
-            for alias in &aliases {
+            hosts.retain(|host| {
+                if host.is_empty() {
+                    warn!("ignoring empty host name in virtual hosts configuration, please use `default` setting instead");
+                    false
+                } else {
+                    true
+                }
+            });
+            names.extend(hosts);
+
+            for host in &names {
                 handlers.push(
-                    alias,
+                    host,
                     "",
                     (None, handler.clone()),
                     Some((None, handler.clone())),
                 );
             }
-            handlers.push(&host, "", (None, handler.clone()), Some((None, handler)));
 
             let mut subpaths = host_conf.subpaths.into_iter().collect::<Vec<_>>();
 
@@ -228,9 +230,9 @@ where
                 } else {
                     None
                 };
-                for alias in &aliases {
+                for host in &names {
                     handlers.push(
-                        alias,
+                        host,
                         &rule.path,
                         (strip_path.clone(), handler.clone()),
                         if rule.exact {
@@ -240,13 +242,6 @@ where
                         },
                     );
                 }
-
-                let handler_prefix = if rule.exact {
-                    None
-                } else {
-                    Some((strip_path.clone(), handler.clone()))
-                };
-                handlers.push(&host, &rule.path, (strip_path, handler), handler_prefix);
             }
         }
         let handlers = handlers.build();
@@ -307,8 +302,7 @@ mod tests {
             VirtualHostsConf::<Conf>::from_yaml(format!(
                 r#"
                 vhosts:
-                    localhost:8080:
-                        aliases: ["127.0.0.1:8080", "[::1]:8080"]
+                    [localhost:8080, 127.0.0.1:8080, "[::1]:8080"]:
                         default: {add_default}
                         result: ResponseSent
                         subpaths:
@@ -319,8 +313,9 @@ mod tests {
                                 result: ResponseSent
                             /subdir/subsub/*:
                                 result: Handled
-                    example.com:
-                        aliases: ["example.com:8080"]
+                    [example.com, example.com:8080]:
+                        result: Handled
+                    example.info:
                         result: Handled
             "#
             ))

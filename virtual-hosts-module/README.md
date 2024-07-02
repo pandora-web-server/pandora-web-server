@@ -8,13 +8,8 @@ Static Files Module is the wrapped handler, the configuration file might look li
 ```yaml
 vhosts:
     localhost:8000:
-        aliases:
-            - 127.0.0.1:8000
-            - "[::1]:8000"
         root: ./local-debug-root
-    example.com:
-        aliases:
-            - www.example.com
+    [example.com, www.example.com]:
         default: true
         root: ./production-root
         subpaths:
@@ -30,7 +25,6 @@ vhosts:
 A virtual host configuration adds three configuration settings to the configuration of the
 wrapped handler:
 
-* `aliases` lists additional host names that should share the same configuration.
 * `default` can be set to `true` to indicate that this configuration should apply to all host
   names not listed explicitly.
 * `subpaths` maps paths within the virtual host to their respective configuration. If the path

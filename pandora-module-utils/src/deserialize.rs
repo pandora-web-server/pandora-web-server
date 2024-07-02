@@ -134,7 +134,7 @@ impl_deserialize_map!(ServerConf {
 ///
 /// If a list is encountered in the configuration file, it is deserialized into `Vec` directly.
 /// String or map values are deserialized as a `Vec` instance with one element instead.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct OneOrMany<T> {
     inner: Vec<T>,
 }
@@ -181,6 +181,12 @@ impl<T> DerefMut for OneOrMany<T> {
 impl<T> From<Vec<T>> for OneOrMany<T> {
     fn from(value: Vec<T>) -> Self {
         Self { inner: value }
+    }
+}
+
+impl<T> From<OneOrMany<T>> for Vec<T> {
+    fn from(value: OneOrMany<T>) -> Self {
+        value.inner
     }
 }
 

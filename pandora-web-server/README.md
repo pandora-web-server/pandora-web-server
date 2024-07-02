@@ -60,10 +60,7 @@ response_headers:
 # * https://docs.rs/upstream-module/latest/upstream_module/struct.UpstreamConf.html
 # * https://docs.rs/static-files-module/latest/static_files_module/struct.StaticFilesConf.html
 vhosts:
-    localhost:8080:
-        aliases:
-        - 127.0.0.1:8080
-        - "[::1]:8080"
+    [localhost:8080, 127.0.0.1:8080, "[::1]:8080"]:
         root: ./local-debug-root
     example.com:
         default: true

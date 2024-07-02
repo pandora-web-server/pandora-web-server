@@ -66,8 +66,6 @@ pub struct SubPathConf<C: Default> {
 /// Virtual host configuration
 #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
 pub struct VirtualHostConf<C: Default> {
-    /// List of additional names for the virtual host
-    pub aliases: OneOrMany<String>,
     /// If true, this virtual host should be used as fallback when no other virtual host
     /// configuration applies
     pub default: bool,
@@ -85,5 +83,5 @@ pub struct VirtualHostConf<C: Default> {
 #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
 pub struct VirtualHostsConf<C: Default> {
     /// Maps virtual host names to their configuration
-    pub vhosts: HashMap<String, VirtualHostConf<C>>,
+    pub vhosts: HashMap<OneOrMany<String>, VirtualHostConf<C>>,
 }

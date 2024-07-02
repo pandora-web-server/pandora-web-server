@@ -3,9 +3,6 @@ listen:
 - "[::1]:8080"
 vhosts:
   localhost:8080:
-    aliases:
-      - 127.0.0.1:8080
-      - "[::1]:8080"
     default: true
     log_file: localhost.access.log
     log_format: [remote_addr, -, -, time_local, request, status, bytes_sent, http_referer, http_user_agent, processing_time]
