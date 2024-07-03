@@ -20,7 +20,6 @@ path = "src/lib.rs"
 async-trait.workspace = true
 bytes.workspace = true
 clap.workspace = true
-enumset = "1.1.3"
 glob = "0.3.1"
 http.workspace = true
 log.workspace = true

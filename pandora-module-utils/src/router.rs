@@ -42,7 +42,7 @@ pub const EMPTY_PATH: &Path = &Path { path: Vec::new() };
 /// Encapsulates a router path
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Path {
-    path: Vec<u8>,
+    pub(crate) path: Vec<u8>,
 }
 
 impl Path {

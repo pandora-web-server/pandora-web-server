@@ -14,90 +14,78 @@
 
 //! Rule/configuration merging to be performed prior to creating a router.
 
-use enumset::{EnumSet, EnumSetType};
 use serde::Deserialize;
 use std::ops::{Deref, DerefMut};
 use std::{collections::HashMap, fmt::Debug};
 
 use crate::router::{Path, Router};
 
-/// Result of a path matching operation
-#[derive(Debug, EnumSetType)]
-pub enum PathMatchFlags {
-    /// The match applies to the fallback host
-    Fallback,
-
-    /// There is a match for the exact path
-    Exact,
-
-    /// There is a match for the files within the path
-    Prefix,
-}
-
 /// Combination of various flags to be returned from `PathMatch::matches`
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct PathMatchResult {
-    inner: EnumSet<PathMatchFlags>,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PathMatchResult<SorterIndex> {
+    /// There is a match for the exact path
+    exact: bool,
+    /// There is a match for the files within the path
+    prefix: bool,
+    /// A handle to a matcher object to sort the matches in order of increasing preference
+    sorter: Option<SorterIndex>,
 }
 
-impl PathMatchResult {
+impl<SorterIndex: Copy> PathMatchResult<SorterIndex> {
     /// A result without any flags set
     pub const EMPTY: Self = Self {
-        inner: EnumSet::EMPTY,
+        exact: false,
+        prefix: false,
+        sorter: None,
     };
 
-    /// Modifies the result to apply to the fallback host
-    pub fn set_fallback(self) -> Self {
-        Self {
-            inner: self.inner | PathMatchFlags::Fallback,
-        }
-    }
-
     /// Modifies the result to match the exact path
-    pub fn set_exact(self) -> Self {
-        Self {
-            inner: self.inner | PathMatchFlags::Exact,
-        }
+    pub fn set_exact(mut self) -> Self {
+        self.exact = true;
+        self
     }
 
     /// Modifies the result to match the files within the path
-    pub fn set_prefix(self) -> Self {
-        Self {
-            inner: self.inner | PathMatchFlags::Prefix,
-        }
+    pub fn set_prefix(mut self) -> Self {
+        self.prefix = true;
+        self
     }
 
-    /// Checks whether the match applies to the fallback host
-    pub fn fallback(&self) -> bool {
-        self.contains(PathMatchFlags::Fallback)
+    /// Sets the object determining the ordering of different results
+    pub fn set_sorter(mut self, sorter: SorterIndex) -> Self {
+        self.sorter = Some(sorter);
+        self
     }
 
     /// Checks whether there is a match
     pub fn any(&self) -> bool {
-        self.exact() || self.prefix()
+        self.sorter().is_some()
     }
 
     /// Checks whether there is a match for the exact path
     pub fn exact(&self) -> bool {
-        self.contains(PathMatchFlags::Exact)
+        self.exact
     }
 
     /// Checks whether there is a match for the files within the path
     pub fn prefix(&self) -> bool {
-        self.contains(PathMatchFlags::Prefix)
+        self.prefix
     }
-}
 
-impl Deref for PathMatchResult {
-    type Target = EnumSet<PathMatchFlags>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
+    /// Retrieves the object determining the ordering of different results if any
+    pub fn sorter(&self) -> Option<SorterIndex> {
+        self.sorter
     }
 }
 
 /// Encapsulates the logic determining which paths configuration should apply to.
 pub trait PathMatch {
+    /// Type that can be used to sort matches
+    type Sorter: Ord;
+
+    /// Sorter index that can be stored without storing an explicit reference to the sorter
+    type SorterIndex: Debug + Copy + PartialEq + Eq;
+
     /// Produces all host/path combinations where the result might change, both in positive and
     /// negative direction.
     fn iter(&self) -> Box<dyn Iterator<Item = (&[u8], &Path)> + '_>;
@@ -106,7 +94,15 @@ pub trait PathMatch {
     ///
     /// If `force_prefix` is `true`, the check is meant to produce the result for some path
     /// *starting* with `path` but not actually equal to `path`.
-    fn matches(&self, host: &[u8], path: &Path, force_prefix: bool) -> PathMatchResult;
+    fn matches(
+        &self,
+        host: &[u8],
+        path: &Path,
+        force_prefix: bool,
+    ) -> PathMatchResult<Self::SorterIndex>;
+
+    /// Retrieves the sorter associated with a previous match by its index
+    fn sorter(&self, index: Self::SorterIndex) -> &Self::Sorter;
 }
 
 /// A basic path matcher, applying to a single host/path combination
@@ -121,6 +117,15 @@ pub struct HostPathMatcher {
 
     /// If `true`, only exact path matches are accepted, otherwise both exact and prefix matches.
     pub exact: bool,
+}
+
+impl HostPathMatcher {
+    /// A matcher that matches everything, equivalent to `/*`
+    pub const FALLBACK: &'static HostPathMatcher = &HostPathMatcher {
+        host: Vec::new(),
+        path: Path { path: Vec::new() },
+        exact: false,
+    };
 }
 
 impl Debug for HostPathMatcher {
@@ -179,15 +184,21 @@ impl From<String> for HostPathMatcher {
 }
 
 impl PathMatch for HostPathMatcher {
+    type Sorter = Self;
+    type SorterIndex = ();
+
     fn iter(&self) -> Box<dyn Iterator<Item = (&[u8], &Path)> + '_> {
         Box::new(std::iter::once((self.host.as_slice(), &self.path)))
     }
 
-    fn matches(&self, host: &[u8], path: &Path, _force_prefix: bool) -> PathMatchResult {
-        let result = if self.host == host {
-            PathMatchResult::EMPTY
-        } else if self.host.is_empty() {
-            PathMatchResult::EMPTY.set_fallback()
+    fn matches(
+        &self,
+        host: &[u8],
+        path: &Path,
+        _force_prefix: bool,
+    ) -> PathMatchResult<Self::SorterIndex> {
+        let result = if self.host.is_empty() || self.host == host {
+            PathMatchResult::EMPTY.set_sorter(())
         } else {
             return PathMatchResult::EMPTY;
         };
@@ -203,6 +214,10 @@ impl PathMatch for HostPathMatcher {
         } else {
             PathMatchResult::EMPTY
         }
+    }
+
+    fn sorter(&self, _index: Self::SorterIndex) -> &Self::Sorter {
+        self
     }
 }
 
@@ -259,16 +274,24 @@ impl From<String> for PathMatcher {
 }
 
 impl PathMatch for PathMatcher {
+    type Sorter = Self;
+    type SorterIndex = ();
+
     fn iter(&self) -> Box<dyn Iterator<Item = (&[u8], &Path)> + '_> {
         Box::new(std::iter::once(([].as_slice(), &self.path)))
     }
 
-    fn matches(&self, host: &[u8], path: &Path, _force_prefix: bool) -> PathMatchResult {
-        let result = PathMatchResult::EMPTY;
+    fn matches(
+        &self,
+        host: &[u8],
+        path: &Path,
+        _force_prefix: bool,
+    ) -> PathMatchResult<Self::SorterIndex> {
         if !host.is_empty() {
-            return result;
+            return PathMatchResult::EMPTY;
         }
 
+        let result = PathMatchResult::EMPTY.set_sorter(());
         if &self.path == path {
             if self.exact {
                 result.set_exact()
@@ -278,8 +301,12 @@ impl PathMatch for PathMatcher {
         } else if !self.exact && self.path.is_prefix_of(path) {
             result.set_prefix()
         } else {
-            result
+            PathMatchResult::EMPTY
         }
+    }
+
+    fn sorter(&self, _index: Self::SorterIndex) -> &Self::Sorter {
+        self
     }
 }
 
@@ -291,16 +318,23 @@ pub struct StrictHostPathMatcher {
     path: Path,
     exact: bool,
 }
+
 impl PathMatch for StrictHostPathMatcher {
+    type Sorter = Self;
+    type SorterIndex = ();
+
     fn iter(&self) -> Box<dyn Iterator<Item = (&[u8], &Path)> + '_> {
         Box::new(std::iter::once((self.host.as_slice(), &self.path)))
     }
 
-    fn matches(&self, host: &[u8], path: &Path, force_prefix: bool) -> PathMatchResult {
-        let result = if self.host == host {
-            PathMatchResult::EMPTY
-        } else if self.host.is_empty() {
-            PathMatchResult::EMPTY.set_fallback()
+    fn matches(
+        &self,
+        host: &[u8],
+        path: &Path,
+        force_prefix: bool,
+    ) -> PathMatchResult<Self::SorterIndex> {
+        let result = if self.host.is_empty() || self.host == host {
+            PathMatchResult::EMPTY.set_sorter(())
         } else {
             return PathMatchResult::EMPTY;
         };
@@ -318,6 +352,10 @@ impl PathMatch for StrictHostPathMatcher {
         } else {
             PathMatchResult::EMPTY
         }
+    }
+
+    fn sorter(&self, _index: Self::SorterIndex) -> &Self::Sorter {
+        self
     }
 }
 
@@ -338,23 +376,20 @@ impl Debug for StrictHostPathMatcher {
 
 /// Intermediate node type used by `Merger`
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct MergerEntry<Matcher, Conf> {
+struct MergerEntry<Matcher: PathMatch, Conf> {
     matcher: Matcher,
+    sorter: Matcher::SorterIndex,
     conf: Conf,
 }
 
-type MergerEntriesInner<Matcher, Conf> = (
-    Path,
-    Vec<MergerEntry<Matcher, Conf>>,
-    Vec<MergerEntry<Matcher, Conf>>,
-);
+type MergerEntriesInner<Matcher, Conf> = (Path, Vec<MergerEntry<Matcher, Conf>>);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct MergerEntries<Matcher, Conf> {
+struct MergerEntries<Matcher: PathMatch, Conf> {
     inner: Vec<MergerEntriesInner<Matcher, Conf>>,
 }
 
-impl<Matcher, Conf> Deref for MergerEntries<Matcher, Conf> {
+impl<Matcher: PathMatch, Conf> Deref for MergerEntries<Matcher, Conf> {
     type Target = Vec<MergerEntriesInner<Matcher, Conf>>;
 
     fn deref(&self) -> &Self::Target {
@@ -362,13 +397,13 @@ impl<Matcher, Conf> Deref for MergerEntries<Matcher, Conf> {
     }
 }
 
-impl<Matcher, Conf> DerefMut for MergerEntries<Matcher, Conf> {
+impl<Matcher: PathMatch, Conf> DerefMut for MergerEntries<Matcher, Conf> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
     }
 }
 
-impl<Matcher, Conf> Default for MergerEntries<Matcher, Conf> {
+impl<Matcher: PathMatch, Conf> Default for MergerEntries<Matcher, Conf> {
     fn default() -> Self {
         Self { inner: Vec::new() }
     }
@@ -398,7 +433,10 @@ impl<Matcher, Conf> Default for MergerEntries<Matcher, Conf> {
 /// produce an intermediate `Merger`. Multiple mergers of the same type can be combined by calling
 /// `extend` and turned into a `Router` instance then.
 #[derive(Debug, Clone, Default)]
-pub struct Merger<Matcher, Conf> {
+pub struct Merger<Matcher, Conf>
+where
+    Matcher: PathMatch,
+{
     hosts: HashMap<Vec<u8>, MergerEntries<Matcher, Conf>>,
 }
 
@@ -423,12 +461,8 @@ where
                     .get(&Vec::new())
                     .map(|entries| {
                         let mut new_entries = Vec::new();
-                        for (path, list_fallback, list_main) in entries.iter() {
-                            new_entries.push((
-                                path.clone(),
-                                list_fallback.iter().chain(list_main).cloned().collect(),
-                                Vec::new(),
-                            ));
+                        for (path, list) in entries.iter() {
+                            new_entries.push((path.clone(), list.clone()));
                         }
                         MergerEntries { inner: new_entries }
                     })
@@ -440,39 +474,37 @@ where
     }
 
     fn ensure_entry(entries: &mut MergerEntries<Matcher, Conf>, host: &[u8], path: &Path) {
-        let index = match entries.binary_search_by_key(&path, |(path, _, _)| path) {
+        let index = match entries.binary_search_by_key(&path, |(path, _)| path) {
             Ok(_) => return,
             Err(index) => index,
         };
 
-        let mut list_fallback = Vec::new();
-        let mut list_main = Vec::new();
+        let mut list = Vec::new();
 
         // Walk backwards in the list to find parent entry
-        for (parent_path, parent_fallback, parent_main) in entries[0..index].iter().rev() {
+        for (parent_path, parent_list) in entries[0..index].iter().rev() {
             if parent_path.is_prefix_of(path) {
                 // Copy any configurations from parent that apply
-                for entry in parent_fallback.iter().chain(parent_main.iter()) {
+                for entry in parent_list {
                     let result = entry.matcher.matches(host, path, false);
-                    if result.any() {
-                        let list = if result.fallback() {
-                            &mut list_fallback
-                        } else {
-                            &mut list_main
-                        };
-                        list.push(entry.clone());
+                    if let Some(sorter) = result.sorter() {
+                        list.push(MergerEntry {
+                            matcher: entry.matcher.clone(),
+                            sorter,
+                            conf: entry.conf.clone(),
+                        });
                     }
                 }
                 break;
             }
         }
 
-        entries.insert(index, (path.clone(), list_fallback, list_main));
+        entries.insert(index, (path.clone(), list));
     }
 
     /// Adds a configuration to the merging pool, along with the matcher encapsulating its
     /// path-based restrictions.
-    pub fn push(&mut self, matcher: Matcher, conf: Conf) {
+    pub fn push(&mut self, mut matcher: Matcher, conf: Conf) {
         // Make sure entries for all relevant host/path combinations exist
         for (host, path) in matcher.iter() {
             Self::ensure_entry(self.ensure_host(host), host, path);
@@ -488,17 +520,17 @@ where
         }
 
         // Add this conf to any entries it applies to
-        let entry = MergerEntry { matcher, conf };
         for (host, entries) in self.hosts.iter_mut() {
-            for (path, list_fallback, list_main) in entries.iter_mut() {
-                let result = entry.matcher.matches(host, path, false);
-                if result.any() {
-                    let list = if result.fallback() {
-                        list_fallback
-                    } else {
-                        list_main
-                    };
-                    list.push(entry.clone())
+            for (path, list) in entries.iter_mut() {
+                let result = matcher.matches(host, path, false);
+                if let Some(sorter) = result.sorter() {
+                    let new_matcher = matcher.clone();
+                    list.push(MergerEntry {
+                        matcher,
+                        sorter,
+                        conf: conf.clone(),
+                    });
+                    matcher = new_matcher;
                 }
             }
         }
@@ -507,29 +539,27 @@ where
     fn merge_entry<C, M>(
         host: &[u8],
         path: &Path,
-        list_fallback: Vec<MergerEntry<Matcher, Conf>>,
-        list_main: Vec<MergerEntry<Matcher, Conf>>,
+        list: Vec<MergerEntry<Matcher, Conf>>,
         callback: &C,
     ) -> (M, M)
     where
         C: for<'a> Fn(Box<dyn Iterator<Item = &'a Conf> + 'a>) -> M,
         M: Clone,
     {
-        // Iterate over fallback entries first, so that regular entries take precedence.
-        let value_exact = callback(Box::new(
-            list_fallback
-                .iter()
-                .chain(list_main.iter())
-                .filter(|entry| entry.matcher.matches(host, path, false).any())
-                .map(|entry| &entry.conf),
-        ));
-        let value_prefix = callback(Box::new(
-            list_fallback
-                .iter()
-                .chain(list_main.iter())
-                .filter(|entry| entry.matcher.matches(host, path, true).prefix())
-                .map(|entry| &entry.conf),
-        ));
+        let mut list_exact = list
+            .iter()
+            .filter(|entry| entry.matcher.matches(host, path, false).any())
+            .collect::<Vec<_>>();
+        list_exact.sort_by_key(|entry| entry.matcher.sorter(entry.sorter));
+        let value_exact = callback(Box::new(list_exact.iter().map(|entry| &entry.conf)));
+
+        let mut list_prefix = list
+            .iter()
+            .filter(|entry| entry.matcher.matches(host, path, true).prefix())
+            .collect::<Vec<_>>();
+        list_prefix.sort_by_key(|entry| entry.matcher.sorter(entry.sorter));
+        let value_prefix = callback(Box::new(list_prefix.iter().map(|entry| &entry.conf)));
+
         (value_exact, value_prefix)
     }
 
@@ -542,9 +572,8 @@ where
         let mut builder = Router::builder();
         for (host, entries) in self.hosts {
             let mut values = Vec::new();
-            for (path, list_fallback, list_main) in entries.inner {
-                let (value_exact, value_prefix) =
-                    Self::merge_entry(&host, &path, list_fallback, list_main, &callback);
+            for (path, list) in entries.inner {
+                let (value_exact, value_prefix) = Self::merge_entry(&host, &path, list, &callback);
                 values.push((path, value_exact, value_prefix));
             }
 
@@ -592,9 +621,8 @@ where
 
         for (host, entries) in self.hosts {
             let mut new_entries = MergerEntries::default();
-            for (path, list_fallback, list_main) in entries.inner {
-                let (value_exact, value_prefix) =
-                    Self::merge_entry(&host, &path, list_fallback, list_main, &callback);
+            for (path, list) in entries.inner {
+                let (value_exact, value_prefix) = Self::merge_entry(&host, &path, list, &callback);
 
                 let entry_exact = MergerEntry {
                     matcher: StrictHostPathMatcher {
@@ -602,6 +630,7 @@ where
                         path: path.clone(),
                         exact: true,
                     },
+                    sorter: (),
                     conf: value_exact,
                 };
                 let entry_prefix = MergerEntry {
@@ -610,10 +639,11 @@ where
                         path: path.clone(),
                         exact: false,
                     },
+                    sorter: (),
                     conf: value_prefix,
                 };
 
-                new_entries.push((path, Vec::new(), vec![entry_exact, entry_prefix]));
+                new_entries.push((path, vec![entry_exact, entry_prefix]));
             }
             new_hosts.insert(host, new_entries);
         }
@@ -626,7 +656,7 @@ where
         // Ensure `other` has all entries present in `self`
         for (host, entries) in &self.hosts {
             let other_entries = other.ensure_host(host);
-            for (path, _, _) in entries.iter() {
+            for (path, _) in entries.iter() {
                 Self::ensure_entry(other_entries, host, path);
             }
         }
@@ -634,7 +664,7 @@ where
         // Ensure `self` has all entries present in `other`
         for (host, entries) in &other.hosts {
             let self_entries = self.ensure_host(host);
-            for (path, _, _) in entries.iter() {
+            for (path, _) in entries.iter() {
                 Self::ensure_entry(self_entries, host, path);
             }
         }
@@ -645,10 +675,9 @@ where
             for (self_entry, other_entry) in
                 self_entries.iter_mut().zip(other_entries.inner.into_iter())
             {
-                let (_, list_fallback, list_main) = self_entry;
-                let (_, other_fallback, other_main) = other_entry;
-                list_fallback.extend(other_fallback);
-                list_main.extend(other_main);
+                let (_, list) = self_entry;
+                let (_, other) = other_entry;
+                list.extend(other);
             }
         }
     }
@@ -669,6 +698,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use crate::router::EMPTY_PATH;
+
     use super::*;
 
     fn lookup(router: &Router<String>, host: &str, path: &str) -> Option<String> {
@@ -794,7 +825,7 @@ mod tests {
 
         assert_eq!(
             lookup(&router, "localhost", "/xyz/abc/x"),
-            Some("adk".to_owned())
+            Some("kad".to_owned())
         );
 
         assert_eq!(lookup(&router, "example.com", "/"), Some("k".to_owned()));
@@ -853,6 +884,9 @@ mod tests {
             }
         }
         impl PathMatch for CustomMatcher {
+            type Sorter = ();
+            type SorterIndex = ();
+
             fn iter(&self) -> Box<dyn Iterator<Item = (&[u8], &Path)> + '_> {
                 Box::new(
                     self.paths
@@ -861,12 +895,21 @@ mod tests {
                 )
             }
 
-            fn matches(&self, host: &[u8], path: &Path, _force_prefix: bool) -> PathMatchResult {
+            fn matches(
+                &self,
+                host: &[u8],
+                path: &Path,
+                _force_prefix: bool,
+            ) -> PathMatchResult<Self::Sorter> {
                 if host == b"localhost" && Path::new("abc/def").is_prefix_of(path) {
-                    PathMatchResult::EMPTY.set_prefix()
+                    PathMatchResult::EMPTY.set_sorter(()).set_prefix()
                 } else {
                     PathMatchResult::EMPTY
                 }
+            }
+
+            fn sorter(&self, _index: Self::SorterIndex) -> &Self::Sorter {
+                &()
             }
         }
 
@@ -904,17 +947,29 @@ mod tests {
         }
 
         impl PathMatch for CustomMatcher {
+            type Sorter = HostPathMatcher;
+            type SorterIndex = ();
+
             fn iter(&self) -> Box<dyn Iterator<Item = (&[u8], &Path)> + '_> {
                 Box::new(self.include.iter().chain(self.exclude.iter()))
             }
 
-            fn matches(&self, host: &[u8], path: &Path, force_prefix: bool) -> PathMatchResult {
+            fn matches(
+                &self,
+                host: &[u8],
+                path: &Path,
+                force_prefix: bool,
+            ) -> PathMatchResult<Self::SorterIndex> {
                 let result = self.exclude.matches(host, path, force_prefix);
                 if !result.any() {
                     self.include.matches(host, path, force_prefix)
                 } else {
                     PathMatchResult::EMPTY
                 }
+            }
+
+            fn sorter(&self, _index: Self::SorterIndex) -> &Self::Sorter {
+                &self.include
             }
         }
 
@@ -935,5 +990,57 @@ mod tests {
             router.lookup("example.com", "subdir").as_deref().copied(),
             Some("")
         );
+    }
+
+    #[test]
+    fn sorter() {
+        #[derive(Debug, Clone)]
+        struct CustomMatcher {
+            index: usize,
+        }
+
+        impl CustomMatcher {
+            fn new(index: usize) -> Self {
+                Self { index }
+            }
+        }
+
+        impl PathMatch for CustomMatcher {
+            type Sorter = usize;
+            type SorterIndex = usize;
+
+            fn iter(&self) -> Box<dyn Iterator<Item = (&[u8], &Path)> + '_> {
+                Box::new(std::iter::once(("".as_bytes(), EMPTY_PATH)))
+            }
+
+            fn matches(
+                &self,
+                _host: &[u8],
+                _path: &Path,
+                _force_prefix: bool,
+            ) -> PathMatchResult<Self::SorterIndex> {
+                PathMatchResult::EMPTY
+                    .set_sorter(3)
+                    .set_exact()
+                    .set_prefix()
+            }
+
+            fn sorter(&self, index: Self::SorterIndex) -> &Self::Sorter {
+                assert_eq!(index, 3);
+                &self.index
+            }
+        }
+
+        let mut merger = Merger::new();
+        merger.push(CustomMatcher::new(8), "a");
+        merger.push(CustomMatcher::new(0), "b");
+        merger.push(CustomMatcher::new(10), "c");
+        merger.push(CustomMatcher::new(3), "d");
+        merger.push(CustomMatcher::new(4), "e");
+        merger.push(CustomMatcher::new(2), "f");
+        merger.push(CustomMatcher::new(9), "g");
+        let router = merger.merge(|values| values.copied().collect::<String>());
+
+        assert_eq!(lookup(&router, "", ""), Some("bfdeagc".to_owned()));
     }
 }

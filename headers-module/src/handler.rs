@@ -200,13 +200,13 @@ mod tests {
                 response_headers:
                     cache_control:
                     -
+                        max-age: 300
+                        include: example.com/subdir/file.txt
+                    -
                         max-age: 200
                         public: true
                         include: example.com/subdir/*
                         exclude: example.com/subdir/subsub/*
-                    -
-                        max-age: 300
-                        include: example.com/subdir/file.txt
                     -
                         no-storage: true
                         include: example.net
@@ -327,7 +327,7 @@ mod tests {
             session.deref().response_written().unwrap(),
             vec![
                 ("X-Me", "localhost"),
-                ("Cache-Control", "no-cache, max-age=604800"),
+                ("Cache-Control", "max-age=604800, no-cache"),
                 ("X-Test", "unchanged"),
                 ("Server", "My very own web server"),
                 (
@@ -484,7 +484,7 @@ mod tests {
             &header,
             vec![
                 ("X-Me", "localhost"),
-                ("Cache-Control", "no-cache, max-age=604800"),
+                ("Cache-Control", "max-age=604800, no-cache"),
                 ("X-Test", "unchanged"),
                 ("Server", "My very own web server"),
                 (

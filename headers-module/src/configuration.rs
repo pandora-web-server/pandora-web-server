@@ -51,6 +51,9 @@ pub struct MatchRules {
 }
 
 impl PathMatch for MatchRules {
+    type Sorter = HostPathMatcher;
+    type SorterIndex = usize;
+
     fn iter(&self) -> Box<dyn Iterator<Item = (&[u8], &Path)> + '_> {
         if self.include.is_empty() && self.exclude.is_empty() {
             Box::new(std::iter::once(("".as_bytes(), EMPTY_PATH)))
@@ -64,25 +67,34 @@ impl PathMatch for MatchRules {
         }
     }
 
-    fn matches(&self, host: &[u8], path: &Path, force_prefix: bool) -> PathMatchResult {
+    fn matches(
+        &self,
+        host: &[u8],
+        path: &Path,
+        force_prefix: bool,
+    ) -> PathMatchResult<Self::SorterIndex> {
         fn find_match<'a>(
             rules: &'a [HostPathMatcher],
             host: &[u8],
             path: &Path,
             force_prefix: bool,
-        ) -> (PathMatchResult, Option<&'a HostPathMatcher>) {
-            rules.iter().fold(
-                (PathMatchResult::EMPTY, None),
-                |(previous_result, previous), current| {
+        ) -> (
+            PathMatchResult<<HostPathMatcher as PathMatch>::SorterIndex>,
+            usize,
+            Option<&'a HostPathMatcher>,
+        ) {
+            rules.iter().enumerate().fold(
+                (PathMatchResult::EMPTY, 0, None),
+                |(previous_result, previous_index, previous), (index, current)| {
                     let result = current.matches(host, path, force_prefix);
                     if result.any() {
                         if previous.is_some_and(|previous| previous > current) {
-                            (previous_result, previous)
+                            (previous_result, previous_index, previous)
                         } else {
-                            (result, Some(current))
+                            (result, index, Some(current))
                         }
                     } else {
-                        (previous_result, previous)
+                        (previous_result, previous_index, previous)
                     }
                 },
             )
@@ -90,11 +102,7 @@ impl PathMatch for MatchRules {
 
         if self.include.is_empty() && self.exclude.is_empty() {
             // By default, this is a fallback rule matching everything
-            let result = if host.is_empty() {
-                PathMatchResult::EMPTY
-            } else {
-                PathMatchResult::EMPTY.set_fallback()
-            };
+            let result = PathMatchResult::EMPTY.set_sorter(0);
 
             return if path.is_empty() {
                 result.set_exact().set_prefix()
@@ -103,16 +111,36 @@ impl PathMatch for MatchRules {
             };
         }
 
-        let (_, exclude) = find_match(&self.exclude, host, path, force_prefix);
-        let (include_result, include) = find_match(&self.include, host, path, force_prefix);
+        let (_, _, exclude) = find_match(&self.exclude, host, path, force_prefix);
+        let (include_result, include_index, include) =
+            find_match(&self.include, host, path, force_prefix);
+
+        let mut result = PathMatchResult::EMPTY.set_sorter(include_index);
+        if include_result.exact() {
+            result = result.set_exact();
+        }
+        if include_result.prefix() {
+            result = result.set_prefix();
+        }
+
         if let Some(exclude) = exclude {
             if include.is_some_and(|include| include > exclude) {
-                include_result
+                result
             } else {
                 PathMatchResult::EMPTY
             }
+        } else if include_result.any() {
+            result
         } else {
-            include_result
+            PathMatchResult::EMPTY
+        }
+    }
+
+    fn sorter(&self, index: Self::SorterIndex) -> &Self::Sorter {
+        if self.include.is_empty() {
+            HostPathMatcher::FALLBACK
+        } else {
+            &self.include[index]
         }
     }
 }
