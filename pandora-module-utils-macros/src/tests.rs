@@ -653,3 +653,84 @@ fn merge_across_maps() {
         ],
     );
 }
+
+#[test]
+fn deserialize_merge_across_options() {
+    #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
+    struct ConfInner {
+        value1: Option<u32>,
+        value2: Option<u32>,
+    }
+
+    #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
+    struct Conf {
+        option: Option<ConfInner>,
+    }
+
+    let conf = Conf { option: None };
+
+    let conf = conf
+        .merge_from_yaml(
+            r#"
+                option:
+                    value2: 12
+            "#,
+        )
+        .unwrap();
+    assert_eq!(
+        conf,
+        Conf {
+            option: Some(ConfInner {
+                value1: None,
+                value2: Some(12),
+            })
+        }
+    );
+
+    let conf = conf
+        .merge_from_yaml(
+            r#"
+                option:
+                    value1: 34
+            "#,
+        )
+        .unwrap();
+    assert_eq!(
+        conf,
+        Conf {
+            option: Some(ConfInner {
+                value1: Some(34),
+                value2: Some(12),
+            })
+        }
+    );
+
+    let conf = conf.merge_from_yaml("{}").unwrap();
+    assert_eq!(
+        conf,
+        Conf {
+            option: Some(ConfInner {
+                value1: Some(34),
+                value2: Some(12),
+            })
+        }
+    );
+
+    let conf = conf
+        .merge_from_yaml(
+            r#"
+                option:
+                    value2: 56
+            "#,
+        )
+        .unwrap();
+    assert_eq!(
+        conf,
+        Conf {
+            option: Some(ConfInner {
+                value1: Some(34),
+                value2: Some(56),
+            })
+        }
+    );
+}

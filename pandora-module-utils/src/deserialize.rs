@@ -352,6 +352,24 @@ pub mod _private {
         }
     }
 
+    // `Option` with type supporting `DeserializeSeed`: merge values when both present.
+    impl<'de, T> DeserializeMerge<'de, Option<T>> for &&PhantomData<Option<T>>
+    where
+        T: DeserializeSeed<'de, Value = T> + Default,
+    {
+        fn deserialize_merge<D>(
+            &self,
+            initial: Option<T>,
+            deserializer: D,
+        ) -> Result<Option<T>, D::Error>
+        where
+            Option<T>: Sized,
+            D: Deserializer<'de>,
+        {
+            Ok(Some(initial.unwrap_or_default().deserialize(deserializer)?))
+        }
+    }
+
     // `HashMap` with type supporting `DeserializeSeed`: for existing keys, merge the values.
     impl<'de, K, V> DeserializeMerge<'de, HashMap<K, V>> for &&PhantomData<HashMap<K, V>>
     where
