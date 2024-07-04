@@ -177,7 +177,7 @@ mod tests {
         ) -> Result<RequestFilterResult, Box<Error>> {
             if self.conf.send_response {
                 let header = make_response_header()?;
-                session.write_response_header(Box::new(header)).await?;
+                session.write_response_header(Box::new(header), true).await?;
 
                 Ok(RequestFilterResult::ResponseSent)
             } else {

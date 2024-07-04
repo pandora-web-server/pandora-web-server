@@ -21,6 +21,7 @@ use http::status::StatusCode;
 use pandora_module_utils::pingora::{Error, RequestHeader, SessionWrapper, TestSession};
 use pandora_module_utils::standard_response::response_text;
 use pandora_module_utils::{FromYaml, RequestFilter, RequestFilterResult};
+use pingora_core::modules::http::compression::ResponseCompression;
 use std::path::PathBuf;
 use test_log::test;
 
@@ -685,7 +686,7 @@ async fn if_none_match() -> Result<(), Box<Error>> {
     session
         .req_header_mut()
         .insert_header("If-None-Match", &meta.etag)?;
-    session.downstream_compression.adjust_level(3);
+    session.downstream_modules_ctx.get_mut::<ResponseCompression>().unwrap().adjust_level(3);
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
@@ -819,7 +820,7 @@ async fn if_match() -> Result<(), Box<Error>> {
     session
         .req_header_mut()
         .insert_header("If-Match", "\"xyz\"")?;
-    session.downstream_compression.adjust_level(3);
+    session.downstream_modules_ctx.get_mut::<ResponseCompression>().unwrap().adjust_level(3);
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
@@ -913,7 +914,7 @@ async fn if_modified_since() -> Result<(), Box<Error>> {
     session
         .req_header_mut()
         .insert_header("If-Modified-Since", meta.modified.as_ref().unwrap())?;
-    session.downstream_compression.adjust_level(3);
+    session.downstream_modules_ctx.get_mut::<ResponseCompression>().unwrap().adjust_level(3);
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
@@ -1008,7 +1009,7 @@ async fn if_unmodified_since() -> Result<(), Box<Error>> {
     session
         .req_header_mut()
         .insert_header("If-Match", "\"xyz\"")?;
-    session.downstream_compression.adjust_level(3);
+    session.downstream_modules_ctx.get_mut::<ResponseCompression>().unwrap().adjust_level(3);
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
@@ -1120,7 +1121,7 @@ async fn ranged_request() -> Result<(), Box<Error>> {
     session
         .req_header_mut()
         .insert_header("Range", "bytes=200000-")?;
-    session.downstream_compression.adjust_level(3);
+    session.downstream_modules_ctx.get_mut::<ResponseCompression>().unwrap().adjust_level(3);
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
@@ -1150,7 +1151,7 @@ async fn dynamic_compression() -> Result<(), Box<Error>> {
     session
         .req_header_mut()
         .insert_header("Accept-Encoding", "gzip")?;
-    session.downstream_compression.adjust_level(3);
+    session.downstream_modules_ctx.get_mut::<ResponseCompression>().unwrap().adjust_level(3);
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
@@ -1174,7 +1175,7 @@ async fn dynamic_compression() -> Result<(), Box<Error>> {
     session
         .req_header_mut()
         .insert_header("Accept-Encoding", "unsupported")?;
-    session.downstream_compression.adjust_level(3);
+    session.downstream_modules_ctx.get_mut::<ResponseCompression>().unwrap().adjust_level(3);
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent
@@ -1200,7 +1201,7 @@ async fn dynamic_compression() -> Result<(), Box<Error>> {
     session
         .req_header_mut()
         .insert_header("Range", "bytes=0-10000")?;
-    session.downstream_compression.adjust_level(3);
+    session.downstream_modules_ctx.get_mut::<ResponseCompression>().unwrap().adjust_level(3);
     assert_eq!(
         handler.request_filter(&mut session, &mut ()).await?,
         RequestFilterResult::ResponseSent

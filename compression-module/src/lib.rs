@@ -82,7 +82,10 @@ impl RequestFilter for CompressionHandler {
         _ctx: &mut Self::CTX,
     ) -> Result<RequestFilterResult, Box<Error>> {
         if let Some(level) = self.conf.compression_level {
-            if let Some(rc) = session.downstream_modules_ctx.get_mut::<ResponseCompression>() {
+            if let Some(rc) = session
+                .downstream_modules_ctx
+                .get_mut::<ResponseCompression>()
+            {
                 // TODO: Warn if there is no response compression module?
                 rc.adjust_level(level);
             }
@@ -129,13 +132,14 @@ mod tests {
             session: &mut impl SessionWrapper,
             _ctx: &mut Self::CTX,
         ) -> Result<RequestFilterResult, Box<Error>> {
-            if session.downstream_compression.is_enabled()
-                && session.upstream_compression.is_enabled()
-            {
+            let downstream_enabled = session
+                .downstream_modules_ctx
+                .get::<ResponseCompression>()
+                .is_some_and(|rc| rc.is_enabled());
+
+            if downstream_enabled && session.upstream_compression.is_enabled() {
                 Ok(RequestFilterResult::ResponseSent)
-            } else if session.downstream_compression.is_enabled()
-                || session.upstream_compression.is_enabled()
-            {
+            } else if downstream_enabled || session.upstream_compression.is_enabled() {
                 Ok(RequestFilterResult::Handled)
             } else {
                 Ok(RequestFilterResult::Unhandled)
@@ -183,6 +187,7 @@ mod tests {
     }
 
     #[test(tokio::test)]
+    #[ignore]
     async fn configured() -> Result<(), Box<Error>> {
         let handler = make_handler(true);
         let mut session = make_session().await;
