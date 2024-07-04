@@ -25,10 +25,8 @@ regex = "1.10.4"
 serde.workspace = true
 
 [dev-dependencies]
-clap.workspace = true
 env_logger.workspace = true
 startup-module.workspace = true
-static-files-module.workspace = true
 test-log.workspace = true
 tokio.workspace = true
 

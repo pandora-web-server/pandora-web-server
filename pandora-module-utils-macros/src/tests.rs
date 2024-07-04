@@ -13,11 +13,14 @@
 // limitations under the License.
 
 use async_trait::async_trait;
-use pandora_module_utils::pingora::{Error, RequestHeader, SessionWrapper, TestSession};
+use pandora_module_utils::pingora::{
+    create_test_session, Error, ErrorType, RequestHeader, SessionWrapper,
+};
 use pandora_module_utils::serde::{Deserialize, Deserializer};
 use pandora_module_utils::{
     merge_conf, DeserializeMap, FromYaml, RequestFilter, RequestFilterResult,
 };
+use startup_module::DefaultApp;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Debug;
 use test_log::test;
@@ -55,7 +58,7 @@ impl RequestFilter for Handler1 {
         _ctx: &mut Self::CTX,
     ) -> Result<RequestFilterResult, Box<Error>> {
         Ok(if self.handle_request {
-            RequestFilterResult::Handled
+            RequestFilterResult::ResponseSent
         } else {
             RequestFilterResult::Unhandled
         })
@@ -168,22 +171,28 @@ fn request_filter() {
 #[test(tokio::test)]
 async fn handler() -> Result<(), Box<Error>> {
     let header = RequestHeader::build("GET", "/".as_bytes(), None)?;
-    let mut session = TestSession::from(header).await;
+    let session = create_test_session(header).await;
 
     let conf = <Handler<String, u32> as RequestFilter>::Conf::default();
-    let mut ctx = <Handler<String, u32> as RequestFilter>::new_ctx();
+    let handler = Handler::<String, u32>::try_from(conf).unwrap();
+    let mut app = DefaultApp::new(handler);
+
+    let result = app.handle_request(session).await;
+    assert_eq!(
+        result.err().as_ref().map(|err| &err.etype),
+        Some(&ErrorType::HTTPStatus(404))
+    );
+
+    let header = RequestHeader::build("GET", "/".as_bytes(), None)?;
+    let session = create_test_session(header).await;
+
+    let conf = <Handler<String, u32> as RequestFilter>::Conf::default();
     let mut handler = Handler::<String, u32>::try_from(conf).unwrap();
-
-    assert_eq!(
-        handler.request_filter(&mut session, &mut ctx).await?,
-        RequestFilterResult::Unhandled
-    );
-
     handler.handler1.handle_request = true;
-    assert_eq!(
-        handler.request_filter(&mut session, &mut ctx).await?,
-        RequestFilterResult::Handled
-    );
+    let mut app = DefaultApp::new(handler);
+
+    let result = app.handle_request(session).await;
+    assert!(result.err().is_none());
 
     Ok(())
 }

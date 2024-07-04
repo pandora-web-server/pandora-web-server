@@ -177,26 +177,29 @@ impl RequestFilter for RewriteHandler {
 mod tests {
     use super::*;
 
-    use pandora_module_utils::pingora::{RequestHeader, TestSession};
+    use pandora_module_utils::pingora::{create_test_session, ErrorType, RequestHeader, Session};
     use pandora_module_utils::FromYaml;
+    use startup_module::DefaultApp;
     use test_log::test;
 
-    fn make_handler(conf: &str) -> RewriteHandler {
-        <RewriteHandler as RequestFilter>::Conf::from_yaml(conf)
-            .unwrap()
-            .try_into()
-            .unwrap()
+    fn make_app(conf: &str) -> DefaultApp<RewriteHandler> {
+        DefaultApp::new(
+            <RewriteHandler as RequestFilter>::Conf::from_yaml(conf)
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        )
     }
 
-    async fn make_session(path: &str) -> TestSession {
+    async fn make_session(path: &str) -> Session {
         let header = RequestHeader::build("GET", path.as_bytes(), None).unwrap();
 
-        TestSession::from(header).await
+        create_test_session(header).await
     }
 
     #[test(tokio::test)]
-    async fn internal_redirect() -> Result<(), Box<Error>> {
-        let handler = make_handler(
+    async fn internal_redirect() {
+        let mut app = make_app(
             r#"
                 rewrite_rules:
                     from: /path/*
@@ -204,52 +207,46 @@ mod tests {
             "#,
         );
 
-        let mut session = make_session("/").await;
+        let session = make_session("/").await;
+        let mut result = app.handle_request(session).await;
         assert_eq!(
-            handler
-                .request_filter(&mut session, &mut RewriteHandler::new_ctx())
-                .await?,
-            RequestFilterResult::Unhandled
+            result.err().as_ref().map(|err| &err.etype),
+            Some(&ErrorType::HTTPStatus(404))
         );
-        assert_eq!(session.uri(), "/");
-        assert_eq!(session.original_uri(), "/");
+        assert_eq!(result.session().uri(), "/");
+        assert_eq!(result.session().original_uri(), "/");
 
-        let mut session = make_session("/path").await;
+        let session = make_session("/path").await;
+        let mut result = app.handle_request(session).await;
         assert_eq!(
-            handler
-                .request_filter(&mut session, &mut RewriteHandler::new_ctx())
-                .await?,
-            RequestFilterResult::Unhandled
+            result.err().as_ref().map(|err| &err.etype),
+            Some(&ErrorType::HTTPStatus(404))
         );
-        assert_eq!(session.uri(), "/another/");
-        assert_eq!(session.original_uri(), "/path");
+        assert_eq!(result.session().uri(), "/another/");
+        assert_eq!(result.session().original_uri(), "/path");
 
-        let mut session = make_session("/path/").await;
+        let session = make_session("/path/").await;
+        let mut result = app.handle_request(session).await;
         assert_eq!(
-            handler
-                .request_filter(&mut session, &mut RewriteHandler::new_ctx())
-                .await?,
-            RequestFilterResult::Unhandled
+            result.err().as_ref().map(|err| &err.etype),
+            Some(&ErrorType::HTTPStatus(404))
         );
-        assert_eq!(session.uri(), "/another/");
-        assert_eq!(session.original_uri(), "/path/");
+        assert_eq!(result.session().uri(), "/another/");
+        assert_eq!(result.session().original_uri(), "/path/");
 
-        let mut session = make_session("/path/file.txt").await;
+        let session = make_session("/path/file.txt").await;
+        let mut result = app.handle_request(session).await;
         assert_eq!(
-            handler
-                .request_filter(&mut session, &mut RewriteHandler::new_ctx())
-                .await?,
-            RequestFilterResult::Unhandled
+            result.err().as_ref().map(|err| &err.etype),
+            Some(&ErrorType::HTTPStatus(404))
         );
-        assert_eq!(session.uri(), "/another/file.txt");
-        assert_eq!(session.original_uri(), "/path/file.txt");
-
-        Ok(())
+        assert_eq!(result.session().uri(), "/another/file.txt");
+        assert_eq!(result.session().original_uri(), "/path/file.txt");
     }
 
     #[test(tokio::test)]
-    async fn conditions() -> Result<(), Box<Error>> {
-        let handler = make_handler(
+    async fn conditions() {
+        let mut app = make_app(
             r#"
                 rewrite_rules:
                 -
@@ -272,66 +269,58 @@ mod tests {
             "#,
         );
 
-        let mut session = make_session("/path/image.jpg").await;
+        let session = make_session("/path/image.jpg").await;
+        let mut result = app.handle_request(session).await;
         assert_eq!(
-            handler
-                .request_filter(&mut session, &mut RewriteHandler::new_ctx())
-                .await?,
-            RequestFilterResult::Unhandled
+            result.err().as_ref().map(|err| &err.etype),
+            Some(&ErrorType::HTTPStatus(404))
         );
-        assert_eq!(session.uri(), "/another/image.jpg");
+        assert_eq!(result.session().uri(), "/another/image.jpg");
 
-        let mut session = make_session("/path/?a=b").await;
+        let session = make_session("/path/?a=b").await;
+        let mut result = app.handle_request(session).await;
         assert_eq!(
-            handler
-                .request_filter(&mut session, &mut RewriteHandler::new_ctx())
-                .await?,
-            RequestFilterResult::Unhandled
+            result.err().as_ref().map(|err| &err.etype),
+            Some(&ErrorType::HTTPStatus(404))
         );
-        assert_eq!(session.uri(), "/different?a=b");
+        assert_eq!(result.session().uri(), "/different?a=b");
 
-        let mut session = make_session("/path/image.png?a=b&file=c").await;
+        let session = make_session("/path/image.png?a=b&file=c").await;
+        let mut result = app.handle_request(session).await;
         assert_eq!(
-            handler
-                .request_filter(&mut session, &mut RewriteHandler::new_ctx())
-                .await?,
-            RequestFilterResult::Unhandled
+            result.err().as_ref().map(|err| &err.etype),
+            Some(&ErrorType::HTTPStatus(404))
         );
-        assert_eq!(session.uri(), "/different?a=b&file=c");
+        assert_eq!(result.session().uri(), "/different?a=b&file=c");
 
-        let mut session = make_session("/path/image.png?file=c").await;
+        let session = make_session("/path/image.png?file=c").await;
+        let mut result = app.handle_request(session).await;
         assert_eq!(
-            handler
-                .request_filter(&mut session, &mut RewriteHandler::new_ctx())
-                .await?,
-            RequestFilterResult::Unhandled
+            result.err().as_ref().map(|err| &err.etype),
+            Some(&ErrorType::HTTPStatus(404))
         );
-        assert_eq!(session.uri(), "/path/image.png?file=c");
+        assert_eq!(result.session().uri(), "/path/image.png?file=c");
 
-        let mut session = make_session("/file.txt").await;
+        let session = make_session("/file.txt").await;
+        let mut result = app.handle_request(session).await;
         assert_eq!(
-            handler
-                .request_filter(&mut session, &mut RewriteHandler::new_ctx())
-                .await?,
-            RequestFilterResult::Unhandled
+            result.err().as_ref().map(|err| &err.etype),
+            Some(&ErrorType::HTTPStatus(404))
         );
-        assert_eq!(session.uri(), "/other.txt");
+        assert_eq!(result.session().uri(), "/other.txt");
 
-        let mut session = make_session("/file.txt?no_redirect").await;
+        let session = make_session("/file.txt?no_redirect").await;
+        let mut result = app.handle_request(session).await;
         assert_eq!(
-            handler
-                .request_filter(&mut session, &mut RewriteHandler::new_ctx())
-                .await?,
-            RequestFilterResult::Unhandled
+            result.err().as_ref().map(|err| &err.etype),
+            Some(&ErrorType::HTTPStatus(404))
         );
-        assert_eq!(session.uri(), "/file.txt?no_redirect");
-
-        Ok(())
+        assert_eq!(result.session().uri(), "/file.txt?no_redirect");
     }
 
     #[test(tokio::test)]
-    async fn interpolation() -> Result<(), Box<Error>> {
-        let handler = make_handler(
+    async fn interpolation() {
+        let mut app = make_app(
             r#"
                 rewrite_rules:
                     from: /path/*
@@ -339,48 +328,45 @@ mod tests {
             "#,
         );
 
-        let mut session = make_session("/path/file.txt").await;
+        let session = make_session("/path/file.txt").await;
+        let mut result = app.handle_request(session).await;
         assert_eq!(
-            handler
-                .request_filter(&mut session, &mut RewriteHandler::new_ctx())
-                .await?,
-            RequestFilterResult::Unhandled
+            result.err().as_ref().map(|err| &err.etype),
+            Some(&ErrorType::HTTPStatus(404))
         );
-        assert_eq!(session.uri(), "/another/file.txt?&host=&test=");
+        assert_eq!(result.session().uri(), "/another/file.txt?&host=&test=");
 
-        let mut session = make_session("/path/file.txt?a=b").await;
+        let session = make_session("/path/file.txt?a=b").await;
+        let mut result = app.handle_request(session).await;
         assert_eq!(
-            handler
-                .request_filter(&mut session, &mut RewriteHandler::new_ctx())
-                .await?,
-            RequestFilterResult::Unhandled
+            result.err().as_ref().map(|err| &err.etype),
+            Some(&ErrorType::HTTPStatus(404))
         );
-        assert_eq!(session.uri(), "/another/file.txt?a=b&host=&test=");
+        assert_eq!(result.session().uri(), "/another/file.txt?a=b&host=&test=");
 
         let mut session = make_session("/path/file.txt?a=b").await;
         session
             .req_header_mut()
-            .insert_header("Host", "localhost")?;
+            .insert_header("Host", "localhost")
+            .unwrap();
         session
             .req_header_mut()
-            .insert_header("Test-Header", "successful")?;
+            .insert_header("Test-Header", "successful")
+            .unwrap();
+        let mut result = app.handle_request(session).await;
         assert_eq!(
-            handler
-                .request_filter(&mut session, &mut RewriteHandler::new_ctx())
-                .await?,
-            RequestFilterResult::Unhandled
+            result.err().as_ref().map(|err| &err.etype),
+            Some(&ErrorType::HTTPStatus(404))
         );
         assert_eq!(
-            session.uri(),
+            result.session().uri(),
             "/another/file.txt?a=b&host=localhost&test=successful"
         );
-
-        Ok(())
     }
 
     #[test(tokio::test)]
-    async fn external_redirect() -> Result<(), Box<Error>> {
-        let handler = make_handler(
+    async fn external_redirect() {
+        let mut app = make_app(
             r#"
                 rewrite_rules:
                 -
@@ -394,50 +380,42 @@ mod tests {
             "#,
         );
 
-        let mut session = make_session("/path/file.txt").await;
+        let session = make_session("/path/file.txt").await;
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
         assert_eq!(
-            handler
-                .request_filter(&mut session, &mut RewriteHandler::new_ctx())
-                .await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(
-            session.response_written().map(|r| r.status),
+            result.session().response_written().map(|r| r.status),
             Some(StatusCode::PERMANENT_REDIRECT)
         );
         assert_eq!(
-            session
+            result
+                .session()
                 .response_written()
                 .and_then(|r| r.headers.get("Location"))
                 .map(|h| h.to_str().unwrap()),
             Some("/another/file.txt")
         );
 
-        let mut session = make_session("/file.txt?a=b").await;
+        let session = make_session("/file.txt?a=b").await;
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
         assert_eq!(
-            handler
-                .request_filter(&mut session, &mut RewriteHandler::new_ctx())
-                .await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(
-            session.response_written().map(|r| r.status),
+            result.session().response_written().map(|r| r.status),
             Some(StatusCode::TEMPORARY_REDIRECT)
         );
         assert_eq!(
-            session
+            result
+                .session()
                 .response_written()
                 .and_then(|r| r.headers.get("Location"))
                 .map(|h| h.to_str().unwrap()),
             Some("https://example.com/?a=b")
         );
-
-        Ok(())
     }
 
     #[test(tokio::test)]
-    async fn rule_order() -> Result<(), Box<Error>> {
-        let handler = make_handler(
+    async fn rule_order() {
+        let mut app = make_app(
             r#"
                 rewrite_rules:
                 -
@@ -463,51 +441,44 @@ mod tests {
             "#,
         );
 
-        let mut session = make_session("/path?12345").await;
+        let session = make_session("/path?12345").await;
+        let mut result = app.handle_request(session).await;
         assert_eq!(
-            handler
-                .request_filter(&mut session, &mut RewriteHandler::new_ctx())
-                .await?,
-            RequestFilterResult::Unhandled
+            result.err().as_ref().map(|err| &err.etype),
+            Some(&ErrorType::HTTPStatus(404))
         );
-        assert_eq!(session.uri(), "/4");
+        assert_eq!(result.session().uri(), "/4");
 
-        let mut session = make_session("/path?1235").await;
+        let session = make_session("/path?1235").await;
+        let mut result = app.handle_request(session).await;
         assert_eq!(
-            handler
-                .request_filter(&mut session, &mut RewriteHandler::new_ctx())
-                .await?,
-            RequestFilterResult::Unhandled
+            result.err().as_ref().map(|err| &err.etype),
+            Some(&ErrorType::HTTPStatus(404))
         );
-        assert_eq!(session.uri(), "/5");
+        assert_eq!(result.session().uri(), "/5");
 
-        let mut session = make_session("/path?123").await;
+        let session = make_session("/path?123").await;
+        let mut result = app.handle_request(session).await;
         assert_eq!(
-            handler
-                .request_filter(&mut session, &mut RewriteHandler::new_ctx())
-                .await?,
-            RequestFilterResult::Unhandled
+            result.err().as_ref().map(|err| &err.etype),
+            Some(&ErrorType::HTTPStatus(404))
         );
-        assert_eq!(session.uri(), "/2");
+        assert_eq!(result.session().uri(), "/2");
 
-        let mut session = make_session("/path?13").await;
+        let session = make_session("/path?13").await;
+        let mut result = app.handle_request(session).await;
         assert_eq!(
-            handler
-                .request_filter(&mut session, &mut RewriteHandler::new_ctx())
-                .await?,
-            RequestFilterResult::Unhandled
+            result.err().as_ref().map(|err| &err.etype),
+            Some(&ErrorType::HTTPStatus(404))
         );
-        assert_eq!(session.uri(), "/3");
+        assert_eq!(result.session().uri(), "/3");
 
-        let mut session = make_session("/path?1").await;
+        let session = make_session("/path?1").await;
+        let mut result = app.handle_request(session).await;
         assert_eq!(
-            handler
-                .request_filter(&mut session, &mut RewriteHandler::new_ctx())
-                .await?,
-            RequestFilterResult::Unhandled
+            result.err().as_ref().map(|err| &err.etype),
+            Some(&ErrorType::HTTPStatus(404))
         );
-        assert_eq!(session.uri(), "/1");
-
-        Ok(())
+        assert_eq!(result.session().uri(), "/1");
     }
 }

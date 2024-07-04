@@ -24,11 +24,10 @@ pandora-module-utils.workspace = true
 
 [dev-dependencies]
 env_logger.workspace = true
-clap.workspace = true
 startup-module.workspace = true
-static-files-module.workspace = true
 test-log.workspace = true
 tokio.workspace = true
+upstream-module.workspace = true
 
 [lints]
 workspace = true

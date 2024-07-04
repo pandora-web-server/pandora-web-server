@@ -254,81 +254,43 @@ where
 mod tests {
     use super::*;
 
-    use pandora_module_utils::pingora::{RequestHeader, TestSession};
-    use pandora_module_utils::{DeserializeMap, FromYaml};
+    use pandora_module_utils::pingora::{create_test_session, ErrorType, RequestHeader, Session};
+    use pandora_module_utils::FromYaml;
+    use startup_module::DefaultApp;
     use test_log::test;
+    use upstream_module::UpstreamHandler;
 
-    #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
-    struct Conf {
-        result: RequestFilterResult,
-    }
-
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    struct Handler {
-        result: RequestFilterResult,
-    }
-
-    #[async_trait]
-    impl RequestFilter for Handler {
-        type Conf = Conf;
-        type CTX = ();
-        fn new_ctx() -> Self::CTX {}
-        async fn request_filter(
-            &self,
-            _session: &mut impl SessionWrapper,
-            _ctx: &mut Self::CTX,
-        ) -> Result<RequestFilterResult, Box<Error>> {
-            Ok(self.result)
-        }
-    }
-
-    impl TryFrom<Conf> for Handler {
-        type Error = Box<Error>;
-
-        fn try_from(conf: Conf) -> Result<Self, Self::Error> {
-            Ok(Self {
-                result: conf.result,
-            })
-        }
-    }
-
-    fn handler(
-        add_default: bool,
-    ) -> (
-        VirtualHostsHandler<Handler>,
-        <VirtualHostsHandler<Handler> as RequestFilter>::CTX,
-    ) {
-        (
-            VirtualHostsConf::<Conf>::from_yaml(format!(
+    fn make_app(add_default: bool) -> DefaultApp<VirtualHostsHandler<UpstreamHandler>> {
+        DefaultApp::new(
+            <VirtualHostsHandler<UpstreamHandler> as RequestFilter>::Conf::from_yaml(format!(
                 r#"
-                vhosts:
-                    [localhost:8080, 127.0.0.1:8080, "[::1]:8080"]:
-                        default: {add_default}
-                        result: ResponseSent
-                        subpaths:
-                            /subdir/*:
-                                strip_prefix: true
-                                result: Unhandled
-                            /subdir/file.txt:
-                                result: ResponseSent
-                            /subdir/subsub/*:
-                                result: Handled
-                    [example.com, example.com:8080]:
-                        result: Handled
-                    example.info:
-                        result: Handled
-            "#
+                    vhosts:
+                        [localhost:8080, 127.0.0.1:8080, "[::1]:8080"]:
+                            default: {add_default}
+                            upstream: http://127.0.0.1
+                            subpaths:
+                                /subdir/*:
+                                    strip_prefix: true
+                                    upstream: http://127.0.0.2
+                                /subdir/file.txt:
+                                    upstream: http://127.0.0.3
+                                /subdir/subsub/*:
+                                    upstream: http://127.0.0.4
+                        [example.com, example.com:8080]:
+                            upstream: http://127.0.0.5
+                        example.info:
+                            upstream: http://127.0.0.6
+                "#
             ))
             .unwrap()
             .try_into()
             .unwrap(),
-            VirtualHostsHandler::<Handler>::new_ctx(),
         )
     }
 
-    async fn make_session(uri: &str, host: Option<&str>) -> TestSession {
+    async fn make_session(uri: &str, host: Option<&str>) -> Session {
         let header = RequestHeader::build("GET", uri.as_bytes(), None).unwrap();
-        let mut session = TestSession::from(header).await;
+        let mut session = create_test_session(header).await;
 
         if let Some(host) = host {
             session
@@ -343,221 +305,259 @@ mod tests {
         session
     }
 
-    #[test(tokio::test)]
-    async fn host_match() -> Result<(), Box<Error>> {
-        let (handler, mut ctx) = handler(true);
-        let mut session = make_session("/", Some("example.com")).await;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ctx).await?,
-            RequestFilterResult::Handled
-        );
-        Ok(())
+    fn response_header() -> ResponseHeader {
+        ResponseHeader::build(200, None).unwrap()
     }
 
     #[test(tokio::test)]
-    async fn host_alias_match() -> Result<(), Box<Error>> {
-        let (handler, mut ctx) = handler(false);
-        let mut session = make_session("/", Some("[::1]:8080")).await;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ctx).await?,
-            RequestFilterResult::ResponseSent
-        );
-        Ok(())
+    async fn host_match() {
+        let mut app = make_app(true);
+        let session = make_session("/", Some("example.com")).await;
+        let result = app
+            .handle_request_with_upstream(session, |_, peer| {
+                assert_eq!(peer.sni, "127.0.0.5");
+                Ok(response_header())
+            })
+            .await;
+        assert!(result.err().is_none());
     }
 
     #[test(tokio::test)]
-    async fn uri_match() -> Result<(), Box<Error>> {
-        let (handler, mut ctx) = handler(false);
-        let mut session = make_session("https://example.com/", None).await;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ctx).await?,
-            RequestFilterResult::Handled
-        );
-        Ok(())
+    async fn host_alias_match() {
+        let mut app = make_app(false);
+        let session = make_session("/", Some("[::1]:8080")).await;
+        let result = app
+            .handle_request_with_upstream(session, |_, peer| {
+                assert_eq!(peer.sni, "127.0.0.1");
+                Ok(response_header())
+            })
+            .await;
+        assert!(result.err().is_none());
     }
 
     #[test(tokio::test)]
-    async fn uri_alias_match() -> Result<(), Box<Error>> {
-        let (handler, mut ctx) = handler(false);
-        let mut session = make_session("http://[::1]:8080/", None).await;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ctx).await?,
-            RequestFilterResult::ResponseSent
-        );
-        Ok(())
+    async fn uri_match() {
+        let mut app = make_app(false);
+        let session = make_session("https://example.com/", None).await;
+        let result = app
+            .handle_request_with_upstream(session, |_, peer| {
+                assert_eq!(peer.sni, "127.0.0.5");
+                Ok(response_header())
+            })
+            .await;
+        assert!(result.err().is_none());
     }
 
     #[test(tokio::test)]
-    async fn host_precedence() -> Result<(), Box<Error>> {
-        let (handler, mut ctx) = handler(false);
-        let mut session = make_session("https://localhost:8080/", Some("example.com")).await;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ctx).await?,
-            RequestFilterResult::Handled
-        );
-        Ok(())
+    async fn uri_alias_match() {
+        let mut app = make_app(false);
+        let session = make_session("http://[::1]:8080/", None).await;
+        let result = app
+            .handle_request_with_upstream(session, |_, peer| {
+                assert_eq!(peer.sni, "127.0.0.1");
+                Ok(response_header())
+            })
+            .await;
+        assert!(result.err().is_none());
     }
 
     #[test(tokio::test)]
-    async fn default_fallback() -> Result<(), Box<Error>> {
-        let (handler, mut ctx) = handler(true);
-        let mut session = make_session("/", Some("example.net")).await;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ctx).await?,
-            RequestFilterResult::ResponseSent
-        );
-        Ok(())
+    async fn host_precedence() {
+        let mut app = make_app(false);
+        let session = make_session("https://localhost:8080/", Some("example.com")).await;
+        let result = app
+            .handle_request_with_upstream(session, |_, peer| {
+                assert_eq!(peer.sni, "127.0.0.5");
+                Ok(response_header())
+            })
+            .await;
+        assert!(result.err().is_none());
     }
 
     #[test(tokio::test)]
-    async fn no_default_fallback() -> Result<(), Box<Error>> {
-        let (handler, mut ctx) = handler(false);
-        let mut session = make_session("/", Some("example.net")).await;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ctx).await?,
-            RequestFilterResult::Unhandled
-        );
-        Ok(())
+    async fn default_fallback() {
+        let mut app = make_app(true);
+        let session = make_session("/", Some("example.net")).await;
+        let result = app
+            .handle_request_with_upstream(session, |_, peer| {
+                assert_eq!(peer.sni, "127.0.0.1");
+                Ok(response_header())
+            })
+            .await;
+        assert!(result.err().is_none());
     }
 
     #[test(tokio::test)]
-    async fn subdir_match() -> Result<(), Box<Error>> {
-        let (handler, mut ctx) = handler(true);
-        let mut session = make_session("/subdir/", Some("localhost:8080")).await;
+    async fn no_default_fallback() {
+        let mut app = make_app(false);
+        let session = make_session("/", Some("example.net")).await;
+        let result = app.handle_request(session).await;
         assert_eq!(
-            handler.request_filter(&mut session, &mut ctx).await?,
-            RequestFilterResult::Unhandled
+            result.err().as_ref().map(|err| &err.etype),
+            Some(&ErrorType::HTTPStatus(404))
         );
-        assert_eq!(session.uri(), "/");
-        assert_eq!(session.original_uri(), "/subdir/");
-        Ok(())
     }
 
     #[test(tokio::test)]
-    async fn subdir_match_without_slash() -> Result<(), Box<Error>> {
-        let (handler, mut ctx) = handler(true);
-        let mut session = make_session("/subdir", Some("localhost:8080")).await;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ctx).await?,
-            RequestFilterResult::Unhandled
-        );
-        assert_eq!(session.uri(), "/");
-        assert_eq!(session.original_uri(), "/subdir");
-        Ok(())
+    async fn subdir_match() {
+        let mut app = make_app(true);
+        let session = make_session("/subdir/", Some("localhost:8080")).await;
+        let mut result = app
+            .handle_request_with_upstream(session, |_, peer| {
+                assert_eq!(peer.sni, "127.0.0.2");
+                Ok(response_header())
+            })
+            .await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().uri(), "/");
+        assert_eq!(result.session().original_uri(), "/subdir/");
     }
 
     #[test(tokio::test)]
-    async fn subdir_match_with_suffix() -> Result<(), Box<Error>> {
-        let (handler, mut ctx) = handler(true);
-        let mut session = make_session("/subdir/xyz?abc", Some("localhost:8080")).await;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ctx).await?,
-            RequestFilterResult::Unhandled
-        );
-        assert_eq!(session.uri(), "/xyz?abc");
-        assert_eq!(session.original_uri(), "/subdir/xyz?abc");
-        Ok(())
+    async fn subdir_match_without_slash() {
+        let mut app = make_app(true);
+        let session = make_session("/subdir", Some("localhost:8080")).await;
+        let mut result = app
+            .handle_request_with_upstream(session, |_, peer| {
+                assert_eq!(peer.sni, "127.0.0.2");
+                Ok(response_header())
+            })
+            .await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().uri(), "/");
+        assert_eq!(result.session().original_uri(), "/subdir");
     }
 
     #[test(tokio::test)]
-    async fn subdir_match_extra_slashes() -> Result<(), Box<Error>> {
-        let (handler, mut ctx) = handler(true);
-        let mut session = make_session("//subdir///xyz//", Some("localhost:8080")).await;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ctx).await?,
-            RequestFilterResult::Unhandled
-        );
-        assert_eq!(session.uri(), "///xyz//");
-        assert_eq!(session.original_uri(), "//subdir///xyz//");
-        Ok(())
+    async fn subdir_match_with_suffix() {
+        let mut app = make_app(true);
+        let session = make_session("/subdir/xyz?abc", Some("localhost:8080")).await;
+        let mut result = app
+            .handle_request_with_upstream(session, |_, peer| {
+                assert_eq!(peer.sni, "127.0.0.2");
+                Ok(response_header())
+            })
+            .await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().uri(), "/xyz?abc");
+        assert_eq!(result.session().original_uri(), "/subdir/xyz?abc");
     }
 
     #[test(tokio::test)]
-    async fn subdir_no_match() -> Result<(), Box<Error>> {
-        let (handler, mut ctx) = handler(true);
-        let mut session = make_session("/subdir_xyz", Some("localhost:8080")).await;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ctx).await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(session.uri(), "/subdir_xyz");
-        assert_eq!(session.original_uri(), "/subdir_xyz");
-        Ok(())
+    async fn subdir_match_extra_slashes() {
+        let mut app = make_app(true);
+        let session = make_session("//subdir///xyz//", Some("localhost:8080")).await;
+        let mut result = app
+            .handle_request_with_upstream(session, |_, peer| {
+                assert_eq!(peer.sni, "127.0.0.2");
+                Ok(response_header())
+            })
+            .await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().uri(), "///xyz//");
+        assert_eq!(result.session().original_uri(), "//subdir///xyz//");
     }
 
     #[test(tokio::test)]
-    async fn subdir_longer_match() -> Result<(), Box<Error>> {
-        let (handler, mut ctx) = handler(true);
-        let mut session = make_session("/subdir/subsub/xyz", Some("localhost:8080")).await;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ctx).await?,
-            RequestFilterResult::Handled
-        );
-        assert_eq!(session.uri(), "/subdir/subsub/xyz");
-        assert_eq!(session.original_uri(), "/subdir/subsub/xyz");
-        Ok(())
+    async fn subdir_no_match() {
+        let mut app = make_app(true);
+        let session = make_session("/subdir_xyz", Some("localhost:8080")).await;
+        let mut result = app
+            .handle_request_with_upstream(session, |_, peer| {
+                assert_eq!(peer.sni, "127.0.0.1");
+                Ok(response_header())
+            })
+            .await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().uri(), "/subdir_xyz");
+        assert_eq!(result.session().original_uri(), "/subdir_xyz");
     }
 
     #[test(tokio::test)]
-    async fn subdir_alias_match() -> Result<(), Box<Error>> {
-        let (handler, mut ctx) = handler(false);
-        let mut session = make_session("/subdir/xyz?abc", Some("127.0.0.1:8080")).await;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ctx).await?,
-            RequestFilterResult::Unhandled
-        );
-        assert_eq!(session.uri(), "/xyz?abc");
-        assert_eq!(session.original_uri(), "/subdir/xyz?abc");
-        Ok(())
+    async fn subdir_longer_match() {
+        let mut app = make_app(true);
+        let session = make_session("/subdir/subsub/xyz", Some("localhost:8080")).await;
+        let mut result = app
+            .handle_request_with_upstream(session, |_, peer| {
+                assert_eq!(peer.sni, "127.0.0.4");
+                Ok(response_header())
+            })
+            .await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().uri(), "/subdir/subsub/xyz");
+        assert_eq!(result.session().original_uri(), "/subdir/subsub/xyz");
     }
 
     #[test(tokio::test)]
-    async fn subdir_default_match() -> Result<(), Box<Error>> {
-        let (handler, mut ctx) = handler(true);
-        let mut session = make_session("/subdir/xyz?abc", Some("unknown")).await;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ctx).await?,
-            RequestFilterResult::Unhandled
-        );
-        assert_eq!(session.uri(), "/xyz?abc");
-        assert_eq!(session.original_uri(), "/subdir/xyz?abc");
-        Ok(())
+    async fn subdir_alias_match() {
+        let mut app = make_app(false);
+        let session = make_session("/subdir/xyz?abc", Some("127.0.0.1:8080")).await;
+        let mut result = app
+            .handle_request_with_upstream(session, |_, peer| {
+                assert_eq!(peer.sni, "127.0.0.2");
+                Ok(response_header())
+            })
+            .await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().uri(), "/xyz?abc");
+        assert_eq!(result.session().original_uri(), "/subdir/xyz?abc");
     }
 
     #[test(tokio::test)]
-    async fn subpath_exact_match() -> Result<(), Box<Error>> {
-        let (handler, mut ctx) = handler(true);
-        let mut session = make_session("/subdir/file.txt", Some("localhost:8080")).await;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ctx).await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(session.uri(), "/subdir/file.txt");
-        Ok(())
+    async fn subdir_default_match() {
+        let mut app = make_app(true);
+        let session = make_session("/subdir/xyz?abc", Some("unknown")).await;
+        let mut result = app
+            .handle_request_with_upstream(session, |_, peer| {
+                assert_eq!(peer.sni, "127.0.0.2");
+                Ok(response_header())
+            })
+            .await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().uri(), "/xyz?abc");
+        assert_eq!(result.session().original_uri(), "/subdir/xyz?abc");
     }
 
     #[test(tokio::test)]
-    async fn subpath_exact_match_trailing_slash() -> Result<(), Box<Error>> {
-        let (handler, mut ctx) = handler(true);
-        let mut session = make_session("/subdir/file.txt/", Some("localhost:8080")).await;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ctx).await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(session.uri(), "/subdir/file.txt/");
-        Ok(())
+    async fn subpath_exact_match() {
+        let mut app = make_app(true);
+        let session = make_session("/subdir/file.txt", Some("localhost:8080")).await;
+        let mut result = app
+            .handle_request_with_upstream(session, |_, peer| {
+                assert_eq!(peer.sni, "127.0.0.3");
+                Ok(response_header())
+            })
+            .await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().uri(), "/subdir/file.txt");
     }
 
     #[test(tokio::test)]
-    async fn subpath_exact_match_with_suffix() -> Result<(), Box<Error>> {
-        let (handler, mut ctx) = handler(true);
-        let mut session = make_session("/subdir/file.txt/xyz", Some("localhost:8080")).await;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ctx).await?,
-            RequestFilterResult::Unhandled
-        );
-        assert_eq!(session.uri(), "/file.txt/xyz");
-        assert_eq!(session.original_uri(), "/subdir/file.txt/xyz");
-        Ok(())
+    async fn subpath_exact_match_trailing_slash() {
+        let mut app = make_app(true);
+        let session = make_session("/subdir/file.txt/", Some("localhost:8080")).await;
+        let mut result = app
+            .handle_request_with_upstream(session, |_, peer| {
+                assert_eq!(peer.sni, "127.0.0.3");
+                Ok(response_header())
+            })
+            .await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().uri(), "/subdir/file.txt/");
+    }
+
+    #[test(tokio::test)]
+    async fn subpath_exact_match_with_suffix() {
+        let mut app = make_app(true);
+        let session = make_session("/subdir/file.txt/xyz", Some("localhost:8080")).await;
+        let mut result = app
+            .handle_request_with_upstream(session, |_, peer| {
+                assert_eq!(peer.sni, "127.0.0.2");
+                Ok(response_header())
+            })
+            .await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().uri(), "/file.txt/xyz");
+        assert_eq!(result.session().original_uri(), "/subdir/file.txt/xyz");
     }
 }

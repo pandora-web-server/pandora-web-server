@@ -18,6 +18,7 @@ mod configuration;
 mod redirector;
 
 use async_trait::async_trait;
+use bytes::{Bytes, BytesMut};
 pub use configuration::{
     CertKeyConf, ListenAddr, StartupConf, StartupOpt, TlsConf, TlsRedirectorConf,
 };
@@ -27,7 +28,94 @@ use pandora_module_utils::pingora::{
 };
 use pandora_module_utils::{RequestFilter, RequestFilterResult};
 use pingora::ErrorType;
+use std::borrow::Cow;
+use std::fmt::Debug;
 use std::ops::{Deref, DerefMut};
+
+#[derive(Debug, RequestFilter)]
+struct DummyHandler {}
+
+struct NoDebug<T> {
+    inner: T,
+}
+
+impl<T> Debug for NoDebug<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("skipped").finish()
+    }
+}
+
+impl<T> From<T> for NoDebug<T> {
+    fn from(value: T) -> Self {
+        Self { inner: value }
+    }
+}
+
+impl<T> Deref for NoDebug<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl<T> DerefMut for NoDebug<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+
+/// Result of a test execution of the app
+#[derive(Debug)]
+pub struct AppResult {
+    session: NoDebug<Session>,
+    err: Option<Box<Error>>,
+    extensions: Extensions,
+    body: BytesMut,
+    handler: DummyHandler,
+}
+
+impl AppResult {
+    fn new(
+        session: Session,
+        err: Option<Box<Error>>,
+        extensions: Extensions,
+        body: BytesMut,
+    ) -> Self {
+        Self {
+            session: session.into(),
+            err,
+            extensions,
+            body,
+            handler: DummyHandler {},
+        }
+    }
+
+    /// Produces the resulting session state of the request
+    pub fn session(&mut self) -> impl SessionWrapper + '_ {
+        SessionWrapperImpl::new(
+            &mut self.session,
+            &self.handler,
+            &mut self.extensions,
+            false,
+        )
+    }
+
+    /// Retrieves the error if any
+    pub fn err(&self) -> &Option<Box<Error>> {
+        &self.err
+    }
+
+    /// Retrieves the response body
+    pub fn body(&self) -> &[u8] {
+        &self.body
+    }
+
+    /// Retrieves the response body as string
+    pub fn body_str(&self) -> Cow<'_, str> {
+        String::from_utf8_lossy(&self.body)
+    }
+}
 
 /// A basic Pingora app implementation, to be passed to [`StartupConf::into_server`]
 ///
@@ -36,12 +124,16 @@ use std::ops::{Deref, DerefMut};
 #[derive(Debug)]
 pub struct DefaultApp<H> {
     handler: H,
+    capture_body: bool,
 }
 
 impl<H> DefaultApp<H> {
     /// Creates a new app from a [`RequestFilter`] instance.
     pub fn new(handler: H) -> Self {
-        Self { handler }
+        Self {
+            handler,
+            capture_body: false,
+        }
     }
 
     /// Creates a new app from a [`RequestFilter`] configuration.
@@ -52,6 +144,74 @@ impl<H> DefaultApp<H> {
         H: RequestFilter<Conf = C> + TryFrom<C, Error = Box<Error>>,
     {
         Ok(Self::new(conf.try_into()?))
+    }
+
+    /// Handles all request phases for a request like Pingora would do it.
+    ///
+    /// This method is meant for testing. Will error out if an upstream peer needs to be contacted.
+    /// Upon successful completion, `evaluate_result` callback is called to validate the session.
+    pub async fn handle_request(&mut self, session: Session) -> AppResult
+    where
+        H: RequestFilter + Sync,
+        H::CTX: Send + Sync,
+    {
+        self.handle_request_with_upstream(session, |_, _| {
+            Err(Error::explain(
+                ErrorType::InternalError,
+                "Got upstream peer but no handler for it",
+            ))
+        })
+        .await
+    }
+
+    /// Handles all request phases for a request like Pingora would do it while also faking
+    /// upstream response.
+    ///
+    /// This method is meant for testing. Will call `upstream_response` callback to produce a fake
+    /// upstream response if necessary. Upon successful completion, `evaluate_result` callback is
+    /// called to validate the session.
+    pub async fn handle_request_with_upstream<C>(
+        &mut self,
+        mut session: Session,
+        upstream_response: C,
+    ) -> AppResult
+    where
+        C: Fn(&mut Session, Box<HttpPeer>) -> Result<ResponseHeader, Box<Error>>,
+        H: RequestFilter + Sync,
+        H::CTX: Send + Sync,
+    {
+        self.capture_body = true;
+
+        let mut ctx = self.new_ctx();
+
+        let result = async {
+            match self.request_filter(&mut session, &mut ctx).await {
+                Ok(false) => {
+                    let upstream_peer = self.upstream_peer(&mut session, &mut ctx).await?;
+                    let mut response_header = upstream_response(&mut session, upstream_peer)?;
+                    self.upstream_response_filter(&mut session, &mut response_header, &mut ctx);
+                    session
+                        .write_response_header(Box::new(response_header))
+                        .await
+                }
+                Ok(true) => Ok(()),
+                Err(err) => Err(err),
+            }
+        }
+        .await;
+
+        self.logging(
+            &mut session,
+            result.as_ref().err().map(|err| err.as_ref()),
+            &mut ctx,
+        )
+        .await;
+
+        self.capture_body = false;
+
+        let body = ctx.extensions.remove::<BytesMut>().unwrap_or_default();
+
+        AppResult::new(session, result.err(), ctx.extensions, body)
     }
 }
 
@@ -82,7 +242,12 @@ where
         session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> Result<bool, Box<Error>> {
-        let mut session = SessionWrapperImpl::new(session, &self.handler, &mut ctx.extensions);
+        let mut session = SessionWrapperImpl::new(
+            session,
+            &self.handler,
+            &mut ctx.extensions,
+            self.capture_body,
+        );
         Ok(self
             .handler
             .request_filter(&mut session, &mut ctx.handler)
@@ -95,7 +260,12 @@ where
         session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> Result<Box<HttpPeer>, Box<Error>> {
-        let mut session = SessionWrapperImpl::new(session, &self.handler, &mut ctx.extensions);
+        let mut session = SessionWrapperImpl::new(
+            session,
+            &self.handler,
+            &mut ctx.extensions,
+            self.capture_body,
+        );
         let result = self
             .handler
             .upstream_peer(&mut session, &mut ctx.handler)
@@ -113,13 +283,23 @@ where
         response: &mut ResponseHeader,
         ctx: &mut Self::CTX,
     ) {
-        let mut session = SessionWrapperImpl::new(session, &self.handler, &mut ctx.extensions);
+        let mut session = SessionWrapperImpl::new(
+            session,
+            &self.handler,
+            &mut ctx.extensions,
+            self.capture_body,
+        );
         self.handler
             .response_filter(&mut session, response, Some(&mut ctx.handler))
     }
 
     async fn logging(&self, session: &mut Session, e: Option<&Error>, ctx: &mut Self::CTX) {
-        let mut session = SessionWrapperImpl::new(session, &self.handler, &mut ctx.extensions);
+        let mut session = SessionWrapperImpl::new(
+            session,
+            &self.handler,
+            &mut ctx.extensions,
+            self.capture_body,
+        );
         self.handler
             .logging(&mut session, e, &mut ctx.handler)
             .await
@@ -130,11 +310,17 @@ struct SessionWrapperImpl<'a, H> {
     inner: &'a mut Session,
     handler: &'a H,
     extensions: &'a mut Extensions,
+    capture_body: bool,
 }
 
 impl<'a, H> SessionWrapperImpl<'a, H> {
     /// Creates a new session wrapper for the given Pingora session.
-    fn new(inner: &'a mut Session, handler: &'a H, extensions: &'a mut Extensions) -> Self
+    fn new(
+        inner: &'a mut Session,
+        handler: &'a H,
+        extensions: &'a mut Extensions,
+        capture_body: bool,
+    ) -> Self
     where
         H: RequestFilter,
     {
@@ -142,6 +328,7 @@ impl<'a, H> SessionWrapperImpl<'a, H> {
             inner,
             handler,
             extensions,
+            capture_body,
         }
     }
 }
@@ -171,6 +358,17 @@ where
 
     async fn write_response_header_ref(&mut self, resp: &ResponseHeader) -> Result<(), Box<Error>> {
         self.write_response_header(Box::new(resp.clone())).await
+    }
+
+    async fn write_response_body(&mut self, data: Bytes) -> Result<(), Box<Error>> {
+        if self.capture_body {
+            self.extensions_mut()
+                .get_or_insert_default::<BytesMut>()
+                .extend_from_slice(&data);
+            Ok(())
+        } else {
+            self.deref_mut().write_response_body(data).await
+        }
     }
 }
 

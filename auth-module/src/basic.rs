@@ -138,9 +138,10 @@ pub(crate) async fn basic_auth(
 mod tests {
     use super::*;
 
-    use pandora_module_utils::pingora::{RequestHeader, TestSession};
+    use pandora_module_utils::pingora::{create_test_session, ErrorType, RequestHeader, Session};
     use pandora_module_utils::standard_response::response_text;
     use pandora_module_utils::{FromYaml, RequestFilter};
+    use startup_module::{AppResult, DefaultApp};
     use test_log::test;
 
     use crate::AuthHandler;
@@ -161,16 +162,18 @@ auth_rate_limits:
         "#
     }
 
-    fn make_handler(conf: &str) -> AuthHandler {
-        <AuthHandler as RequestFilter>::Conf::from_yaml(conf)
-            .unwrap()
-            .try_into()
-            .unwrap()
+    fn make_app(conf: &str) -> DefaultApp<AuthHandler> {
+        DefaultApp::new(
+            <AuthHandler as RequestFilter>::Conf::from_yaml(conf)
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        )
     }
 
-    async fn make_session() -> TestSession {
+    async fn make_session() -> Session {
         let header = RequestHeader::build("GET", b"/", None).unwrap();
-        TestSession::from(header).await
+        create_test_session(header).await
     }
 
     fn assert_headers(header: &ResponseHeader, expected: Vec<(&str, &str)>) {
@@ -196,166 +199,147 @@ auth_rate_limits:
         assert_eq!(headers, expected);
     }
 
-    fn check_unauthorized_response(session: &TestSession) {
+    fn check_unauthorized_response(result: &mut AppResult) {
         let unauthorized_response = response_text(StatusCode::UNAUTHORIZED);
-        assert_eq!(session.response_written().unwrap().status, 401);
+        assert_eq!(result.session().response_written().unwrap().status, 401);
         assert_headers(
-            session.response_written().unwrap(),
+            result.session().response_written().unwrap(),
             vec![
                 ("Content-Type", "text/html; charset=utf-8"),
                 ("Content-Length", &unauthorized_response.len().to_string()),
                 ("WWW-Authenticate", "Basic realm=\"Protected area\""),
             ],
         );
-        assert_eq!(
-            String::from_utf8_lossy(&session.response_body),
-            unauthorized_response
-        );
+        assert_eq!(result.body_str(), unauthorized_response);
     }
 
     #[test(tokio::test)]
-    async fn unconfigured() -> Result<(), Box<Error>> {
-        let handler = make_handler("auth_mode: http");
-        let mut session = make_session().await;
+    async fn unconfigured() {
+        let mut app = make_app("auth_mode: http");
+        let session = make_session().await;
+        let mut result = app.handle_request(session).await;
         assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::Unhandled
+            result.err().as_ref().map(|err| &err.etype),
+            Some(&ErrorType::HTTPStatus(404))
         );
-        assert_eq!(session.remote_user(), None);
-        Ok(())
+        assert_eq!(result.session().remote_user(), None);
     }
 
     #[test(tokio::test)]
-    async fn no_auth_header() -> Result<(), Box<Error>> {
-        let handler = make_handler(default_conf());
-        let mut session = make_session().await;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(session.remote_user(), None);
-        check_unauthorized_response(&session);
-        Ok(())
+    async fn no_auth_header() {
+        let mut app = make_app(default_conf());
+        let session = make_session().await;
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().remote_user(), None);
+        check_unauthorized_response(&mut result);
     }
 
     #[test(tokio::test)]
-    async fn unknown_auth_scheme() -> Result<(), Box<Error>> {
-        let handler = make_handler(default_conf());
+    async fn unknown_auth_scheme() {
+        let mut app = make_app(default_conf());
         let mut session = make_session().await;
         session
             .req_header_mut()
-            .insert_header("Authorization", "Unknown bWU6dGVzdA==")?;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(session.remote_user(), None);
-        check_unauthorized_response(&session);
-        Ok(())
+            .insert_header("Authorization", "Unknown bWU6dGVzdA==")
+            .unwrap();
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().remote_user(), None);
+        check_unauthorized_response(&mut result);
     }
 
     #[test(tokio::test)]
-    async fn missing_credentials() -> Result<(), Box<Error>> {
-        let handler = make_handler(default_conf());
+    async fn missing_credentials() {
+        let mut app = make_app(default_conf());
         let mut session = make_session().await;
         session
             .req_header_mut()
-            .insert_header("Authorization", "Basic")?;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(session.remote_user(), None);
-        check_unauthorized_response(&session);
-        Ok(())
+            .insert_header("Authorization", "Basic")
+            .unwrap();
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().remote_user(), None);
+        check_unauthorized_response(&mut result);
     }
 
     #[test(tokio::test)]
-    async fn credentials_no_colon() -> Result<(), Box<Error>> {
+    async fn credentials_no_colon() {
         // Credentials without colon
-        let handler = make_handler(default_conf());
+        let mut app = make_app(default_conf());
         let mut session = make_session().await;
         session
             .req_header_mut()
-            .insert_header("Authorization", "Basic bWV0ZXN0")?;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(session.remote_user(), None);
-        check_unauthorized_response(&session);
-        Ok(())
+            .insert_header("Authorization", "Basic bWV0ZXN0")
+            .unwrap();
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().remote_user(), None);
+        check_unauthorized_response(&mut result);
     }
 
     #[test(tokio::test)]
-    async fn wrong_credentials() -> Result<(), Box<Error>> {
-        let handler = make_handler(default_conf());
+    async fn wrong_credentials() {
+        let mut app = make_app(default_conf());
         let mut session = make_session().await;
         session
             .req_header_mut()
-            .insert_header("Authorization", "Basic bWU6dGVzdDI=")?;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(session.remote_user(), None);
-        check_unauthorized_response(&session);
-        Ok(())
+            .insert_header("Authorization", "Basic bWU6dGVzdDI=")
+            .unwrap();
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().remote_user(), None);
+        check_unauthorized_response(&mut result);
     }
 
     #[test(tokio::test)]
-    async fn wrong_user_name() -> Result<(), Box<Error>> {
-        let handler = make_handler(default_conf());
+    async fn wrong_user_name() {
+        let mut app = make_app(default_conf());
         let mut session = make_session().await;
         session
             .req_header_mut()
-            .insert_header("Authorization", "Basic eW91OnRlc3Q=")?;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(session.remote_user(), None);
-        check_unauthorized_response(&session);
-        Ok(())
+            .insert_header("Authorization", "Basic eW91OnRlc3Q=")
+            .unwrap();
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().remote_user(), None);
+        check_unauthorized_response(&mut result);
     }
 
     #[test(tokio::test)]
-    async fn correct_credentials() -> Result<(), Box<Error>> {
-        let handler = make_handler(default_conf());
+    async fn correct_credentials() {
+        let mut app = make_app(default_conf());
         let mut session = make_session().await;
         session
             .req_header_mut()
-            .insert_header("Authorization", "Basic bWU6dGVzdA==")?;
+            .insert_header("Authorization", "Basic bWU6dGVzdA==")
+            .unwrap();
+        let mut result = app.handle_request(session).await;
         assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::Unhandled
+            result.err().as_ref().map(|err| &err.etype),
+            Some(&ErrorType::HTTPStatus(404))
         );
-        assert_eq!(session.remote_user(), Some("me"));
-        Ok(())
+        assert_eq!(result.session().remote_user(), Some("me"));
     }
 
     #[test(tokio::test)]
-    async fn display_hash() -> Result<(), Box<Error>> {
+    async fn display_hash() {
         let mut conf = default_conf().to_owned();
         conf.push_str("\nauth_display_hash: true");
-        let handler = make_handler(&conf);
+        let mut app = make_app(&conf);
         let mut session = make_session().await;
         session
             .req_header_mut()
-            .insert_header("Authorization", "Basic JzxtZT4nOnRlc3Q=")?;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(session.remote_user(), None);
-        assert!(String::from_utf8_lossy(&session.response_body)
-            .contains("&quot;'&lt;me&gt;'&quot;: $2b$"));
-
-        Ok(())
+            .insert_header("Authorization", "Basic JzxtZT4nOnRlc3Q=")
+            .unwrap();
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().remote_user(), None);
+        assert!(result.body_str().contains("&quot;'&lt;me&gt;'&quot;: $2b$"));
     }
 
     #[test(tokio::test)]
-    async fn rate_limiting() -> Result<(), Box<Error>> {
+    async fn rate_limiting() {
         let mut conf = default_conf().to_owned();
         conf.push_str(
             r#"
@@ -363,29 +347,28 @@ auth_rate_limits:
     total: 4
             "#,
         );
-        let handler = make_handler(&conf);
+        let mut app = make_app(&conf);
 
         for _ in 0..4 {
             let mut session = make_session().await;
             session
                 .req_header_mut()
-                .insert_header("Authorization", "Basic bWU6dGVzdA==")?;
-            let _ = handler.request_filter(&mut session, &mut ()).await?;
+                .insert_header("Authorization", "Basic bWU6dGVzdA==")
+                .unwrap();
+            app.handle_request(session).await;
         }
 
         let mut session = make_session().await;
         session
             .req_header_mut()
-            .insert_header("Authorization", "Basic bWU6dGVzdA==")?;
+            .insert_header("Authorization", "Basic bWU6dGVzdA==")
+            .unwrap();
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().remote_user(), None);
         assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(session.remote_user(), None);
-        assert_eq!(
-            session.response_written().unwrap().status,
+            result.session().response_written().unwrap().status,
             StatusCode::TOO_MANY_REQUESTS
         );
-        Ok(())
     }
 }

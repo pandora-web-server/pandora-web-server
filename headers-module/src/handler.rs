@@ -140,11 +140,11 @@ mod tests {
     use super::*;
 
     use http::header;
-    use pandora_module_utils::pingora::{ProxyHttp, RequestHeader, TestSession};
+    use pandora_module_utils::pingora::{create_test_session, HttpPeer, RequestHeader, Session};
     use pandora_module_utils::{DeserializeMap, FromYaml};
     use startup_module::DefaultApp;
-    use std::ops::Deref;
     use test_log::test;
+    use upstream_module::{UpstreamConf, UpstreamHandler};
 
     #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
     struct TestConf {
@@ -153,35 +153,60 @@ mod tests {
 
     #[derive(Debug)]
     struct TestHandler {
-        conf: TestConf,
+        inner: Option<UpstreamHandler>,
     }
 
     impl TryFrom<TestConf> for TestHandler {
         type Error = Box<Error>;
 
         fn try_from(conf: TestConf) -> Result<Self, Self::Error> {
-            Ok(TestHandler { conf })
+            let inner = if conf.send_response {
+                None
+            } else {
+                Some(
+                    UpstreamConf {
+                        upstream: Some("http://127.0.0.1".try_into().unwrap()),
+                    }
+                    .try_into()
+                    .unwrap(),
+                )
+            };
+            Ok(TestHandler { inner })
         }
     }
 
     #[async_trait]
     impl RequestFilter for TestHandler {
         type Conf = TestConf;
-        type CTX = ();
-        fn new_ctx() -> Self::CTX {}
+        type CTX = <UpstreamHandler as RequestFilter>::CTX;
+        fn new_ctx() -> Self::CTX {
+            UpstreamHandler::new_ctx()
+        }
 
         async fn request_filter(
             &self,
             session: &mut impl SessionWrapper,
-            _ctx: &mut Self::CTX,
+            ctx: &mut Self::CTX,
         ) -> Result<RequestFilterResult, Box<Error>> {
-            if self.conf.send_response {
+            if let Some(inner) = &self.inner {
+                inner.request_filter(session, ctx).await
+            } else {
                 let header = make_response_header()?;
                 session.write_response_header(Box::new(header)).await?;
 
                 Ok(RequestFilterResult::ResponseSent)
+            }
+        }
+
+        async fn upstream_peer(
+            &self,
+            session: &mut impl SessionWrapper,
+            ctx: &mut Self::CTX,
+        ) -> Result<Option<Box<HttpPeer>>, Box<Error>> {
+            if let Some(inner) = &self.inner {
+                inner.upstream_peer(session, ctx).await
             } else {
-                Ok(RequestFilterResult::Handled)
+                Ok(None)
             }
         }
     }
@@ -247,13 +272,13 @@ mod tests {
         )
     }
 
-    async fn make_session(path: &str) -> TestSession {
+    async fn make_session(path: &str) -> Session {
         let mut header = RequestHeader::build("GET", path.as_bytes(), None).unwrap();
 
         // Set URI explicitly, making sure the host name is preserved.
         header.set_uri(path.try_into().unwrap());
 
-        TestSession::from(header).await
+        create_test_session(header).await
     }
 
     fn make_response_header() -> Result<ResponseHeader, Box<Error>> {
@@ -287,13 +312,14 @@ mod tests {
     }
 
     #[test(tokio::test)]
-    async fn request_filter() -> Result<(), Box<Error>> {
-        let app = make_app(true);
+    async fn request_filter() {
+        let mut app = make_app(true);
 
-        let mut session = make_session("https://localhost/").await;
-        assert!(app.request_filter(&mut session, &mut app.new_ctx()).await?);
+        let session = make_session("https://localhost/").await;
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
         assert_headers(
-            session.deref().response_written().unwrap(),
+            result.session().response_written().unwrap(),
             vec![
                 ("X-Me", "localhost"),
                 ("Cache-Control", "max-age=604800"),
@@ -306,10 +332,11 @@ mod tests {
             ],
         );
 
-        let mut session = make_session("https://localhost/subdir/file.txt").await;
-        assert!(app.request_filter(&mut session, &mut app.new_ctx()).await?);
+        let session = make_session("https://localhost/subdir/file.txt").await;
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
         assert_headers(
-            session.deref().response_written().unwrap(),
+            result.session().response_written().unwrap(),
             vec![
                 ("X-Me", "none"),
                 ("X-Test", "unchanged"),
@@ -321,10 +348,11 @@ mod tests {
             ],
         );
 
-        let mut session = make_session("https://localhost/subdir2").await;
-        assert!(app.request_filter(&mut session, &mut app.new_ctx()).await?);
+        let session = make_session("https://localhost/subdir2").await;
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
         assert_headers(
-            session.deref().response_written().unwrap(),
+            result.session().response_written().unwrap(),
             vec![
                 ("X-Me", "localhost"),
                 ("Cache-Control", "max-age=604800, no-cache"),
@@ -337,10 +365,11 @@ mod tests {
             ],
         );
 
-        let mut session = make_session("https://example.com/whatever").await;
-        assert!(app.request_filter(&mut session, &mut app.new_ctx()).await?);
+        let session = make_session("https://example.com/whatever").await;
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
         assert_headers(
-            session.deref().response_written().unwrap(),
+            result.session().response_written().unwrap(),
             vec![
                 ("X-Me", "example.com"),
                 ("X-Test", "unchanged"),
@@ -352,10 +381,11 @@ mod tests {
             ],
         );
 
-        let mut session = make_session("https://example.com/subdir/whatever").await;
-        assert!(app.request_filter(&mut session, &mut app.new_ctx()).await?);
+        let session = make_session("https://example.com/subdir/whatever").await;
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
         assert_headers(
-            session.deref().response_written().unwrap(),
+            result.session().response_written().unwrap(),
             vec![
                 ("X-Me", "example.com"),
                 ("X-Test", "unchanged"),
@@ -364,10 +394,11 @@ mod tests {
             ],
         );
 
-        let mut session = make_session("https://example.com/subdir/file.txt").await;
-        assert!(app.request_filter(&mut session, &mut app.new_ctx()).await?);
+        let session = make_session("https://example.com/subdir/file.txt").await;
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
         assert_headers(
-            session.deref().response_written().unwrap(),
+            result.session().response_written().unwrap(),
             vec![
                 ("X-Me", "example.com"),
                 ("X-Test", "unchanged"),
@@ -376,10 +407,11 @@ mod tests {
             ],
         );
 
-        let mut session = make_session("https://example.com/subdir/subsub/file.txt").await;
-        assert!(app.request_filter(&mut session, &mut app.new_ctx()).await?);
+        let session = make_session("https://example.com/subdir/subsub/file.txt").await;
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
         assert_headers(
-            session.deref().response_written().unwrap(),
+            result.session().response_written().unwrap(),
             vec![
                 ("X-Me", "example.com"),
                 ("X-Test", "unchanged"),
@@ -387,10 +419,11 @@ mod tests {
             ],
         );
 
-        let mut session = make_session("https://example.net/whatever").await;
-        assert!(app.request_filter(&mut session, &mut app.new_ctx()).await?);
+        let session = make_session("https://example.net/whatever").await;
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
         assert_headers(
-            session.deref().response_written().unwrap(),
+            result.session().response_written().unwrap(),
             vec![
                 ("X-Me", "none"),
                 ("X-Test", "unchanged"),
@@ -400,10 +433,11 @@ mod tests {
             ],
         );
 
-        let mut session = make_session("https://example.info/whatever").await;
-        assert!(app.request_filter(&mut session, &mut app.new_ctx()).await?);
+        let session = make_session("https://example.info/whatever").await;
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
         assert_headers(
-            session.deref().response_written().unwrap(),
+            result.session().response_written().unwrap(),
             vec![
                 ("X-Me", "none"),
                 ("X-Test", "unchanged"),
@@ -415,10 +449,11 @@ mod tests {
             ],
         );
 
-        let mut session = make_session("https://example.info/subdir/whatever").await;
-        assert!(app.request_filter(&mut session, &mut app.new_ctx()).await?);
+        let session = make_session("https://example.info/subdir/whatever").await;
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
         assert_headers(
-            session.deref().response_written().unwrap(),
+            result.session().response_written().unwrap(),
             vec![
                 ("X-Me", "none"),
                 ("X-Test", "unchanged"),
@@ -430,21 +465,19 @@ mod tests {
                 ),
             ],
         );
-
-        Ok(())
     }
 
     #[test(tokio::test)]
-    async fn upstream() -> Result<(), Box<Error>> {
-        let app = make_app(false);
+    async fn upstream() {
+        let mut app = make_app(false);
 
-        let mut session = make_session("https://localhost/").await;
-        let mut ctx = app.new_ctx();
-        assert!(!app.request_filter(&mut session, &mut ctx).await?);
-        let mut header = make_response_header().unwrap();
-        app.upstream_response_filter(&mut session, &mut header, &mut ctx);
+        let session = make_session("https://localhost/").await;
+        let mut result = app
+            .handle_request_with_upstream(session, |_, _| make_response_header())
+            .await;
+        assert!(result.err().is_none());
         assert_headers(
-            &header,
+            result.session().response_written().unwrap(),
             vec![
                 ("X-Me", "localhost"),
                 ("Cache-Control", "max-age=604800"),
@@ -457,13 +490,13 @@ mod tests {
             ],
         );
 
-        let mut session = make_session("https://localhost/subdir/file.txt").await;
-        let mut ctx = app.new_ctx();
-        assert!(!app.request_filter(&mut session, &mut ctx).await?);
-        let mut header = make_response_header().unwrap();
-        app.upstream_response_filter(&mut session, &mut header, &mut ctx);
+        let session = make_session("https://localhost/subdir/file.txt").await;
+        let mut result = app
+            .handle_request_with_upstream(session, |_, _| make_response_header())
+            .await;
+        assert!(result.err().is_none());
         assert_headers(
-            &header,
+            result.session().response_written().unwrap(),
             vec![
                 ("X-Me", "none"),
                 ("X-Test", "unchanged"),
@@ -475,13 +508,13 @@ mod tests {
             ],
         );
 
-        let mut session = make_session("https://localhost/subdir2").await;
-        let mut ctx = app.new_ctx();
-        assert!(!app.request_filter(&mut session, &mut ctx).await?);
-        let mut header = make_response_header().unwrap();
-        app.upstream_response_filter(&mut session, &mut header, &mut ctx);
+        let session = make_session("https://localhost/subdir2").await;
+        let mut result = app
+            .handle_request_with_upstream(session, |_, _| make_response_header())
+            .await;
+        assert!(result.err().is_none());
         assert_headers(
-            &header,
+            result.session().response_written().unwrap(),
             vec![
                 ("X-Me", "localhost"),
                 ("Cache-Control", "max-age=604800, no-cache"),
@@ -494,13 +527,13 @@ mod tests {
             ],
         );
 
-        let mut session = make_session("https://example.com/whatever").await;
-        let mut ctx = app.new_ctx();
-        assert!(!app.request_filter(&mut session, &mut ctx).await?);
-        let mut header = make_response_header().unwrap();
-        app.upstream_response_filter(&mut session, &mut header, &mut ctx);
+        let session = make_session("https://example.com/whatever").await;
+        let mut result = app
+            .handle_request_with_upstream(session, |_, _| make_response_header())
+            .await;
+        assert!(result.err().is_none());
         assert_headers(
-            &header,
+            result.session().response_written().unwrap(),
             vec![
                 ("X-Me", "example.com"),
                 ("X-Test", "unchanged"),
@@ -512,13 +545,13 @@ mod tests {
             ],
         );
 
-        let mut session = make_session("https://example.com/subdir/whatever").await;
-        let mut ctx = app.new_ctx();
-        assert!(!app.request_filter(&mut session, &mut ctx).await?);
-        let mut header = make_response_header().unwrap();
-        app.upstream_response_filter(&mut session, &mut header, &mut ctx);
+        let session = make_session("https://example.com/subdir/whatever").await;
+        let mut result = app
+            .handle_request_with_upstream(session, |_, _| make_response_header())
+            .await;
+        assert!(result.err().is_none());
         assert_headers(
-            &header,
+            result.session().response_written().unwrap(),
             vec![
                 ("X-Me", "example.com"),
                 ("X-Test", "unchanged"),
@@ -527,13 +560,13 @@ mod tests {
             ],
         );
 
-        let mut session = make_session("https://example.com/subdir/file.txt").await;
-        let mut ctx = app.new_ctx();
-        assert!(!app.request_filter(&mut session, &mut ctx).await?);
-        let mut header = make_response_header().unwrap();
-        app.upstream_response_filter(&mut session, &mut header, &mut ctx);
+        let session = make_session("https://example.com/subdir/file.txt").await;
+        let mut result = app
+            .handle_request_with_upstream(session, |_, _| make_response_header())
+            .await;
+        assert!(result.err().is_none());
         assert_headers(
-            &header,
+            result.session().response_written().unwrap(),
             vec![
                 ("X-Me", "example.com"),
                 ("X-Test", "unchanged"),
@@ -542,13 +575,13 @@ mod tests {
             ],
         );
 
-        let mut session = make_session("https://example.com/subdir/subsub/file.txt").await;
-        let mut ctx = app.new_ctx();
-        assert!(!app.request_filter(&mut session, &mut ctx).await?);
-        let mut header = make_response_header().unwrap();
-        app.upstream_response_filter(&mut session, &mut header, &mut ctx);
+        let session = make_session("https://example.com/subdir/subsub/file.txt").await;
+        let mut result = app
+            .handle_request_with_upstream(session, |_, _| make_response_header())
+            .await;
+        assert!(result.err().is_none());
         assert_headers(
-            &header,
+            result.session().response_written().unwrap(),
             vec![
                 ("X-Me", "example.com"),
                 ("X-Test", "unchanged"),
@@ -556,13 +589,13 @@ mod tests {
             ],
         );
 
-        let mut session = make_session("https://example.net/whatever").await;
-        let mut ctx = app.new_ctx();
-        assert!(!app.request_filter(&mut session, &mut ctx).await?);
-        let mut header = make_response_header().unwrap();
-        app.upstream_response_filter(&mut session, &mut header, &mut ctx);
+        let session = make_session("https://example.net/whatever").await;
+        let mut result = app
+            .handle_request_with_upstream(session, |_, _| make_response_header())
+            .await;
+        assert!(result.err().is_none());
         assert_headers(
-            &header,
+            result.session().response_written().unwrap(),
             vec![
                 ("X-Me", "none"),
                 ("X-Test", "unchanged"),
@@ -572,13 +605,13 @@ mod tests {
             ],
         );
 
-        let mut session = make_session("https://example.info/whatever").await;
-        let mut ctx = app.new_ctx();
-        assert!(!app.request_filter(&mut session, &mut ctx).await?);
-        let mut header = make_response_header().unwrap();
-        app.upstream_response_filter(&mut session, &mut header, &mut ctx);
+        let session = make_session("https://example.info/whatever").await;
+        let mut result = app
+            .handle_request_with_upstream(session, |_, _| make_response_header())
+            .await;
+        assert!(result.err().is_none());
         assert_headers(
-            &header,
+            result.session().response_written().unwrap(),
             vec![
                 ("X-Me", "none"),
                 ("X-Test", "unchanged"),
@@ -590,13 +623,13 @@ mod tests {
             ],
         );
 
-        let mut session = make_session("https://example.info/subdir/whatever").await;
-        let mut ctx = app.new_ctx();
-        assert!(!app.request_filter(&mut session, &mut ctx).await?);
-        let mut header = make_response_header().unwrap();
-        app.upstream_response_filter(&mut session, &mut header, &mut ctx);
+        let session = make_session("https://example.info/subdir/whatever").await;
+        let mut result = app
+            .handle_request_with_upstream(session, |_, _| make_response_header())
+            .await;
+        assert!(result.err().is_none());
         assert_headers(
-            &header,
+            result.session().response_written().unwrap(),
             vec![
                 ("X-Me", "none"),
                 ("X-Test", "unchanged"),
@@ -608,7 +641,5 @@ mod tests {
                 ),
             ],
         );
-
-        Ok(())
     }
 }

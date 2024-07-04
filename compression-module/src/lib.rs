@@ -96,58 +96,14 @@ impl RequestFilter for CompressionHandler {
 mod tests {
     use super::*;
 
-    use pandora_module_utils::pingora::{RequestHeader, TestSession};
+    use pandora_module_utils::pingora::{create_test_session, RequestHeader, Session};
     use pandora_module_utils::FromYaml;
+    use startup_module::{AppResult, DefaultApp};
     use test_log::test;
 
-    #[derive(Debug, Clone, PartialEq, Eq, DeserializeMap, Default)]
-    struct TestConf {}
-
-    #[derive(Debug)]
-    struct TestHandler {}
-
-    impl TryFrom<TestConf> for TestHandler {
-        type Error = Box<Error>;
-
-        fn try_from(_conf: TestConf) -> Result<Self, Self::Error> {
-            Ok(TestHandler {})
-        }
-    }
-
-    #[async_trait]
-    impl RequestFilter for TestHandler {
-        type Conf = TestConf;
-        type CTX = ();
-        fn new_ctx() -> Self::CTX {}
-
-        async fn request_filter(
-            &self,
-            session: &mut impl SessionWrapper,
-            _ctx: &mut Self::CTX,
-        ) -> Result<RequestFilterResult, Box<Error>> {
-            if session.downstream_compression.is_enabled()
-                && session.upstream_compression.is_enabled()
-            {
-                Ok(RequestFilterResult::ResponseSent)
-            } else if session.downstream_compression.is_enabled()
-                || session.upstream_compression.is_enabled()
-            {
-                Ok(RequestFilterResult::Handled)
-            } else {
-                Ok(RequestFilterResult::Unhandled)
-            }
-        }
-    }
-
-    #[derive(Debug, RequestFilter)]
-    struct Handler {
-        compression: CompressionHandler,
-        test: TestHandler,
-    }
-
-    fn make_handler(configured: bool) -> Handler {
+    fn make_app(configured: bool) -> DefaultApp<CompressionHandler> {
         let conf = if configured {
-            <Handler as RequestFilter>::Conf::from_yaml(
+            <CompressionHandler as RequestFilter>::Conf::from_yaml(
                 r#"
                     compression_level: 6
                     decompress_upstream: true
@@ -155,39 +111,35 @@ mod tests {
             )
             .unwrap()
         } else {
-            <Handler as RequestFilter>::Conf::default()
+            <CompressionHandler as RequestFilter>::Conf::default()
         };
-        conf.try_into().unwrap()
+        DefaultApp::new(conf.try_into().unwrap())
     }
 
-    async fn make_session() -> TestSession {
+    async fn make_session() -> Session {
         let header = RequestHeader::build("GET", b"/", None).unwrap();
-        TestSession::from(header).await
+        create_test_session(header).await
+    }
+
+    fn assert_compression(result: &mut AppResult, downstream: bool, upstream: bool) {
+        let session = result.session();
+        assert_eq!(session.downstream_compression.is_enabled(), downstream);
+        assert_eq!(session.upstream_compression.is_enabled(), upstream);
     }
 
     #[test(tokio::test)]
-    async fn unconfigured() -> Result<(), Box<Error>> {
-        let handler = make_handler(false);
-        let mut session = make_session().await;
-        assert_eq!(
-            handler
-                .request_filter(&mut session, &mut Handler::new_ctx())
-                .await?,
-            RequestFilterResult::Unhandled
-        );
-        Ok(())
+    async fn unconfigured() {
+        let mut app = make_app(false);
+        let session = make_session().await;
+        let mut result = app.handle_request(session).await;
+        assert_compression(&mut result, false, false);
     }
 
     #[test(tokio::test)]
-    async fn configured() -> Result<(), Box<Error>> {
-        let handler = make_handler(true);
-        let mut session = make_session().await;
-        assert_eq!(
-            handler
-                .request_filter(&mut session, &mut Handler::new_ctx())
-                .await?,
-            RequestFilterResult::ResponseSent
-        );
-        Ok(())
+    async fn configured() {
+        let mut app = make_app(true);
+        let session = make_session().await;
+        let mut result = app.handle_request(session).await;
+        assert_compression(&mut result, true, true);
     }
 }

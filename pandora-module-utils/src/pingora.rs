@@ -16,7 +16,7 @@
 //! longer need them as direct dependencies.
 
 use async_trait::async_trait;
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use http::{header, Extensions, Uri};
 pub use pingora::http::{IntoCaseHeaderName, RequestHeader, ResponseHeader};
 pub use pingora::protocols::http::HttpTask;
@@ -153,93 +153,28 @@ struct RemoteUser(String);
 #[derive(Debug, Clone)]
 struct OriginalUri(Uri);
 
-/// A `SessionWrapper` implementation used for tests.
-pub struct TestSession {
-    inner: Session,
-    extensions: Extensions,
-
-    /// The response header written if any
-    pub response_header: Option<ResponseHeader>,
-
-    /// The response body written if any
-    pub response_body: BytesMut,
+/// Creates a new Pingora session for tests with given request header
+pub async fn create_test_session(header: RequestHeader) -> Session {
+    create_test_session_with_body(header, "").await
 }
 
-impl TestSession {
-    /// Creates a new test session based with the given header.
-    pub async fn from(header: RequestHeader) -> Self {
-        Self::with_body(header, "").await
-    }
+/// Creates a new Pingora session for tests with given request header and request body
+pub async fn create_test_session_with_body(
+    mut header: RequestHeader,
+    body: impl AsRef<[u8]>,
+) -> Session {
+    let mut cursor = Cursor::new(Vec::<u8>::new());
+    let _ = cursor.write(b"POST / HTTP/1.1\r\n");
+    let _ = cursor.write(b"Connection: close\r\n");
+    let _ = cursor.write(b"\r\n");
+    let _ = cursor.write(body.as_ref());
+    let _ = cursor.seek(SeekFrom::Start(0));
 
-    /// Creates a new test session based with the given header and request body.
-    pub async fn with_body(mut header: RequestHeader, body: impl AsRef<[u8]>) -> Self {
-        let mut cursor = Cursor::new(Vec::<u8>::new());
-        let _ = cursor.write(b"POST / HTTP/1.1\r\n");
-        let _ = cursor.write(b"Connection: close\r\n");
-        let _ = cursor.write(b"\r\n");
-        let _ = cursor.write(body.as_ref());
-        let _ = cursor.seek(SeekFrom::Start(0));
+    let _ = header.insert_header(header::CONTENT_LENGTH, body.as_ref().len());
 
-        let _ = header.insert_header(header::CONTENT_LENGTH, body.as_ref().len());
+    let mut session = Session::new_h1(Box::new(cursor));
+    assert!(session.read_request().await.unwrap());
+    *session.req_header_mut() = header;
 
-        let mut inner = Session::new_h1(Box::new(cursor));
-        assert!(inner.read_request().await.unwrap());
-        *inner.req_header_mut() = header;
-
-        Self {
-            inner,
-            extensions: Extensions::new(),
-            response_header: None,
-            response_body: BytesMut::new(),
-        }
-    }
-}
-
-#[async_trait]
-impl SessionWrapper for TestSession {
-    fn extensions(&self) -> &Extensions {
-        &self.extensions
-    }
-
-    fn extensions_mut(&mut self) -> &mut Extensions {
-        &mut self.extensions
-    }
-
-    async fn write_response_header(&mut self, resp: Box<ResponseHeader>) -> Result<(), Box<Error>> {
-        self.response_header = Some(*resp);
-        Ok(())
-    }
-
-    async fn write_response_header_ref(&mut self, resp: &ResponseHeader) -> Result<(), Box<Error>> {
-        self.write_response_header(Box::new(resp.clone())).await
-    }
-
-    fn response_written(&self) -> Option<&ResponseHeader> {
-        self.response_header.as_ref()
-    }
-
-    async fn write_response_body(&mut self, data: Bytes) -> Result<(), Box<Error>> {
-        self.response_body.extend(std::iter::once(data));
-        Ok(())
-    }
-}
-
-impl Deref for TestSession {
-    type Target = Session;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl DerefMut for TestSession {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
-    }
-}
-
-impl std::fmt::Debug for TestSession {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("TestSession").finish()
-    }
+    session
 }

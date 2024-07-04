@@ -326,8 +326,12 @@ pub(crate) async fn page_auth(
 mod tests {
     use super::*;
 
-    use pandora_module_utils::pingora::{RequestHeader, TestSession};
+    use pandora_module_utils::pingora::{
+        create_test_session, create_test_session_with_body, RequestHeader, Session,
+    };
     use pandora_module_utils::{FromYaml, RequestFilter};
+    use rewrite_module::RewriteHandler;
+    use startup_module::{AppResult, DefaultApp};
     use test_log::test;
 
     use crate::AuthHandler;
@@ -358,67 +362,81 @@ auth_page_session:
         "#
     }
 
-    fn make_handler(conf: &str) -> AuthHandler {
-        <AuthHandler as RequestFilter>::Conf::from_yaml(conf)
-            .unwrap()
-            .try_into()
-            .unwrap()
+    #[derive(Debug, RequestFilter)]
+    struct Handler {
+        rewrite: RewriteHandler,
+        auth: AuthHandler,
     }
 
-    async fn make_session(path: &str) -> TestSession {
+    fn make_app(conf: &str) -> DefaultApp<Handler> {
+        DefaultApp::new(
+            <Handler as RequestFilter>::Conf::from_yaml(conf)
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        )
+    }
+
+    async fn make_session(path: &str) -> Session {
         let header = RequestHeader::build("GET", path.as_bytes(), None).unwrap();
-        TestSession::from(header).await
+        create_test_session(header).await
     }
 
-    async fn make_session_with_body(path: &str, body: &str) -> TestSession {
+    async fn make_session_with_body(path: &str, body: &str) -> Session {
         let header = RequestHeader::build("POST", path.as_bytes(), None).unwrap();
-        TestSession::with_body(header, body).await
+        create_test_session_with_body(header, body).await
     }
 
     fn check_login_page_response(
-        session: &TestSession,
+        result: &mut AppResult,
         expect_error: bool,
         expect_suggestion: bool,
     ) {
-        assert_eq!(session.response_written().unwrap().status, 200);
-        assert_eq!(
-            session
-                .response_written()
-                .unwrap()
-                .headers
-                .get("Content-Type")
-                .unwrap()
-                .to_str()
-                .unwrap(),
-            "text/html; charset=utf-8"
-        );
+        {
+            let session = result.session();
+            assert_eq!(session.response_written().unwrap().status, 200);
+            assert_eq!(
+                session
+                    .response_written()
+                    .unwrap()
+                    .headers
+                    .get("Content-Type")
+                    .unwrap()
+                    .to_str()
+                    .unwrap(),
+                "text/html; charset=utf-8"
+            );
+        }
 
-        let response = String::from_utf8_lossy(&session.response_body);
-        assert!(response.contains("%%title%%"));
-        assert!(response.contains("%%heading%%"));
-        assert_eq!(response.contains("%%error%%"), expect_error);
+        let body = result.body_str();
+        assert!(body.contains("%%title%%"));
+        assert!(body.contains("%%heading%%"));
+        assert_eq!(body.contains("%%error%%"), expect_error);
         assert_eq!(
-            response.contains("&quot;'&lt;me&gt;'&quot;: $2b$"),
+            body.contains("&quot;'&lt;me&gt;'&quot;: $2b$"),
             expect_suggestion
         );
-        assert!(response.contains("%%username_label%%"));
-        assert!(response.contains("%%password_label%%"));
-        assert!(response.contains("%%button_text%%"));
+        assert!(body.contains("%%username_label%%"));
+        assert!(body.contains("%%password_label%%"));
+        assert!(body.contains("%%button_text%%"));
     }
 
-    fn check_json_response(session: &TestSession, expect_error: bool, expect_suggestion: bool) {
-        assert_eq!(session.response_written().unwrap().status, 200);
-        assert_eq!(
-            session
-                .response_written()
-                .unwrap()
-                .headers
-                .get("Content-Type")
-                .unwrap()
-                .to_str()
-                .unwrap(),
-            "application/json; charset=utf-8"
-        );
+    fn check_json_response(result: &mut AppResult, expect_error: bool, expect_suggestion: bool) {
+        {
+            let session = result.session();
+            assert_eq!(session.response_written().unwrap().status, 200);
+            assert_eq!(
+                session
+                    .response_written()
+                    .unwrap()
+                    .headers
+                    .get("Content-Type")
+                    .unwrap()
+                    .to_str()
+                    .unwrap(),
+                "application/json; charset=utf-8"
+            );
+        }
 
         #[derive(Deserialize)]
         struct JsonResponse {
@@ -426,265 +444,235 @@ auth_page_session:
             suggestion: Option<String>,
         }
 
-        let response: JsonResponse = serde_json::from_slice(&session.response_body).unwrap();
+        let response: JsonResponse = serde_json::from_slice(result.body()).unwrap();
         assert_eq!(response.success, !expect_error);
         assert_eq!(response.suggestion.is_some(), expect_suggestion);
     }
 
     #[test(tokio::test)]
-    async fn unconfigured() -> Result<(), Box<Error>> {
-        let handler = make_handler("auth_mode: page");
-        let mut session = make_session("/").await;
+    async fn unconfigured() {
+        let mut app = make_app("auth_mode: page");
+        let session = make_session("/").await;
+        let mut result = app.handle_request(session).await;
         assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::Unhandled
+            result.err().as_ref().map(|err| &err.etype),
+            Some(&ErrorType::HTTPStatus(404))
         );
-        assert_eq!(session.remote_user(), None);
-        Ok(())
+        assert_eq!(result.session().remote_user(), None);
     }
 
     #[test(tokio::test)]
-    async fn no_cookies() -> Result<(), Box<Error>> {
-        let handler = make_handler(default_conf());
-        let mut session = make_session("/").await;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(session.remote_user(), None);
-        check_login_page_response(&session, false, false);
-        Ok(())
+    async fn no_cookies() {
+        let mut app = make_app(default_conf());
+        let session = make_session("/").await;
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().remote_user(), None);
+        check_login_page_response(&mut result, false, false);
     }
 
     #[test(tokio::test)]
-    async fn unknown_cookie() -> Result<(), Box<Error>> {
-        let handler = make_handler(default_conf());
+    async fn unknown_cookie() {
+        let mut app = make_app(default_conf());
         let mut session = make_session("/").await;
         session
             .req_header_mut()
-            .insert_header("Cookie", "auth_cookie2=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtZSIsImlhdCI6MTIzNDV9.oo4uMH-cKddfcmh14kEyXGDUeWObNEXht3lBymUjWlw")?;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(session.remote_user(), None);
-        check_login_page_response(&session, false, false);
-        Ok(())
+            .insert_header("Cookie", "auth_cookie2=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtZSIsImlhdCI6MTIzNDV9.oo4uMH-cKddfcmh14kEyXGDUeWObNEXht3lBymUjWlw").unwrap();
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().remote_user(), None);
+        check_login_page_response(&mut result, false, false);
     }
 
     #[test(tokio::test)]
-    async fn cookie_invalid_token() -> Result<(), Box<Error>> {
-        let handler = make_handler(default_conf());
+    async fn cookie_invalid_token() {
+        let mut app = make_app(default_conf());
         let mut session = make_session("/").await;
         session
             .req_header_mut()
-            .insert_header("Cookie", "auth_cookie=fyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtZSIsImlhdCI6MTIzNDV9.oo4uMH-cKddfcmh14kEyXGDUeWObNEXht3lBymUjWlw")?;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(session.remote_user(), None);
-        check_login_page_response(&session, false, false);
-        Ok(())
+            .insert_header("Cookie", "auth_cookie=fyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtZSIsImlhdCI6MTIzNDV9.oo4uMH-cKddfcmh14kEyXGDUeWObNEXht3lBymUjWlw").unwrap();
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().remote_user(), None);
+        check_login_page_response(&mut result, false, false);
     }
 
     #[test(tokio::test)]
-    async fn cookie_invalid_signature() -> Result<(), Box<Error>> {
-        let handler = make_handler(default_conf());
+    async fn cookie_invalid_signature() {
+        let mut app = make_app(default_conf());
         let mut session = make_session("/").await;
         session
             .req_header_mut()
-            .insert_header("Cookie", "auth_cookie=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtZSIsImlhdCI6MTIzNDV9.oo4uMH-cKddfcmh14kEyXGDUeWObNEXht3lBymUjWlv")?;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(session.remote_user(), None);
-        check_login_page_response(&session, false, false);
-        Ok(())
+            .insert_header("Cookie", "auth_cookie=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtZSIsImlhdCI6MTIzNDV9.oo4uMH-cKddfcmh14kEyXGDUeWObNEXht3lBymUjWlv").unwrap();
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().remote_user(), None);
+        check_login_page_response(&mut result, false, false);
     }
 
     #[test(tokio::test)]
-    async fn cookie_expired_token() -> Result<(), Box<Error>> {
+    async fn cookie_expired_token() {
         let conf = default_conf().replace("200000d", "2h");
-        let handler = make_handler(&conf);
+        let mut app = make_app(&conf);
         let mut session = make_session("/").await;
         session
             .req_header_mut()
-            .insert_header("Cookie", "auth_cookie=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtZSIsImlhdCI6MTIzNDV9.oo4uMH-cKddfcmh14kEyXGDUeWObNEXht3lBymUjWlw")?;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(session.remote_user(), None);
-        check_login_page_response(&session, false, false);
-        Ok(())
+            .insert_header("Cookie", "auth_cookie=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtZSIsImlhdCI6MTIzNDV9.oo4uMH-cKddfcmh14kEyXGDUeWObNEXht3lBymUjWlw").unwrap();
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().remote_user(), None);
+        check_login_page_response(&mut result, false, false);
     }
 
     #[test(tokio::test)]
-    async fn cookie_issued_in_future() -> Result<(), Box<Error>> {
-        let handler = make_handler(default_conf());
+    async fn cookie_issued_in_future() {
+        let mut app = make_app(default_conf());
         let mut session = make_session("/").await;
         session
             .req_header_mut()
-            .insert_header("Cookie", "auth_cookie=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtZSIsImlhdCI6OTk5OTk5OTk5OX0.rHg--l9K83j5LUResMAa4lutm5Gz9jAk5zvWZAEARdM")?;
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(session.remote_user(), None);
-        check_login_page_response(&session, false, false);
-        Ok(())
+            .insert_header("Cookie", "auth_cookie=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtZSIsImlhdCI6OTk5OTk5OTk5OX0.rHg--l9K83j5LUResMAa4lutm5Gz9jAk5zvWZAEARdM").unwrap();
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().remote_user(), None);
+        check_login_page_response(&mut result, false, false);
     }
 
     #[test(tokio::test)]
-    async fn valid_cookie() -> Result<(), Box<Error>> {
-        let handler = make_handler(default_conf());
+    async fn valid_cookie() {
+        let mut app = make_app(default_conf());
         let mut session = make_session("/").await;
         session
             .req_header_mut()
-            .insert_header("Cookie", "auth_cookie=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtZSIsImlhdCI6MTIzNDV9.oo4uMH-cKddfcmh14kEyXGDUeWObNEXht3lBymUjWlw")?;
+            .insert_header("Cookie", "auth_cookie=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtZSIsImlhdCI6MTIzNDV9.oo4uMH-cKddfcmh14kEyXGDUeWObNEXht3lBymUjWlw").unwrap();
+        let mut result = app.handle_request(session).await;
         assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::Unhandled
+            result.err().as_ref().map(|err| &err.etype),
+            Some(&ErrorType::HTTPStatus(404))
         );
-        assert_eq!(session.remote_user(), Some("me"));
-        Ok(())
+        assert_eq!(result.session().remote_user(), Some("me"));
     }
 
     #[test(tokio::test)]
-    async fn multiple_cookies() -> Result<(), Box<Error>> {
-        let handler = make_handler(default_conf());
+    async fn multiple_cookies() {
+        let mut app = make_app(default_conf());
         let mut session = make_session("/").await;
         session
             .req_header_mut()
-            .insert_header("Cookie", "auth=abcd; auth_cookie=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtZSIsImlhdCI6MTIzNDV9.oo4uMH-cKddfcmh14kEyXGDUeWObNEXht3lBymUjWlw; another=dcba")?;
+            .insert_header("Cookie", "auth=abcd; auth_cookie=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtZSIsImlhdCI6MTIzNDV9.oo4uMH-cKddfcmh14kEyXGDUeWObNEXht3lBymUjWlw; another=dcba").unwrap();
+        let mut result = app.handle_request(session).await;
         assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::Unhandled
+            result.err().as_ref().map(|err| &err.etype),
+            Some(&ErrorType::HTTPStatus(404))
         );
-        assert_eq!(session.remote_user(), Some("me"));
-        Ok(())
+        assert_eq!(result.session().remote_user(), Some("me"));
     }
 
     #[test(tokio::test)]
-    async fn post_without_body() -> Result<(), Box<Error>> {
-        let handler = make_handler(default_conf());
+    async fn post_without_body() {
+        let mut app = make_app(default_conf());
         let mut session = make_session_with_body("/", "").await;
         session
             .req_header_mut()
-            .insert_header("Content-Type", "application/x-www-form-urlencoded")?;
+            .insert_header("Content-Type", "application/x-www-form-urlencoded")
+            .unwrap();
         session.req_header_mut().set_method(Method::POST);
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(session.remote_user(), None);
-        check_login_page_response(&session, false, false);
-        Ok(())
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().remote_user(), None);
+        check_login_page_response(&mut result, false, false);
     }
 
     #[test(tokio::test)]
-    async fn wrong_content_type() -> Result<(), Box<Error>> {
-        let handler = make_handler(default_conf());
+    async fn wrong_content_type() {
+        let mut app = make_app(default_conf());
         let mut session = make_session_with_body("/", "username=me&password=test").await;
         session
             .req_header_mut()
-            .insert_header("Content-Type", "multipart/form-data")?;
+            .insert_header("Content-Type", "multipart/form-data")
+            .unwrap();
         session.req_header_mut().set_method(Method::POST);
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(session.remote_user(), None);
-        check_login_page_response(&session, false, false);
-        Ok(())
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().remote_user(), None);
+        check_login_page_response(&mut result, false, false);
     }
 
     #[test(tokio::test)]
-    async fn wrong_user_name() -> Result<(), Box<Error>> {
-        let handler = make_handler(default_conf());
+    async fn wrong_user_name() {
+        let mut app = make_app(default_conf());
         let mut session = make_session_with_body("/", "username=notme&password=test").await;
         session
             .req_header_mut()
-            .insert_header("Content-Type", "application/x-www-form-urlencoded")?;
+            .insert_header("Content-Type", "application/x-www-form-urlencoded")
+            .unwrap();
         session.req_header_mut().set_method(Method::POST);
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(session.remote_user(), None);
-        check_login_page_response(&session, true, false);
-        Ok(())
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().remote_user(), None);
+        check_login_page_response(&mut result, true, false);
     }
 
     #[test(tokio::test)]
-    async fn wrong_user_name_json() -> Result<(), Box<Error>> {
-        let handler = make_handler(default_conf());
+    async fn wrong_user_name_json() {
+        let mut app = make_app(default_conf());
         let mut session =
             make_session_with_body("/", "username=notme&password=test&type=json").await;
         session
             .req_header_mut()
-            .insert_header("Content-Type", "application/x-www-form-urlencoded")?;
+            .insert_header("Content-Type", "application/x-www-form-urlencoded")
+            .unwrap();
         session.req_header_mut().set_method(Method::POST);
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(session.remote_user(), None);
-        check_json_response(&session, true, false);
-        Ok(())
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().remote_user(), None);
+        check_json_response(&mut result, true, false);
     }
 
     #[test(tokio::test)]
-    async fn wrong_password() -> Result<(), Box<Error>> {
-        let handler = make_handler(default_conf());
+    async fn wrong_password() {
+        let mut app = make_app(default_conf());
         let mut session = make_session_with_body("/", "username=me&password=nottest").await;
         session
             .req_header_mut()
-            .insert_header("Content-Type", "application/x-www-form-urlencoded")?;
+            .insert_header("Content-Type", "application/x-www-form-urlencoded")
+            .unwrap();
         session.req_header_mut().set_method(Method::POST);
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(session.remote_user(), None);
-        check_login_page_response(&session, true, false);
-        Ok(())
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().remote_user(), None);
+        check_login_page_response(&mut result, true, false);
     }
 
     #[test(tokio::test)]
-    async fn wrong_password_json() -> Result<(), Box<Error>> {
-        let handler = make_handler(default_conf());
+    async fn wrong_password_json() {
+        let mut app = make_app(default_conf());
         let mut session =
             make_session_with_body("/", "username=me&password=nottest&type=json").await;
         session
             .req_header_mut()
-            .insert_header("Content-Type", "application/x-www-form-urlencoded")?;
+            .insert_header("Content-Type", "application/x-www-form-urlencoded")
+            .unwrap();
         session.req_header_mut().set_method(Method::POST);
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(session.remote_user(), None);
-        check_json_response(&session, true, false);
-        Ok(())
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().remote_user(), None);
+        check_json_response(&mut result, true, false);
     }
 
     #[test(tokio::test)]
-    async fn correct_credentials() -> Result<(), Box<Error>> {
-        let handler = make_handler(default_conf());
+    async fn correct_credentials() {
+        let mut app = make_app(default_conf());
         let mut session = make_session_with_body("/", "username=me&password=test").await;
         session
             .req_header_mut()
-            .insert_header("Content-Type", "application/x-www-form-urlencoded")?;
+            .insert_header("Content-Type", "application/x-www-form-urlencoded")
+            .unwrap();
         session.req_header_mut().set_method(Method::POST);
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(session.remote_user(), Some("me"));
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().remote_user(), Some("me"));
 
+        let session = result.session();
         let response = session.response_written().unwrap();
         assert_eq!(response.status, 302);
         assert_eq!(response.headers.get("Location").unwrap(), "/");
@@ -723,86 +711,80 @@ auth_page_session:
             let mut session = make_session("/").await;
             session
                 .req_header_mut()
-                .insert_header("Cookie", format!("auth_cookie={token}"))?;
+                .insert_header("Cookie", format!("auth_cookie={token}"))
+                .unwrap();
+            let mut result = app.handle_request(session).await;
             assert_eq!(
-                handler.request_filter(&mut session, &mut ()).await?,
-                RequestFilterResult::Unhandled
+                result.err().as_ref().map(|err| &err.etype),
+                Some(&ErrorType::HTTPStatus(404))
             );
-            assert_eq!(session.remote_user(), Some("me"));
+            assert_eq!(result.session().remote_user(), Some("me"));
         } else {
             panic!("auth_cookie cookie wasn't set")
         }
-
-        Ok(())
     }
 
     #[test(tokio::test)]
-    async fn correct_credentials_json() -> Result<(), Box<Error>> {
-        let handler = make_handler(default_conf());
+    async fn correct_credentials_json() {
+        let mut app = make_app(default_conf());
         let mut session = make_session_with_body("/", "username=me&password=test&type=json").await;
         session
             .req_header_mut()
-            .insert_header("Content-Type", "application/x-www-form-urlencoded")?;
+            .insert_header("Content-Type", "application/x-www-form-urlencoded")
+            .unwrap();
         session.req_header_mut().set_method(Method::POST);
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(session.remote_user(), Some("me"));
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().remote_user(), Some("me"));
 
-        check_json_response(&session, false, false);
+        check_json_response(&mut result, false, false);
 
-        assert!(session
+        assert!(result
+            .session()
             .response_written()
             .unwrap()
             .headers
             .get("Set-Cookie")
             .is_some());
-
-        Ok(())
     }
 
     #[test(tokio::test)]
-    async fn display_hash() -> Result<(), Box<Error>> {
+    async fn display_hash() {
         let mut conf = default_conf().to_owned();
         conf.push_str("\nauth_display_hash: true");
-        let handler = make_handler(&conf);
+        let mut app = make_app(&conf);
         let mut session = make_session_with_body("/", "username='<me>'&password=nottest").await;
         session
             .req_header_mut()
-            .insert_header("Content-Type", "application/x-www-form-urlencoded")?;
+            .insert_header("Content-Type", "application/x-www-form-urlencoded")
+            .unwrap();
         session.req_header_mut().set_method(Method::POST);
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(session.remote_user(), None);
-        check_login_page_response(&session, true, true);
-        Ok(())
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().remote_user(), None);
+        check_login_page_response(&mut result, true, true);
     }
 
     #[test(tokio::test)]
-    async fn display_hash_json() -> Result<(), Box<Error>> {
+    async fn display_hash_json() {
         let mut conf = default_conf().to_owned();
         conf.push_str("\nauth_display_hash: true");
-        let handler = make_handler(&conf);
+        let mut app = make_app(&conf);
         let mut session =
             make_session_with_body("/", "username='<me>'&password=nottest&type=json").await;
         session
             .req_header_mut()
-            .insert_header("Content-Type", "application/x-www-form-urlencoded")?;
+            .insert_header("Content-Type", "application/x-www-form-urlencoded")
+            .unwrap();
         session.req_header_mut().set_method(Method::POST);
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(session.remote_user(), None);
-        check_json_response(&session, true, true);
-        Ok(())
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().remote_user(), None);
+        check_json_response(&mut result, true, true);
     }
 
     #[test(tokio::test)]
-    async fn rate_limiting() -> Result<(), Box<Error>> {
+    async fn rate_limiting() {
         let mut conf = default_conf().to_owned();
         conf.push_str(
             r#"
@@ -810,59 +792,63 @@ auth_rate_limits:
     total: 4
             "#,
         );
-        let handler = make_handler(&conf);
+        let mut app = make_app(&conf);
 
         for _ in 0..4 {
             let mut session = make_session_with_body("/", "username=me&password=test").await;
             session
                 .req_header_mut()
-                .insert_header("Content-Type", "application/x-www-form-urlencoded")?;
+                .insert_header("Content-Type", "application/x-www-form-urlencoded")
+                .unwrap();
             session.req_header_mut().set_method(Method::POST);
-            let _ = handler.request_filter(&mut session, &mut ()).await?;
+            app.handle_request(session).await;
         }
 
         let mut session = make_session_with_body("/", "username=me&password=test").await;
         session
             .req_header_mut()
-            .insert_header("Content-Type", "application/x-www-form-urlencoded")?;
+            .insert_header("Content-Type", "application/x-www-form-urlencoded")
+            .unwrap();
         session.req_header_mut().set_method(Method::POST);
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().remote_user(), None);
         assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(session.remote_user(), None);
-        assert_eq!(
-            session.response_written().unwrap().status,
+            result.session().response_written().unwrap().status,
             StatusCode::TOO_MANY_REQUESTS
         );
-        Ok(())
     }
 
     #[test(tokio::test)]
-    async fn redirect_after_uri_modified() -> Result<(), Box<Error>> {
-        let handler = make_handler(default_conf());
+    async fn redirect_after_uri_modified() {
+        let mut conf = default_conf().to_owned();
+        conf.push_str(
+            r#"
+rewrite_rules:
+    from: /subdir/file
+    to: /file
+            "#,
+        );
+        let mut app = make_app(&conf);
         let mut session = make_session_with_body("/subdir/file", "username=me&password=test").await;
-        session.set_uri("/file".try_into().unwrap());
         session
             .req_header_mut()
-            .insert_header("Content-Type", "application/x-www-form-urlencoded")?;
+            .insert_header("Content-Type", "application/x-www-form-urlencoded")
+            .unwrap();
         session.req_header_mut().set_method(Method::POST);
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::ResponseSent
-        );
-        assert_eq!(session.remote_user(), Some("me"));
+        let mut result = app.handle_request(session).await;
+        assert!(result.err().is_none());
+        assert_eq!(result.session().remote_user(), Some("me"));
 
+        let session = result.session();
         let response = session.response_written().unwrap();
         assert_eq!(response.status, 302);
         assert_eq!(response.headers.get("Location").unwrap(), "/subdir/file");
         assert!(response.headers.get("Set-Cookie").is_some());
-
-        Ok(())
     }
 
     #[test(tokio::test)]
-    async fn login_page() -> Result<(), Box<Error>> {
+    async fn login_page() {
         let mut conf = default_conf().to_owned();
         conf.push_str(
             r#"
@@ -870,24 +856,23 @@ auth_page_session:
     login_page: /login.html
             "#,
         );
-        let handler = make_handler(&conf);
+        let mut app = make_app(&conf);
         let mut session = make_session("/file").await;
         session.req_header_mut().set_method(Method::POST);
+        let mut result = app.handle_request(session).await;
         assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::Unhandled
+            result.err().as_ref().map(|err| &err.etype),
+            Some(&ErrorType::HTTPStatus(404))
         );
-        assert_eq!(session.remote_user(), None);
+        assert_eq!(result.session().remote_user(), None);
 
-        assert_eq!(session.req_header().method, Method::GET);
-        assert_eq!(session.uri(), "/login.html");
-        assert_eq!(session.original_uri(), "/file");
-
-        Ok(())
+        assert_eq!(result.session().req_header().method, Method::GET);
+        assert_eq!(result.session().uri(), "/login.html");
+        assert_eq!(result.session().original_uri(), "/file");
     }
 
     #[test(tokio::test)]
-    async fn login_page_head() -> Result<(), Box<Error>> {
+    async fn login_page_head() {
         let mut conf = default_conf().to_owned();
         conf.push_str(
             r#"
@@ -895,18 +880,17 @@ auth_page_session:
     login_page: /login.html
             "#,
         );
-        let handler = make_handler(&conf);
+        let mut app = make_app(&conf);
         let mut session = make_session("/file").await;
         session.req_header_mut().set_method(Method::HEAD);
+        let mut result = app.handle_request(session).await;
         assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::Unhandled
+            result.err().as_ref().map(|err| &err.etype),
+            Some(&ErrorType::HTTPStatus(404))
         );
-        assert_eq!(session.remote_user(), None);
+        assert_eq!(result.session().remote_user(), None);
 
-        assert_eq!(session.req_header().method, Method::HEAD);
-        assert_eq!(session.uri().path(), "/login.html");
-
-        Ok(())
+        assert_eq!(result.session().req_header().method, Method::HEAD);
+        assert_eq!(result.session().uri().path(), "/login.html");
     }
 }

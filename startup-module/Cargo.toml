@@ -18,6 +18,7 @@ path = "src/lib.rs"
 
 [dependencies]
 async-trait.workspace = true
+bytes.workspace = true
 clap.workspace = true
 http.workspace = true
 pandora-module-utils.workspace = true

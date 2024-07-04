@@ -115,100 +115,162 @@ impl RequestFilter for IPAnonymizationHandler {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
     use super::*;
 
-    use pandora_module_utils::pingora::{RequestHeader, TestSession};
+    use pandora_module_utils::pingora::{create_test_session, ErrorType, RequestHeader, Session};
     use pandora_module_utils::FromYaml;
+    use startup_module::DefaultApp;
+    use std::str::FromStr;
     use test_log::test;
 
-    fn make_handler(conf: &str) -> IPAnonymizationHandler {
-        <IPAnonymizationHandler as RequestFilter>::Conf::from_yaml(conf)
-            .unwrap()
-            .try_into()
-            .unwrap()
+    #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
+    struct IPAddressConf {
+        ip_address: String,
     }
 
-    async fn make_session() -> TestSession {
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct IPAddressHandler {
+        ip_address: String,
+    }
+
+    #[async_trait]
+    impl RequestFilter for IPAddressHandler {
+        type Conf = IPAddressConf;
+        type CTX = ();
+        fn new_ctx() -> Self::CTX {}
+
+        async fn request_filter(
+            &self,
+            session: &mut impl SessionWrapper,
+            _ctx: &mut Self::CTX,
+        ) -> Result<RequestFilterResult, Box<Error>> {
+            session.set_client_addr(SocketAddr::Inet(
+                (IpAddr::from_str(&self.ip_address).unwrap(), 8000).into(),
+            ));
+            Ok(RequestFilterResult::Unhandled)
+        }
+    }
+
+    impl TryFrom<IPAddressConf> for IPAddressHandler {
+        type Error = Box<Error>;
+
+        fn try_from(conf: IPAddressConf) -> Result<Self, Self::Error> {
+            Ok(Self {
+                ip_address: conf.ip_address,
+            })
+        }
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq, RequestFilter)]
+    struct Handler {
+        address: IPAddressHandler,
+        anonymization: IPAnonymizationHandler,
+    }
+
+    fn make_app(conf: &str) -> DefaultApp<Handler> {
+        DefaultApp::new(
+            <Handler as RequestFilter>::Conf::from_yaml(conf)
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        )
+    }
+
+    async fn make_session() -> Session {
         let header = RequestHeader::build("GET", b"/", None).unwrap();
-        TestSession::from(header).await
+        create_test_session(header).await
     }
 
     #[test(tokio::test)]
-    async fn unconfigured() -> Result<(), Box<Error>> {
-        let handler = make_handler("anonymization_enabled: false");
-
-        let mut session = make_session().await;
-        session.set_client_addr(SocketAddr::Inet(([1, 2, 3, 4], 8000).into()));
-        assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::Unhandled
-        );
-        assert_eq!(
-            session.client_addr(),
-            Some(&SocketAddr::Inet(([1, 2, 3, 4], 8000).into()))
+    async fn unconfigured() {
+        let mut app = make_app(
+            r#"
+                ip_address: 1.2.3.4
+                anonymization_enabled: false
+            "#,
         );
 
-        Ok(())
+        let session = make_session().await;
+        let mut result = app.handle_request(session).await;
+        assert_eq!(
+            result.err().as_ref().map(|err| &err.etype),
+            Some(&ErrorType::HTTPStatus(404))
+        );
+        assert_eq!(
+            result.session().client_addr(),
+            Some(&SocketAddr::Inet(
+                (IpAddr::from_str("1.2.3.4").unwrap(), 8000).into()
+            ))
+        );
     }
 
     #[test(tokio::test)]
-    async fn enabled() -> Result<(), Box<Error>> {
-        let handler = make_handler("anonymization_enabled: true");
+    async fn ipv4() {
+        let mut app = make_app(
+            r#"
+                ip_address: 1.2.3.4
+                anonymization_enabled: true
+            "#,
+        );
 
         // IPv4
-        let mut session = make_session().await;
-        session.set_client_addr(SocketAddr::Inet(
-            (IpAddr::from_str("1.2.3.4").unwrap(), 8000).into(),
-        ));
+        let session = make_session().await;
+        let mut result = app.handle_request(session).await;
         assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::Unhandled
+            result.err().as_ref().map(|err| &err.etype),
+            Some(&ErrorType::HTTPStatus(404))
         );
         assert_eq!(
-            session.client_addr(),
+            result.session().client_addr(),
             Some(&SocketAddr::Inet(
                 (IpAddr::from_str("1.2.3.0").unwrap(), 8000).into()
             ))
         );
+    }
 
-        // IPv4 mapped to IPv6
-        let mut session = make_session().await;
-        session.set_client_addr(SocketAddr::Inet(
-            (IpAddr::from_str("::ffff:1.2.3.4").unwrap(), 8000).into(),
-        ));
+    #[test(tokio::test)]
+    async fn ipv4_mapped_ipv6() {
+        let mut app = make_app(
+            r#"
+                ip_address: ::ffff:1.2.3.4
+                anonymization_enabled: true
+            "#,
+        );
+
+        let session = make_session().await;
+        let mut result = app.handle_request(session).await;
         assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::Unhandled
+            result.err().as_ref().map(|err| &err.etype),
+            Some(&ErrorType::HTTPStatus(404))
         );
         assert_eq!(
-            session.client_addr(),
+            result.session().client_addr(),
             Some(&SocketAddr::Inet(
                 (IpAddr::from_str("::ffff:1.2.3.0").unwrap(), 8000).into()
             ))
         );
+    }
 
-        // IPv6
-        let mut session = make_session().await;
-        session.set_client_addr(SocketAddr::Inet(
-            (
-                IpAddr::from_str("1234:5678:90ab:cdef:1234:5678:90ab:cdef").unwrap(),
-                8000,
-            )
-                .into(),
-        ));
+    #[test(tokio::test)]
+    async fn ipv6() {
+        let mut app = make_app(
+            r#"
+                ip_address: 1234:5678:90ab:cdef:1234:5678:90ab:cdef
+                anonymization_enabled: true
+            "#,
+        );
+
+        let session = make_session().await;
+        let mut result = app.handle_request(session).await;
         assert_eq!(
-            handler.request_filter(&mut session, &mut ()).await?,
-            RequestFilterResult::Unhandled
+            result.err().as_ref().map(|err| &err.etype),
+            Some(&ErrorType::HTTPStatus(404))
         );
         assert_eq!(
-            session.client_addr(),
+            result.session().client_addr(),
             Some(&SocketAddr::Inet(
                 (IpAddr::from_str("1234:5678::").unwrap(), 8000).into()
             ))
         );
-
-        Ok(())
     }
 }

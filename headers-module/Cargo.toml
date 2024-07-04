@@ -24,8 +24,6 @@ pandora-module-utils.workspace = true
 serde.workspace = true
 
 [dev-dependencies]
-clap.workspace = true
-compression-module.workspace = true
 env_logger.workspace = true
 startup-module.workspace = true
 test-log.workspace = true

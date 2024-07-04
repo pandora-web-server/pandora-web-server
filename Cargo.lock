@@ -214,12 +214,12 @@ dependencies = [
  "once_cell",
  "pandora-module-utils",
  "pingora-limits",
+ "rewrite-module",
  "serde",
  "serde_json",
  "serde_urlencoded",
  "sha2",
  "startup-module",
- "static-files-module",
  "test-log",
  "tokio",
 ]
@@ -479,8 +479,6 @@ dependencies = [
  "once_cell",
  "pandora-module-utils",
  "serde",
- "startup-module",
- "static-files-module",
  "tokio",
 ]
 
@@ -901,8 +899,6 @@ name = "headers-module"
 version = "0.2.0"
 dependencies = [
  "async-trait",
- "clap 4.5.7",
- "compression-module",
  "env_logger",
  "http 1.1.0",
  "log",
@@ -1131,7 +1127,6 @@ dependencies = [
  "log",
  "pandora-module-utils",
  "startup-module",
- "static-files-module",
  "test-log",
  "tokio",
 ]
@@ -1987,7 +1982,6 @@ name = "rewrite-module"
 version = "0.2.0"
 dependencies = [
  "async-trait",
- "clap 4.5.7",
  "env_logger",
  "http 1.1.0",
  "log",
@@ -1995,7 +1989,6 @@ dependencies = [
  "regex",
  "serde",
  "startup-module",
- "static-files-module",
  "test-log",
  "tokio",
 ]
@@ -2361,6 +2354,7 @@ name = "startup-module"
 version = "0.2.0"
 dependencies = [
  "async-trait",
+ "bytes",
  "clap 4.5.7",
  "http 1.1.0",
  "pandora-module-utils",
@@ -2375,7 +2369,6 @@ dependencies = [
  "async-trait",
  "bytes",
  "clap 4.5.7",
- "compression-module",
  "const_format",
  "env_logger",
  "http 1.1.0",
@@ -2384,6 +2377,7 @@ dependencies = [
  "mime_guess",
  "pandora-module-utils",
  "percent-encoding",
+ "rewrite-module",
  "serde",
  "startup-module",
  "test-log",
@@ -2880,15 +2874,14 @@ name = "virtual-hosts-module"
 version = "0.2.0"
 dependencies = [
  "async-trait",
- "clap 4.5.7",
  "env_logger",
  "http 1.1.0",
  "log",
  "pandora-module-utils",
  "startup-module",
- "static-files-module",
  "test-log",
  "tokio",
+ "upstream-module",
 ]
 
 [[package]]

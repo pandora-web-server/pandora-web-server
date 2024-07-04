@@ -188,7 +188,9 @@ mod tests {
     use super::*;
 
     use http::HeaderValue;
-    use pandora_module_utils::pingora::{Error, ProxyHttp, RequestHeader, TestSession};
+    use pandora_module_utils::pingora::{
+        create_test_session, RequestHeader, ResponseHeader, Session,
+    };
     use pandora_module_utils::FromYaml;
     use startup_module::DefaultApp;
     use test_log::test;
@@ -207,60 +209,38 @@ mod tests {
         DefaultApp::new(conf.try_into().unwrap())
     }
 
-    async fn make_session() -> TestSession {
+    async fn make_session() -> Session {
         let header = RequestHeader::build("GET", b"/", None).unwrap();
-        TestSession::from(header).await
+        create_test_session(header).await
     }
 
     #[test(tokio::test)]
-    async fn unconfigured() -> Result<(), Box<Error>> {
-        let app = make_app(false);
-        let mut session = make_session().await;
-        let mut ctx = app.new_ctx();
-        assert!(!app.request_filter(&mut session, &mut ctx).await?);
-        assert!(matches!(
-            app.upstream_peer(&mut session, &mut ctx)
-                .await
-                .unwrap_err()
-                .etype,
-            ErrorType::HTTPStatus(404)
-        ));
-
-        Ok(())
-    }
-
-    #[test(tokio::test)]
-    async fn handled() -> Result<(), Box<Error>> {
-        let app = make_app(true);
-        let mut session = make_session().await;
-        let mut ctx = app.new_ctx();
-        assert!(!app.request_filter(&mut session, &mut ctx).await?);
-
-        let peer = app.upstream_peer(&mut session, &mut ctx).await.unwrap();
-        assert_eq!(peer.scheme.to_string(), "HTTPS".to_owned());
-        assert_eq!(peer.sni, "example.com");
+    async fn unconfigured() {
+        let mut app = make_app(false);
+        let session = make_session().await;
+        let result = app.handle_request(session).await;
         assert_eq!(
-            session.req_header().headers.get("Host"),
-            Some(&HeaderValue::from_str("example.com").unwrap())
+            result.err().as_ref().map(|err| &err.etype),
+            Some(&ErrorType::HTTPStatus(404))
         );
-
-        Ok(())
     }
 
     #[test(tokio::test)]
-    async fn not_called() -> Result<(), Box<Error>> {
-        let app = make_app(true);
-        let mut session = make_session().await;
-        let mut ctx = app.new_ctx();
+    async fn handled() {
+        let mut app = make_app(true);
+        let session = make_session().await;
+        let result = app
+            .handle_request_with_upstream(session, |session, peer| {
+                assert_eq!(peer.scheme.to_string(), "HTTPS".to_owned());
+                assert_eq!(peer.sni, "example.com");
+                assert_eq!(
+                    session.req_header().headers.get("Host"),
+                    Some(&HeaderValue::from_str("example.com").unwrap())
+                );
 
-        assert!(matches!(
-            app.upstream_peer(&mut session, &mut ctx)
-                .await
-                .unwrap_err()
-                .etype,
-            ErrorType::HTTPStatus(404)
-        ));
-
-        Ok(())
+                ResponseHeader::build(200, None)
+            })
+            .await;
+        assert!(result.err().is_none());
     }
 }

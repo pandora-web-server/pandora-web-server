@@ -30,9 +30,9 @@ percent-encoding.workspace = true
 serde.workspace = true
 
 [dev-dependencies]
-compression-module.workspace = true
 const_format = "0.2.32"
 env_logger.workspace = true
+rewrite-module.workspace = true
 startup-module.workspace = true
 test-log.workspace = true
 tokio.workspace = true
