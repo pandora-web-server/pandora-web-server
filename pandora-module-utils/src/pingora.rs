@@ -125,8 +125,8 @@ pub trait SessionWrapper: Send + Deref<Target = Session> + DerefMut {
     }
 
     /// See [`Session::write_response_header`](pingora::protocols::http::server::Session::write_response_header)
-    async fn write_response_header(&mut self, resp: Box<ResponseHeader>) -> Result<(), Box<Error>> {
-        self.deref_mut().write_response_header(resp).await
+    async fn write_response_header(&mut self, resp: Box<ResponseHeader>, end_of_stream: bool) -> Result<(), Box<Error>> {
+        self.deref_mut().write_response_header(resp, end_of_stream).await
     }
 
     /// See [`Session::write_response_header_ref`](pingora::protocols::http::server::Session::write_response_header_ref)
@@ -140,8 +140,8 @@ pub trait SessionWrapper: Send + Deref<Target = Session> + DerefMut {
     }
 
     /// See [`Session::write_response_body`](pingora::protocols::http::server::Session::write_response_body)
-    async fn write_response_body(&mut self, data: Bytes) -> Result<(), Box<Error>> {
-        self.deref_mut().write_response_body(data).await
+    async fn write_response_body(&mut self, data: Option<Bytes>, end_of_stream: bool) -> Result<(), Box<Error>> {
+        self.deref_mut().write_response_body(data, end_of_stream).await
     }
 }
 
@@ -205,21 +205,24 @@ impl SessionWrapper for TestSession {
         &mut self.extensions
     }
 
-    async fn write_response_header(&mut self, resp: Box<ResponseHeader>) -> Result<(), Box<Error>> {
+    async fn write_response_header(&mut self, resp: Box<ResponseHeader>, _end_of_stream: bool) -> Result<(), Box<Error>> {
         self.response_header = Some(*resp);
         Ok(())
     }
 
     async fn write_response_header_ref(&mut self, resp: &ResponseHeader) -> Result<(), Box<Error>> {
-        self.write_response_header(Box::new(resp.clone())).await
+        // TODO: What should we report for end of stream?
+        self.write_response_header(Box::new(resp.clone()), false).await
     }
 
     fn response_written(&self) -> Option<&ResponseHeader> {
         self.response_header.as_ref()
     }
 
-    async fn write_response_body(&mut self, data: Bytes) -> Result<(), Box<Error>> {
-        self.response_body.extend(std::iter::once(data));
+    async fn write_response_body(&mut self, data: Option<Bytes>, _end_of_stream: bool) -> Result<(), Box<Error>> {
+        if let Some(data) = data {
+            self.response_body.extend(std::iter::once(data));
+        }
         Ok(())
     }
 }

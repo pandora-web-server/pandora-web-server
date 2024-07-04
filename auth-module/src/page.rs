@@ -116,10 +116,12 @@ async fn login_response(
     header.append_header(header::CONTENT_LENGTH, text.len().to_string())?;
     header.append_header(header::CONTENT_TYPE, "text/html; charset=utf-8")?;
     header.append_header(header::CACHE_CONTROL, "no-store")?;
-    session.write_response_header(Box::new(header)).await?;
+    // TODO: End of stream
+    session.write_response_header(Box::new(header), false).await?;
 
     if session.req_header().method != Method::HEAD {
-        session.write_response_body(text.into()).await?;
+        // TODO: End of stream
+        session.write_response_body(Some(text.into()), false).await?;
     }
 
     Ok(RequestFilterResult::ResponseSent)
@@ -155,10 +157,10 @@ async fn login_response_json(
     if let Some(cookie) = cookie {
         header.append_header(header::SET_COOKIE, cookie)?;
     }
-    session.write_response_header(Box::new(header)).await?;
+    session.write_response_header(Box::new(header), false).await?;
 
     if session.req_header().method != Method::HEAD {
-        session.write_response_body(text.into()).await?;
+        session.write_response_body(Some(text.into()), false).await?;
     }
 
     Ok(RequestFilterResult::ResponseSent)

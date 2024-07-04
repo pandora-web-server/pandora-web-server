@@ -18,6 +18,7 @@ use async_trait::async_trait;
 use clap::Parser;
 use pandora_module_utils::pingora::{Error, SessionWrapper};
 use pandora_module_utils::{DeserializeMap, RequestFilter, RequestFilterResult};
+use pingora_core::modules::http::compression::ResponseCompression;
 
 /// Command line options of the compression module
 #[derive(Debug, Default, Parser)]
@@ -81,7 +82,9 @@ impl RequestFilter for CompressionHandler {
         _ctx: &mut Self::CTX,
     ) -> Result<RequestFilterResult, Box<Error>> {
         if let Some(level) = self.conf.compression_level {
-            session.downstream_compression.adjust_level(level);
+            if let Some(rc) = session.downstream_modules_ctx.get_mut::<ResponseCompression>() {
+                rc.adjust_level(level);
+            }
         }
 
         if self.conf.decompress_upstream {

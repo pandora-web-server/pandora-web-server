@@ -69,13 +69,14 @@ pub(crate) async fn file_response(
 
         buf.truncate(len);
         if let Some(bytes) = compression.transform_body(session, Some(buf.into())) {
-            session.write_response_body(bytes).await?;
+            // TODO: End of stream?
+            session.write_response_body(Some(bytes), false).await?;
         }
         remaining -= len;
     }
 
     if let Some(bytes) = compression.transform_body(session, None) {
-        session.write_response_body(bytes).await?;
+        session.write_response_body(Some(bytes), false).await?;
     }
 
     Ok(())

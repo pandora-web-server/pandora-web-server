@@ -54,6 +54,7 @@ pandora-module-utils = { path = "pandora-module-utils", version = "0.2.0" }
 pandora-module-utils-macros = { path = "pandora-module-utils-macros", version = "0.2.0" }
 percent-encoding = "2.1"
 pingora = "0.2.0"
+pingora-core = "0.2.0"
 pingora-limits = "0.2.0"
 rewrite-module = { path = "rewrite-module", version = "0.2.0" }
 serde = { version = "1.0", features = ["derive"] }
@@ -118,3 +119,38 @@ lto = true
 codegen-units = 1
 panic = "abort"
 strip = true
+
+[patch.crates-io.pingora]
+git = "https://github.com/memorysafety/pingora.git"
+rev = "12ca93c6b187a68ff9a526b4c4e669f602244366"
+# path = "../pingora/pingora"
+
+[patch.crates-io.pingora-limits]
+git = "https://github.com/memorysafety/pingora.git"
+rev = "12ca93c6b187a68ff9a526b4c4e669f602244366"
+# path = "../pingora/pingora-limits"
+
+[patch.crates-io.pingora-load-balancing]
+git = "https://github.com/memorysafety/pingora.git"
+rev = "12ca93c6b187a68ff9a526b4c4e669f602244366"
+# path = "../pingora/pingora-load-balancing"
+
+[patch.crates-io.pingora-core]
+git = "https://github.com/memorysafety/pingora.git"
+rev = "12ca93c6b187a68ff9a526b4c4e669f602244366"
+# path = "../pingora/pingora-core"
+
+[patch.crates-io.pingora-cache]
+git = "https://github.com/memorysafety/pingora.git"
+rev = "12ca93c6b187a68ff9a526b4c4e669f602244366"
+# path = "../pingora/pingora-cache"
+
+[patch.crates-io.pingora-http]
+git = "https://github.com/memorysafety/pingora.git"
+rev = "12ca93c6b187a68ff9a526b4c4e669f602244366"
+# path = "../pingora/pingora-http"
+
+[patch.crates-io.pingora-proxy]
+git = "https://github.com/memorysafety/pingora.git"
+rev = "12ca93c6b187a68ff9a526b4c4e669f602244366"
+# path = "../pingora/pingora-proxy"

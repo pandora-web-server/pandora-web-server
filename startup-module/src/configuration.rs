@@ -78,7 +78,11 @@ pub struct ListenAddr {
 impl ListenAddr {
     pub(crate) fn to_socket_options(&self) -> Option<TcpSocketOptions> {
         self.ipv6_only
-            .map(|ipv6_only| TcpSocketOptions { ipv6_only })
+            .map(|ipv6_only| {
+                let mut tso = TcpSocketOptions::default();
+                tso.ipv6_only = Some(ipv6_only);
+                tso
+            })
     }
 }
 

@@ -163,14 +163,16 @@ where
     async fn write_response_header(
         &mut self,
         mut resp: Box<ResponseHeader>,
+        end_of_stream: bool,
     ) -> Result<(), Box<Error>> {
         self.handler.response_filter(self, &mut resp, None);
 
-        self.deref_mut().write_response_header(resp).await
+        self.deref_mut().write_response_header(resp, end_of_stream).await
     }
 
     async fn write_response_header_ref(&mut self, resp: &ResponseHeader) -> Result<(), Box<Error>> {
-        self.write_response_header(Box::new(resp.clone())).await
+        // TODO: End of stream
+        self.write_response_header(Box::new(resp.clone()), false).await
     }
 }
 

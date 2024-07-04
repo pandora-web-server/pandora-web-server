@@ -20,6 +20,7 @@ use pandora_module_utils::pingora::{Error, HttpTask, ResponseHeader, SessionWrap
 use std::path::{Path, PathBuf};
 
 use crate::compression_algorithm::{find_matches, CompressionAlgorithm};
+use pingora_core::modules::http::compression::ResponseCompression;
 
 /// Encapsulates the compression state for the current session.
 pub(crate) struct Compression<'a> {
@@ -40,7 +41,10 @@ impl<'a> Compression<'a> {
             precompressed,
             precompressed_active: None,
             // Remember this now, later on request header check might flip this flag
-            dynamic: session.downstream_compression.is_enabled(),
+            dynamic: session
+                .downstream_modules_ctx
+                .get::<ResponseCompression>()
+                .is_some_and(|rc| rc.is_enabled()),
             dynamic_active: false,
         }
     }
@@ -96,17 +100,25 @@ impl<'a> Compression<'a> {
             self.dynamic_active = true;
 
             let raw_session = session.deref_mut();
-            raw_session
-                .downstream_compression
-                .request_filter(raw_session.downstream_session.req_header());
+            let req_hdr = raw_session.downstream_session.req_header();
+            if let Some(rc) = raw_session
+                .downstream_modules_ctx
+                .get_mut::<ResponseCompression>()
+            {
+                rc.request_filter(req_hdr);
+            }
 
             // Always pass false for end, even if no body follows. This will result in compression headers
             // on HEAD responses but that should be the right thing to do anyway.
             let mut task = HttpTask::Header(header, false);
 
-            raw_session
-                .downstream_compression
-                .response_filter(&mut task);
+            if let Some(rc) = raw_session
+                .downstream_modules_ctx
+                .get_mut::<ResponseCompression>()
+            {
+                rc.response_filter(&mut task);
+            }
+
             if let HttpTask::Header(mut header, false) = task {
                 if header.headers.get(header::CONTENT_ENCODING).is_some() {
                     // Response is compressed dynamically, no support for ranged requests.
@@ -155,7 +167,12 @@ impl<'a> Compression<'a> {
             HttpTask::Done
         };
 
-        session.downstream_compression.response_filter(&mut task);
+        if let Some(rc) = session
+            .downstream_modules_ctx
+            .get_mut::<ResponseCompression>()
+        {
+            rc.response_filter(&mut task);
+        }
         if let HttpTask::Body(Some(bytes), _) = task {
             if bytes.is_empty() {
                 None

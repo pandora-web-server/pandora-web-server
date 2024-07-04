@@ -61,10 +61,12 @@ async fn response(
     if let Some(cookie) = cookie {
         header.append_header(header::SET_COOKIE, cookie)?;
     }
-    session.write_response_header(Box::new(header)).await?;
+    // TODO: What to do with end of stream?
+    session.write_response_header(Box::new(header), false).await?;
 
     if session.req_header().method != Method::HEAD {
-        session.write_response_body(text.into()).await?;
+        // TODO: End of stream?
+        session.write_response_body(Some(text.into()), false).await?;
     }
 
     Ok(())
