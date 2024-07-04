@@ -77,7 +77,7 @@ Note that the `redirect_to` setting is still required as fallback for the scenar
 | Configuration setting | Command line     | Type | Default value | Description |
 |-----------------------|------------------|------|---------------|-------------|
 |                       | `-c`, `--conf`   | list of file paths or globs |  | Configuration files to process |
-| `listen`              | `-l`, `--listen` | list of [IP address/port configurations](#ip-addressport-configuration) | [127.0.0.1:8080, "[::1]:8080"] | The IP addresses and ports the server should bind on |
+| `listen`              | `-l`, `--listen` | list of [IP address/port configurations](#ip-addressport-configuration) | `[127.0.0.1:8080, "[::1]:8080"]` | The IP addresses and ports the server should bind on |
 | `tls`                 |                  | [TLS configuration](#tls-configuration) | | TLS-related configuration settings |
 | `daemon`              | `-d`, `--daemon` | boolean | `false` | If `true`, the server will start in background |
 |                       | `-t`, `--test`   | boolean | `false` | If `true`, the server will exit after processing the configuration. |
