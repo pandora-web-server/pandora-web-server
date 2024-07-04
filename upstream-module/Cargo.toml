@@ -2,7 +2,7 @@
 name = "upstream-module"
 version = "0.2.0"
 authors = ["Wladimir Palant"]
-repository = "https://github.com/palant/pandora-web-server"
+repository = "https://github.com/pandora-web-server/pandora-web-server"
 categories = ["network-programming", "web-programming::http-server"]
 keywords = ["proxy", "reverse-proxy", "web-server", "http", "pandora"]
 license = "Apache-2.0"
