@@ -67,11 +67,11 @@ impl ProxyHttp for RedirectorApp {
                     .unwrap_or_default()
             ),
         )?;
-        session.write_response_header(Box::new(header), false).await?;
+        let send_body = session.req_header().method != Method::HEAD;
+        session.write_response_header(Box::new(header), !send_body).await?;
 
-        if session.req_header().method != Method::HEAD {
-            // TODO: End of stream
-            session.write_response_body(Some(text.into()), false).await?;
+        if send_body {
+            session.write_response_body(Some(text.into()), true).await?;
         }
 
         Ok(true)

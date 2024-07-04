@@ -118,7 +118,7 @@ impl RequestFilter for WebAppHandler {
         header.insert_header("Content-Type", "text/plain")?;
         header.insert_header("Content-Length", value.len().to_string())?;
         session.write_response_header(Box::new(header), false).await?;
-        session.write_response_body(Some(value.into()), false).await?;
+        session.write_response_body(Some(value.into()), true).await?;
         Ok(RequestFilterResult::ResponseSent)
     }
 }

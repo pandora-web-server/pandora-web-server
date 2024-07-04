@@ -83,6 +83,7 @@ impl RequestFilter for CompressionHandler {
     ) -> Result<RequestFilterResult, Box<Error>> {
         if let Some(level) = self.conf.compression_level {
             if let Some(rc) = session.downstream_modules_ctx.get_mut::<ResponseCompression>() {
+                // TODO: Warn if there is no response compression module?
                 rc.adjust_level(level);
             }
         }
