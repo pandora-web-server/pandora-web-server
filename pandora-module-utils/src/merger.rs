@@ -106,7 +106,7 @@ pub trait PathMatch {
 }
 
 /// A basic path matcher, applying to a single host/path combination
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
 #[serde(from = "String")]
 pub struct HostPathMatcher {
     /// Host name that the matcher applies to
@@ -222,7 +222,7 @@ impl PathMatch for HostPathMatcher {
 }
 
 /// A basic path matcher, applying to a single path on the empty host
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
 #[serde(from = "String")]
 pub struct PathMatcher {
     /// Path that the matcher applies to
@@ -312,7 +312,7 @@ impl PathMatch for PathMatcher {
 
 /// This is almost identical to `HostPathMatcher` but won’t allow prefix rules to match on exact
 /// path.
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct StrictHostPathMatcher {
     host: Vec<u8>,
     path: Path,

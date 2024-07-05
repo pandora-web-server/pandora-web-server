@@ -12,43 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use pandora_module_utils::serde::Deserialize;
+use pandora_module_utils::merger::PathMatcher;
 use pandora_module_utils::{DeserializeMap, OneOrMany};
 use std::collections::HashMap;
-
-/// Determines which paths a configuration should apply to
-#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, Deserialize)]
-#[serde(crate = "pandora_module_utils::serde", from = "String")]
-pub struct PathMatchRule {
-    /// Path to match
-    pub path: String,
-
-    /// If `true`, only exact path matches will be accepted. Otherwise exact and prefix matches
-    /// will be accepted.
-    pub exact: bool,
-}
-
-impl From<&str> for PathMatchRule {
-    fn from(path: &str) -> Self {
-        if let Some(path) = path.strip_suffix("/*") {
-            Self {
-                path: path.to_owned(),
-                exact: false,
-            }
-        } else {
-            Self {
-                path: path.to_owned(),
-                exact: true,
-            }
-        }
-    }
-}
-
-impl From<String> for PathMatchRule {
-    fn from(value: String) -> Self {
-        value.as_str().into()
-    }
-}
 
 /// Configuration of a path within a virtual host
 #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
@@ -70,7 +36,7 @@ pub struct VirtualHostConf<C: Default> {
     /// configuration applies
     pub default: bool,
     /// Maps virtual host's paths to their special configurations
-    pub subpaths: HashMap<PathMatchRule, SubPathConf<C>>,
+    pub subpaths: HashMap<PathMatcher, SubPathConf<C>>,
     /// Generic handler settings
     ///
     /// These settings are flattened and appear at the same level as `default` in the configuration

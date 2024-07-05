@@ -229,19 +229,19 @@ where
             for (rule, conf) in subpaths {
                 let handler = conf.config.try_into()?;
                 let strip_path = if conf.strip_prefix {
-                    Some(Path::new(&rule.path))
+                    Some(&rule.path)
                 } else {
                     None
                 };
                 for host in &names {
                     handlers.push(
                         host,
-                        &rule.path,
-                        (strip_path.clone(), handler.clone()),
+                        &*rule.path,
+                        (strip_path.cloned(), handler.clone()),
                         if rule.exact {
                             None
                         } else {
-                            Some((strip_path.clone(), handler.clone()))
+                            Some((strip_path.cloned(), handler.clone()))
                         },
                     );
                 }
