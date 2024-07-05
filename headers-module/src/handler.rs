@@ -60,7 +60,6 @@ impl TryFrom<HeadersConf> for HeadersHandler {
 
         let mut merged = cache_control;
         merged.extend([content_security_policy, custom]);
-        trace!("Merged headers configuration into: {merged:#?}");
 
         let router = merged.merge(|values| {
             let mut result = Vec::<(HeaderName, HeaderValue)>::new();
@@ -80,6 +79,7 @@ impl TryFrom<HeadersConf> for HeadersHandler {
             }
             result
         });
+        trace!("Merged headers configuration into: {router:#?}");
 
         Ok(Self { router })
     }
