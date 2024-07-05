@@ -26,7 +26,7 @@ If multiple rules potentially apply to a particular request, the rule with the l
 The redirect target defined in the `to` setting can contain variables that depending on the request will be replaced by different values. The supported variables are:
 
 * `${tail}`: The part of the original path matched by `/*` in `from`
-* `${query}`: The original query string
+* `${query}`: The original query string including `?` if a query string is present
 * `${http_<header>}`: The value of an HTTP request header, e.g. `${http_host}` will be replaced by the value of the `Host` header
 
 ## Configuration settings

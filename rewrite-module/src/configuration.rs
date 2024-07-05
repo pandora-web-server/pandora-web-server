@@ -113,16 +113,16 @@ impl VariableInterpolation {
     const VARIABLE_PREFIX: &'static str = "${";
     const VARIABLE_SUFFIX: &'static str = "}";
 
-    pub(crate) fn interpolate<'a, L>(&self, lookup: L) -> Vec<u8>
+    pub(crate) fn interpolate<L>(&self, lookup: L) -> Vec<u8>
     where
-        L: Fn(&Variable) -> &'a [u8],
+        L: Fn(&Variable, &mut Vec<u8>),
     {
         let mut result = Vec::new();
         for part in &self.parts {
             match part {
                 VariableInterpolationPart::Literal(value) => result.extend_from_slice(value),
                 VariableInterpolationPart::Variable(variable) => {
-                    result.extend_from_slice(lookup(variable));
+                    lookup(variable, &mut result);
                 }
             }
         }
@@ -270,20 +270,21 @@ mod tests {
     #[test]
     fn variable_interpolation() {
         assert_eq!(
-            VariableInterpolation::from("abcd").interpolate(|_| panic!("Unexpected lookup call")),
+            VariableInterpolation::from("abcd")
+                .interpolate(|_, _| panic!("Unexpected lookup call")),
             b"abcd".to_vec()
         );
 
         assert_eq!(
             VariableInterpolation::from("ab${xyz}cd")
-                .interpolate(|_| panic!("Unexpected lookup call")),
+                .interpolate(|_, _| panic!("Unexpected lookup call")),
             b"ab${xyz}cd".to_vec()
         );
 
         assert_eq!(
-            VariableInterpolation::from("ab${query}cd").interpolate(|variable| {
+            VariableInterpolation::from("ab${query}cd").interpolate(|variable, result| {
                 if variable == &Variable::Query {
-                    b"resolved"
+                    result.extend_from_slice(b"resolved")
                 } else {
                     panic!("Unexpected variable in lookup")
                 }
@@ -293,8 +294,8 @@ mod tests {
 
         assert_eq!(
             VariableInterpolation::from("a${query}${tail}bc${http_abc}d${unknown}e").interpolate(
-                |variable| {
-                    if variable == &Variable::Query {
+                |variable, result| {
+                    result.extend_from_slice(if variable == &Variable::Query {
                         b"query resolved"
                     } else if variable == &Variable::Tail {
                         b"tail resolved"
@@ -302,16 +303,16 @@ mod tests {
                         b"header resolved"
                     } else {
                         panic!("Unexpected variable in lookup")
-                    }
+                    })
                 }
             ),
             b"aquery resolvedtail resolvedbcheader resolvedd${unknown}e".to_vec()
         );
 
         assert_eq!(
-            VariableInterpolation::from("${a${query}").interpolate(|variable| {
+            VariableInterpolation::from("${a${query}").interpolate(|variable, result| {
                 if variable == &Variable::Query {
-                    b"resolved"
+                    result.extend_from_slice(b"resolved")
                 } else {
                     panic!("Unexpected variable in lookup")
                 }

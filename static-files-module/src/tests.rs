@@ -219,7 +219,7 @@ async fn no_trailing_slash() {
 
     // Scenario where prefix has been stripped from URI
     let mut app = make_app(extended_conf(
-        "rewrite_rules: {from: /static/*, to: '${tail}?${query}'}",
+        "rewrite_rules: {from: /static/*, to: '${tail}${query}'}",
     ));
 
     let session = make_session("GET", "/static/subdir?xyz").await;

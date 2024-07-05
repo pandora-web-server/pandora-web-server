@@ -15,7 +15,7 @@
 //! Handler for the `request_filter` phase.
 
 use async_trait::async_trait;
-use http::{HeaderValue, StatusCode};
+use http::StatusCode;
 use log::{debug, error, trace};
 use pandora_module_utils::merger::Merger;
 use pandora_module_utils::pingora::{Error, SessionWrapper};
@@ -111,23 +111,30 @@ impl RequestFilter for RewriteHandler {
                 }
             }
 
-            let tail = rule_path
-                .remove_prefix_from(path)
-                .unwrap_or(path.as_bytes().to_owned());
             trace!(
-                "Matched rule for path `{}`, tail is: {tail:?}",
+                "Matched rule for path `{}`",
                 String::from_utf8_lossy(rule_path)
             );
 
-            let target = rule.to.interpolate(|variable| match variable {
-                Variable::Tail => &tail,
-                Variable::Query => session.uri().query().unwrap_or("").as_bytes(),
-                Variable::Header(name) => session
-                    .req_header()
-                    .headers
-                    .get(name)
-                    .map(HeaderValue::as_bytes)
-                    .unwrap_or(b""),
+            let target = rule.to.interpolate(|variable, result| match variable {
+                Variable::Tail => {
+                    if let Some(mut tail) = rule_path.remove_prefix_from(path) {
+                        result.append(&mut tail);
+                    } else {
+                        result.extend_from_slice(path.as_bytes());
+                    }
+                }
+                Variable::Query => {
+                    if let Some(query) = session.uri().query() {
+                        result.push(b'?');
+                        result.extend_from_slice(query.as_bytes());
+                    }
+                }
+                Variable::Header(name) => {
+                    if let Some(value) = session.req_header().headers.get(name) {
+                        result.extend_from_slice(value.as_bytes())
+                    }
+                }
             });
 
             match rule.r#type {
@@ -252,7 +259,7 @@ mod tests {
                 -
                     from: /path/*
                     query_regex: "!^file="
-                    to: /different?${query}
+                    to: /different${query}
                 -
                     from: /*
                     from_regex: ^/file\.txt$
@@ -316,7 +323,7 @@ mod tests {
             r#"
                 rewrite_rules:
                     from: /path/*
-                    to: /another${tail}?${query}&host=${http_host}&test=${http_test_header}
+                    to: /another${tail}${tail}${query}&host=${http_host}&test=${http_test_header}
             "#,
         );
 
@@ -326,7 +333,10 @@ mod tests {
             result.err().as_ref().map(|err| &err.etype),
             Some(&ErrorType::HTTPStatus(404))
         );
-        assert_eq!(result.session().uri(), "/another/file.txt?&host=&test=");
+        assert_eq!(
+            result.session().uri(),
+            "/another/file.txt/file.txt&host=&test="
+        );
 
         let session = make_session("/path/file.txt?a=b").await;
         let mut result = app.handle_request(session).await;
@@ -334,7 +344,10 @@ mod tests {
             result.err().as_ref().map(|err| &err.etype),
             Some(&ErrorType::HTTPStatus(404))
         );
-        assert_eq!(result.session().uri(), "/another/file.txt?a=b&host=&test=");
+        assert_eq!(
+            result.session().uri(),
+            "/another/file.txt/file.txt?a=b&host=&test="
+        );
 
         let mut session = make_session("/path/file.txt?a=b").await;
         session
@@ -352,7 +365,7 @@ mod tests {
         );
         assert_eq!(
             result.session().uri(),
-            "/another/file.txt?a=b&host=localhost&test=successful"
+            "/another/file.txt/file.txt?a=b&host=localhost&test=successful"
         );
     }
 
@@ -367,7 +380,7 @@ mod tests {
                     type: permanent
                 -
                     from: /file.txt
-                    to: https://example.com/?${query}
+                    to: https://example.com/${query}
                     type: redirect
             "#,
         );
