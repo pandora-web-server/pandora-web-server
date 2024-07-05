@@ -14,6 +14,7 @@
 
 //! Structures required to deserialize Rewrite Module configuration from YAML configuration files.
 
+use http::HeaderName;
 use pandora_module_utils::merger::PathMatcher;
 use pandora_module_utils::{DeserializeMap, OneOrMany};
 use regex::Regex;
@@ -21,9 +22,16 @@ use serde::Deserialize;
 use std::default::Default;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Variable {
+    Tail,
+    Query,
+    Header(HeaderName),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum VariableInterpolationPart {
     Literal(Vec<u8>),
-    Variable(String),
+    Variable(Variable),
 }
 
 /// Parsed representation of a string with variable interpolation like the `to` field of the
@@ -56,27 +64,39 @@ impl From<&str> for VariableInterpolation {
                 if let (Some(start), Some(end)) = (variable_start, variable_end) {
                     // Found variable start and end, check whether name is alphanumeric
                     let name = &value[start + Self::VARIABLE_PREFIX.len()..end];
-                    if name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
-                        if start > 0 {
-                            parts.push(VariableInterpolationPart::Literal(
-                                value[0..start].as_bytes().to_vec(),
-                            ));
+                    let variable = if name == "tail" {
+                        Variable::Tail
+                    } else if name == "query" {
+                        Variable::Query
+                    } else if let Some(name) = name.strip_prefix("http_") {
+                        if let Ok(header) = HeaderName::try_from(name.replace('_', "-")) {
+                            Variable::Header(header)
+                        } else {
+                            // Invalid header name, look for another variable start further ahead
+                            search_start = start + Self::VARIABLE_PREFIX.len();
+                            continue;
                         }
-                        parts.push(VariableInterpolationPart::Variable(name.to_owned()));
-                        value = &value[end + Self::VARIABLE_SUFFIX.len()..];
-                        break;
-                    }
+                    } else {
+                        // Not a variable name, look for another variable start further ahead
+                        search_start = start + Self::VARIABLE_PREFIX.len();
+                        continue;
+                    };
 
-                    // This variable name is invalid, look for another variable start further ahead
-                    search_start = start + Self::VARIABLE_PREFIX.len();
+                    if start > 0 {
+                        parts.push(VariableInterpolationPart::Literal(
+                            value[0..start].as_bytes().to_vec(),
+                        ));
+                    }
+                    parts.push(VariableInterpolationPart::Variable(variable));
+                    value = &value[end + Self::VARIABLE_SUFFIX.len()..];
                 } else {
                     // No variable found, take the entire value as literal
                     parts.push(VariableInterpolationPart::Literal(
                         value.as_bytes().to_vec(),
                     ));
                     value = "";
-                    break;
                 }
+                break;
             }
         }
         Self { parts }
@@ -95,20 +115,14 @@ impl VariableInterpolation {
 
     pub(crate) fn interpolate<'a, L>(&self, lookup: L) -> Vec<u8>
     where
-        L: Fn(&str) -> Option<&'a [u8]>,
+        L: Fn(&Variable) -> &'a [u8],
     {
         let mut result = Vec::new();
         for part in &self.parts {
-            match &part {
+            match part {
                 VariableInterpolationPart::Literal(value) => result.extend_from_slice(value),
-                VariableInterpolationPart::Variable(name) => {
-                    if let Some(value) = lookup(name) {
-                        result.extend_from_slice(value);
-                    } else {
-                        result.extend_from_slice(Self::VARIABLE_PREFIX.as_bytes());
-                        result.extend_from_slice(name.as_bytes());
-                        result.extend_from_slice(Self::VARIABLE_SUFFIX.as_bytes());
-                    }
+                VariableInterpolationPart::Variable(variable) => {
+                    result.extend_from_slice(lookup(variable));
                 }
             }
         }
@@ -261,40 +275,45 @@ mod tests {
         );
 
         assert_eq!(
-            VariableInterpolation::from("ab${xyz}cd").interpolate(|_| None),
+            VariableInterpolation::from("ab${xyz}cd")
+                .interpolate(|_| panic!("Unexpected lookup call")),
             b"ab${xyz}cd".to_vec()
         );
 
         assert_eq!(
-            VariableInterpolation::from("ab${xyz}cd").interpolate(|name| {
-                if name == "xyz" {
-                    Some(b"resolved")
+            VariableInterpolation::from("ab${query}cd").interpolate(|variable| {
+                if variable == &Variable::Query {
+                    b"resolved"
                 } else {
-                    None
+                    panic!("Unexpected variable in lookup")
                 }
             }),
             b"abresolvedcd".to_vec()
         );
 
         assert_eq!(
-            VariableInterpolation::from("a${x}${y}bc${z}d").interpolate(|name| {
-                if name == "x" {
-                    Some(b"x resolved")
-                } else if name == "z" {
-                    Some(b"z resolved")
-                } else {
-                    None
+            VariableInterpolation::from("a${query}${tail}bc${http_abc}d${unknown}e").interpolate(
+                |variable| {
+                    if variable == &Variable::Query {
+                        b"query resolved"
+                    } else if variable == &Variable::Tail {
+                        b"tail resolved"
+                    } else if variable == &Variable::Header(HeaderName::try_from("abc").unwrap()) {
+                        b"header resolved"
+                    } else {
+                        panic!("Unexpected variable in lookup")
+                    }
                 }
-            }),
-            b"ax resolved${y}bcz resolvedd".to_vec()
+            ),
+            b"aquery resolvedtail resolvedbcheader resolvedd${unknown}e".to_vec()
         );
 
         assert_eq!(
-            VariableInterpolation::from("${a${x}").interpolate(|name| {
-                if name == "x" {
-                    Some(b"resolved")
+            VariableInterpolation::from("${a${query}").interpolate(|variable| {
+                if variable == &Variable::Query {
+                    b"resolved"
                 } else {
-                    None
+                    panic!("Unexpected variable in lookup")
                 }
             }),
             b"${aresolved".to_vec()

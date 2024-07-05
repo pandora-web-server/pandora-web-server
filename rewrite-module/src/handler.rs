@@ -23,7 +23,7 @@ use pandora_module_utils::router::{Path, Router};
 use pandora_module_utils::standard_response::redirect_response;
 use pandora_module_utils::{RequestFilter, RequestFilterResult};
 
-use crate::configuration::{RegexMatch, RewriteConf, RewriteType, VariableInterpolation};
+use crate::configuration::{RegexMatch, RewriteConf, RewriteType, Variable, VariableInterpolation};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Rule {
@@ -119,23 +119,15 @@ impl RequestFilter for RewriteHandler {
                 String::from_utf8_lossy(rule_path)
             );
 
-            let target = rule.to.interpolate(|name| match name {
-                "tail" => Some(&tail),
-                "query" => Some(session.uri().query().unwrap_or("").as_bytes()),
-                name => {
-                    if let Some(name) = name.strip_prefix("http_") {
-                        Some(
-                            session
-                                .req_header()
-                                .headers
-                                .get(name.replace('_', "-"))
-                                .map(HeaderValue::as_bytes)
-                                .unwrap_or(b""),
-                        )
-                    } else {
-                        None
-                    }
-                }
+            let target = rule.to.interpolate(|variable| match variable {
+                Variable::Tail => &tail,
+                Variable::Query => session.uri().query().unwrap_or("").as_bytes(),
+                Variable::Header(name) => session
+                    .req_header()
+                    .headers
+                    .get(name)
+                    .map(HeaderValue::as_bytes)
+                    .unwrap_or(b""),
             });
 
             match rule.r#type {
