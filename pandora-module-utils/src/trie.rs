@@ -22,7 +22,10 @@
 //! * Different value returned for exact and prefix matches
 //! * When the same value is used multiple times, only one copy is stored
 
-use std::ops::{Deref, Range};
+use std::{
+    fmt::Debug,
+    ops::{Deref, Range},
+};
 
 /// Character to separate labels
 pub(crate) const SEPARATOR: u8 = b'/';
@@ -64,7 +67,7 @@ pub(crate) fn common_prefix_length(a: &[u8], b: &[u8]) -> usize {
 /// Finally, the third vector stores the labels of the nodes, so that nodes don’t need separate
 /// allocations for their labels. Each nodes refers to its label within this vector via an index
 /// range.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub(crate) struct Trie<Value> {
     nodes: Vec<Node>,
     values: Vec<Value>,
@@ -216,6 +219,54 @@ impl<Value> Trie<Value> {
     /// Retrieves the value from a previous lookup by its index
     pub(crate) fn retrieve(&self, index: usize) -> Option<&Value> {
         self.values.get(index)
+    }
+
+    fn fmt_field(
+        &self,
+        f: &mut std::fmt::DebugStruct<'_, '_>,
+        index: usize,
+        prefix: &[u8],
+    ) -> std::fmt::Result
+    where
+        Value: Debug,
+    {
+        let node = &self.nodes[index];
+        let mut label = prefix.to_vec();
+        label.extend_from_slice(&self.labels[node.label.start..node.label.end]);
+        if node.value_exact.is_some() || node.value_prefix.is_some() {
+            // Fields are considered dead code here because they are only ever read by the Debug
+            // implementation.
+            #[allow(dead_code)]
+            #[derive(Debug)]
+            struct Node<'a, Value: Debug> {
+                value_exact: Option<&'a Value>,
+                value_prefix: Option<&'a Value>,
+            }
+
+            let value = Node {
+                value_exact: node.value_exact.map(|index| &self.values[index]),
+                value_prefix: node.value_prefix.map(|index| &self.values[index]),
+            };
+
+            f.field(&String::from_utf8_lossy(&label), &value);
+        }
+
+        label.push(SEPARATOR);
+        for child in node.children.start..node.children.end {
+            self.fmt_field(f, child, &label)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl<Value> Debug for Trie<Value>
+where
+    Value: Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut f = f.debug_struct("Trie");
+        self.fmt_field(&mut f, Self::ROOT, b"")
     }
 }
 
