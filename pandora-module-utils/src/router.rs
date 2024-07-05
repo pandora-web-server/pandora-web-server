@@ -89,7 +89,7 @@ impl Path {
 
     /// If this path is a non-empty prefix of the given path, removes the prefix. Otherwise returns
     /// `None`.
-    pub fn remove_prefix_from(&self, path: impl AsRef<[u8]>) -> Option<Vec<u8>> {
+    pub fn remove_prefix_from<'a>(&self, path: &'a impl AsRef<[u8]>) -> Option<&'a [u8]> {
         if self.path.is_empty() {
             return None;
         }
@@ -110,9 +110,9 @@ impl Path {
         }
 
         if path.is_empty() {
-            Some(b"/".to_vec())
+            Some(b"/")
         } else {
-            Some(path.to_vec())
+            Some(path)
         }
     }
 }
@@ -329,31 +329,31 @@ mod tests {
 
     #[test]
     fn path_remove_prefix() {
-        assert_eq!(Path::new("").remove_prefix_from("/"), None);
-        assert_eq!(Path::new("").remove_prefix_from("/abc"), None);
-        assert_eq!(Path::new("///").remove_prefix_from("/"), None);
-        assert_eq!(Path::new("///").remove_prefix_from("/abc"), None);
+        assert_eq!(Path::new("").remove_prefix_from(b"/"), None);
+        assert_eq!(Path::new("").remove_prefix_from(b"/abc"), None);
+        assert_eq!(Path::new("///").remove_prefix_from(b"/"), None);
+        assert_eq!(Path::new("///").remove_prefix_from(b"/abc"), None);
         assert_eq!(
-            Path::new("abc").remove_prefix_from("/abc"),
-            Some(b"/".into())
+            Path::new("abc").remove_prefix_from(b"/abc"),
+            Some("/".as_bytes())
         );
-        assert_eq!(Path::new("abc").remove_prefix_from("/def"), None);
-        assert_eq!(Path::new("abc").remove_prefix_from("/abcd"), None);
+        assert_eq!(Path::new("abc").remove_prefix_from(b"/def"), None);
+        assert_eq!(Path::new("abc").remove_prefix_from(b"/abcd"), None);
         assert_eq!(
-            Path::new("abc").remove_prefix_from("/abc//d"),
-            Some(b"//d".into())
-        );
-        assert_eq!(
-            Path::new("/abc/def/").remove_prefix_from("/abc//def"),
-            Some(b"/".into())
+            Path::new("abc").remove_prefix_from(b"/abc//d"),
+            Some("//d".as_bytes())
         );
         assert_eq!(
-            Path::new("/abc/def/").remove_prefix_from("/abc//def\\xyz"),
+            Path::new("/abc/def/").remove_prefix_from(b"/abc//def"),
+            Some("/".as_bytes())
+        );
+        assert_eq!(
+            Path::new("/abc/def/").remove_prefix_from(b"/abc//def\\xyz"),
             None
         );
         assert_eq!(
-            Path::new("/abc/def/").remove_prefix_from("/abc//def/xyz"),
-            Some(b"/xyz".into())
+            Path::new("/abc/def/").remove_prefix_from(b"/abc//def/xyz"),
+            Some("/xyz".as_bytes())
         );
     }
 

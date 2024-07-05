@@ -113,16 +113,19 @@ where
         if let Some(result) = self.handlers.lookup(host.as_ref(), &path) {
             let (strip_path, handler) = result.as_value();
             let index = result.index();
-            let new_path = strip_path.as_ref().and_then(|p| p.remove_prefix_from(path));
+            let new_path = strip_path
+                .as_ref()
+                .and_then(|p| p.remove_prefix_from(&path));
 
             ctx.index = Some(index);
+
+            if let Some(new_path) = new_path {
+                session.set_uri(set_uri_path(session.uri(), new_path));
+            }
 
             // Save ctx.index in session as well, response_filter could be called without context
             session.extensions_mut().insert(IndexEntry(index));
 
-            if let Some(new_path) = new_path {
-                session.set_uri(set_uri_path(session.uri(), &new_path));
-            }
             handler.request_filter(session, ctx).await
         } else {
             Ok(RequestFilterResult::Unhandled)

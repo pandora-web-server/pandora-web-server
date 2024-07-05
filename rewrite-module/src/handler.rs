@@ -118,11 +118,11 @@ impl RequestFilter for RewriteHandler {
 
             let target = rule.to.interpolate(|variable, result| match variable {
                 Variable::Tail => {
-                    if let Some(mut tail) = rule_path.remove_prefix_from(path) {
-                        result.append(&mut tail);
-                    } else {
-                        result.extend_from_slice(path.as_bytes());
-                    }
+                    result.extend_from_slice(
+                        rule_path
+                            .remove_prefix_from(&path)
+                            .unwrap_or(path.as_bytes()),
+                    );
                 }
                 Variable::Query => {
                     if let Some(query) = session.uri().query() {
