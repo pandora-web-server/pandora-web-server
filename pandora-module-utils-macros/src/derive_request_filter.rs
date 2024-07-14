@@ -100,6 +100,21 @@ fn generate_request_filter_impl(
                     }
                 }
 
+                async fn early_request_filter(
+                    &self,
+                    _session: &mut impl ::pandora_module_utils::pingora::SessionWrapper,
+                    _ctx: &mut Self::CTX,
+                ) -> ::std::result::Result<
+                    (),
+                    ::std::boxed::Box<::pandora_module_utils::pingora::Error>
+                >
+                {
+                    #(
+                        self.#field_name.early_request_filter(_session, &mut _ctx.#field_name).await?;
+                    )*
+                    ::std::result::Result::Ok(())
+                }
+
                 async fn request_filter(
                     &self,
                     _session: &mut impl ::pandora_module_utils::pingora::SessionWrapper,
@@ -128,13 +143,13 @@ fn generate_request_filter_impl(
                 >
                 {
                     #(
-                        if let Some(peer) =
+                        if let ::std::option::Option::Some(peer) =
                             self.#field_name.upstream_peer(_session, &mut _ctx.#field_name).await?
                         {
-                            return Ok(Some(peer));
+                            return ::std::result::Result::Ok(::std::option::Option::Some(peer));
                         }
                     )*
-                    Ok(None)
+                    ::std::result::Result::Ok(::std::option::Option::None)
                 }
 
                 fn response_filter(

@@ -27,6 +27,7 @@ use pandora_module_utils::pingora::{
     Error, HttpPeer, ProxyHttp, ResponseHeader, Session, SessionWrapper,
 };
 use pandora_module_utils::{RequestFilter, RequestFilterResult};
+use pingora::modules::http::HttpModules;
 use pingora::ErrorType;
 use std::borrow::Cow;
 use std::fmt::Debug;
@@ -180,19 +181,40 @@ impl<H> DefaultApp<H> {
         H: RequestFilter + Sync,
         H::CTX: Send + Sync,
     {
+        let mut modules = HttpModules::new();
+        self.init_downstream_modules(&mut modules);
+        session.downstream_modules_ctx = modules.build_ctx();
+
         self.capture_body = true;
 
         let mut ctx = self.new_ctx();
 
         let result = async {
+            self.early_request_filter(&mut session, &mut ctx).await?;
+
+            let request = session.downstream_session.req_header_mut();
+            session
+                .downstream_modules_ctx
+                .request_header_filter(request)
+                .await?;
+
             match self.request_filter(&mut session, &mut ctx).await {
                 Ok(false) => {
                     let upstream_peer = self.upstream_peer(&mut session, &mut ctx).await?;
                     let mut response_header = upstream_response(&mut session, upstream_peer)?;
                     self.upstream_response_filter(&mut session, &mut response_header, &mut ctx);
                     session
-                        .write_response_header(Box::new(response_header))
-                        .await
+                        .downstream_modules_ctx
+                        .response_header_filter(&mut response_header, false)
+                        .await?;
+                    session
+                        .write_response_header(Box::new(response_header), false)
+                        .await?;
+
+                    let mut body = ctx.extensions.remove::<BytesMut>().map(|body| body.into());
+                    session
+                        .downstream_modules_ctx
+                        .response_body_filter(&mut body, true)
                 }
                 Ok(true) => Ok(()),
                 Err(err) => Err(err),
@@ -235,6 +257,22 @@ where
             extensions: Extensions::new(),
             handler: H::new_ctx(),
         }
+    }
+
+    async fn early_request_filter(
+        &self,
+        session: &mut Session,
+        ctx: &mut Self::CTX,
+    ) -> Result<(), Box<Error>> {
+        let mut session = SessionWrapperImpl::new(
+            session,
+            &self.handler,
+            &mut ctx.extensions,
+            self.capture_body,
+        );
+        self.handler
+            .early_request_filter(&mut session, &mut ctx.handler)
+            .await
     }
 
     async fn request_filter(
@@ -350,24 +388,40 @@ where
     async fn write_response_header(
         &mut self,
         mut resp: Box<ResponseHeader>,
+        end_of_stream: bool,
     ) -> Result<(), Box<Error>> {
         self.handler.response_filter(self, &mut resp, None);
 
-        self.deref_mut().write_response_header(resp).await
+        self.deref_mut()
+            .write_response_header(resp, end_of_stream)
+            .await
     }
 
-    async fn write_response_header_ref(&mut self, resp: &ResponseHeader) -> Result<(), Box<Error>> {
-        self.write_response_header(Box::new(resp.clone())).await
+    async fn write_response_header_ref(
+        &mut self,
+        resp: &ResponseHeader,
+        end_of_stream: bool,
+    ) -> Result<(), Box<Error>> {
+        self.write_response_header(Box::new(resp.clone()), end_of_stream)
+            .await
     }
 
-    async fn write_response_body(&mut self, data: Bytes) -> Result<(), Box<Error>> {
+    async fn write_response_body(
+        &mut self,
+        data: Option<Bytes>,
+        end_of_stream: bool,
+    ) -> Result<(), Box<Error>> {
         if self.capture_body {
-            self.extensions_mut()
-                .get_or_insert_default::<BytesMut>()
-                .extend_from_slice(&data);
+            if let Some(data) = data {
+                self.extensions_mut()
+                    .get_or_insert_default::<BytesMut>()
+                    .extend_from_slice(&data);
+            }
             Ok(())
         } else {
-            self.deref_mut().write_response_body(data).await
+            self.deref_mut()
+                .write_response_body(data, end_of_stream)
+                .await
         }
     }
 }

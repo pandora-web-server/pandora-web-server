@@ -16,8 +16,8 @@
 
 use async_trait::async_trait;
 use clap::Parser;
-use pandora_module_utils::pingora::{Error, SessionWrapper};
-use pandora_module_utils::{DeserializeMap, RequestFilter, RequestFilterResult};
+use pandora_module_utils::pingora::{Error, ResponseCompression, SessionWrapper};
+use pandora_module_utils::{DeserializeMap, RequestFilter};
 
 /// Command line options of the compression module
 #[derive(Debug, Default, Parser)]
@@ -75,20 +75,24 @@ impl RequestFilter for CompressionHandler {
     type CTX = ();
     fn new_ctx() -> Self::CTX {}
 
-    async fn request_filter(
+    async fn early_request_filter(
         &self,
         session: &mut impl SessionWrapper,
         _ctx: &mut Self::CTX,
-    ) -> Result<RequestFilterResult, Box<Error>> {
+    ) -> Result<(), Box<Error>> {
         if let Some(level) = self.conf.compression_level {
-            session.downstream_compression.adjust_level(level);
+            session
+                .downstream_modules_ctx
+                .get_mut::<ResponseCompression>()
+                .unwrap()
+                .adjust_level(level);
         }
 
         if self.conf.decompress_upstream {
             session.upstream_compression.adjust_decompression(true);
         }
 
-        Ok(RequestFilterResult::Unhandled)
+        Ok(())
     }
 }
 
@@ -123,7 +127,13 @@ mod tests {
 
     fn assert_compression(result: &mut AppResult, downstream: bool, upstream: bool) {
         let session = result.session();
-        assert_eq!(session.downstream_compression.is_enabled(), downstream);
+        assert_eq!(
+            session
+                .downstream_modules_ctx
+                .get::<ResponseCompression>()
+                .is_some_and(|compression| compression.is_enabled()),
+            downstream
+        );
         assert_eq!(session.upstream_compression.is_enabled(), upstream);
     }
 

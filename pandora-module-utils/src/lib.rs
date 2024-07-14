@@ -86,6 +86,16 @@ pub trait RequestFilter: Sized {
     /// possible host-specific handlers will run.
     fn new_ctx() -> Self::CTX;
 
+    /// Handler to run during Pingora’s `early_request_filter` phase, see
+    /// [`pingora::ProxyHttp::early_request_filter`].
+    async fn early_request_filter(
+        &self,
+        _session: &mut impl SessionWrapper,
+        _ctx: &mut Self::CTX,
+    ) -> Result<(), Box<Error>> {
+        Ok(())
+    }
+
     /// Handler to run during Pingora’s `request_filter` phase, see
     /// [`pingora::ProxyHttp::request_filter`]. This uses a different return type to account
     /// for the existence of multiple chained handlers.

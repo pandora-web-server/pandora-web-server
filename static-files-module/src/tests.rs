@@ -15,6 +15,7 @@
 use crate::handler::StaticFilesHandler;
 use crate::metadata::Metadata;
 
+use compression_module::CompressionHandler;
 use const_format::{concatcp, str_repeat};
 use http::status::StatusCode;
 use pandora_module_utils::pingora::{
@@ -29,6 +30,7 @@ use test_log::test;
 
 #[derive(Debug, Clone, PartialEq, Eq, RequestFilter)]
 struct Handler {
+    compression: CompressionHandler,
     rewrite: RewriteHandler,
     static_files: StaticFilesHandler,
 }
@@ -624,12 +626,12 @@ async fn if_none_match() {
     assert_body(&result, "Hi!\n");
 
     // With compression enabled this should produce Vary header
+    let mut app = make_app(extended_conf("compression_level: 3"));
     let mut session = make_session("GET", "/file.txt").await;
     session
         .req_header_mut()
         .insert_header("If-None-Match", &meta.etag)
         .unwrap();
-    session.downstream_compression.adjust_level(3);
     let mut result = app.handle_request(session).await;
     assert!(result.err().is_none());
     assert_status(&mut result, 304);
@@ -753,12 +755,12 @@ async fn if_match() {
     assert_body(&result, "");
 
     // With compression enabled this should produce Vary header
+    let mut app = make_app(extended_conf("compression_level: 3"));
     let mut session = make_session("GET", "/file.txt").await;
     session
         .req_header_mut()
         .insert_header("If-Match", "\"xyz\"")
         .unwrap();
-    session.downstream_compression.adjust_level(3);
     let mut result = app.handle_request(session).await;
     assert!(result.err().is_none());
     assert_status(&mut result, 412);
@@ -842,12 +844,12 @@ async fn if_modified_since() {
     assert_body(&result, "Hi!\n");
 
     // With compression enabled this should produce Vary header
+    let mut app = make_app(extended_conf("compression_level: 3"));
     let mut session = make_session("GET", "/file.txt").await;
     session
         .req_header_mut()
         .insert_header("If-Modified-Since", meta.modified.as_ref().unwrap())
         .unwrap();
-    session.downstream_compression.adjust_level(3);
     let mut result = app.handle_request(session).await;
     assert!(result.err().is_none());
     assert_status(&mut result, 304);
@@ -929,6 +931,7 @@ async fn if_unmodified_since() {
     assert_body(&result, "");
 
     // With compression enabled this should produce Vary header
+    let mut app = make_app(extended_conf("compression_level: 3"));
     let mut session = make_session("GET", "/file.txt").await;
     session
         .req_header_mut()
@@ -938,7 +941,6 @@ async fn if_unmodified_since() {
         .req_header_mut()
         .insert_header("If-Match", "\"xyz\"")
         .unwrap();
-    session.downstream_compression.adjust_level(3);
     let mut result = app.handle_request(session).await;
     assert!(result.err().is_none());
     assert_status(&mut result, 412);
@@ -1038,12 +1040,12 @@ async fn ranged_request() {
     assert_body(&result, "");
 
     // With compression enabled this should produce Vary header
+    let mut app = make_app(extended_conf("compression_level: 3"));
     let mut session = make_session("GET", "/large.txt").await;
     session
         .req_header_mut()
         .insert_header("Range", "bytes=200000-")
         .unwrap();
-    session.downstream_compression.adjust_level(3);
     let mut result = app.handle_request(session).await;
     assert!(result.err().is_none());
     assert_status(&mut result, 416);
@@ -1062,7 +1064,7 @@ async fn ranged_request() {
 #[test(tokio::test)]
 async fn dynamic_compression() {
     let meta = Metadata::from_path(&root_path("large.txt"), None).unwrap();
-    let mut app = make_app(default_conf());
+    let mut app = make_app(extended_conf("compression_level: 3"));
 
     // Regular request should result in compressed response
     let mut session = make_session("GET", "/large.txt").await;
@@ -1070,7 +1072,6 @@ async fn dynamic_compression() {
         .req_header_mut()
         .insert_header("Accept-Encoding", "gzip")
         .unwrap();
-    session.downstream_compression.adjust_level(3);
     let mut result = app.handle_request(session).await;
     assert!(result.err().is_none());
     assert_status(&mut result, 200);
@@ -1078,7 +1079,6 @@ async fn dynamic_compression() {
         &mut result,
         vec![
             ("Content-Encoding", "gzip"),
-            ("accept-ranges", "none"),
             ("Content-Type", "text/plain"),
             ("last-modified", meta.modified.as_ref().unwrap()),
             ("etag", &meta.etag),
@@ -1093,7 +1093,6 @@ async fn dynamic_compression() {
         .req_header_mut()
         .insert_header("Accept-Encoding", "unsupported")
         .unwrap();
-    session.downstream_compression.adjust_level(3);
     let mut result = app.handle_request(session).await;
     assert!(result.err().is_none());
     assert_status(&mut result, 200);
@@ -1109,7 +1108,7 @@ async fn dynamic_compression() {
         ],
     );
 
-    // Ranged response should be uncompressed
+    // We shouldn’t get ranged requests in practice but Pingora will compress even these responses.
     let mut session = make_session("GET", "/large.txt").await;
     session
         .req_header_mut()
@@ -1119,18 +1118,18 @@ async fn dynamic_compression() {
         .req_header_mut()
         .insert_header("Range", "bytes=0-10000")
         .unwrap();
-    session.downstream_compression.adjust_level(3);
     let mut result = app.handle_request(session).await;
     assert!(result.err().is_none());
     assert_status(&mut result, 206);
     assert_headers(
         &mut result,
         vec![
-            ("Content-Length", "10001"),
+            ("Content-Encoding", "gzip"),
             ("content-range", "bytes 0-10000/100001"),
             ("Content-Type", "text/plain"),
             ("last-modified", meta.modified.as_ref().unwrap()),
             ("etag", &meta.etag),
+            ("Transfer-Encoding", "chunked"),
             ("vary", "Accept-Encoding"),
         ],
     );

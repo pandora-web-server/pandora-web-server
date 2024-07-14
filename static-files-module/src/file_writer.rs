@@ -23,8 +23,6 @@ use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 
-use crate::compression::Compression;
-
 const BUFFER_SIZE: usize = 64 * 1024;
 
 /// Writes a chunk of a file as a Pingora session response. The data will be passed through the
@@ -34,7 +32,6 @@ pub(crate) async fn file_response(
     path: &Path,
     start: u64,
     end: u64,
-    compression: &Compression<'_>,
 ) -> Result<(), Box<Error>> {
     let mut file = File::open(path).map_err(|err| {
         error!("failed opening file {path:?}: {err}");
@@ -68,15 +65,11 @@ pub(crate) async fn file_response(
         }
 
         buf.truncate(len);
-        if let Some(bytes) = compression.transform_body(session, Some(buf.into())) {
-            session.write_response_body(bytes).await?;
-        }
+        session.write_response_body(Some(buf.into()), false).await?;
         remaining -= len;
     }
 
-    if let Some(bytes) = compression.transform_body(session, None) {
-        session.write_response_body(bytes).await?;
-    }
+    session.write_response_body(None, true).await?;
 
     Ok(())
 }

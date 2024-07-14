@@ -62,10 +62,14 @@ async fn unauthorized_response(
     header.append_header(header::CONTENT_LENGTH, text.len().to_string())?;
     header.append_header(header::CONTENT_TYPE, "text/html; charset=utf-8")?;
     header.append_header(header::WWW_AUTHENTICATE, format!("Basic realm=\"{realm}\""))?;
-    session.write_response_header(Box::new(header)).await?;
 
-    if session.req_header().method != Method::HEAD {
-        session.write_response_body(text.into()).await?;
+    let send_body = session.req_header().method != Method::HEAD;
+    session
+        .write_response_header(Box::new(header), !send_body)
+        .await?;
+
+    if send_body {
+        session.write_response_body(Some(text.into()), true).await?;
     }
 
     Ok(())

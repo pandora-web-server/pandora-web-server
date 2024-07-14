@@ -117,8 +117,12 @@ impl RequestFilter for WebAppHandler {
         let mut header = ResponseHeader::build(200, Some(2))?;
         header.insert_header("Content-Type", "text/plain")?;
         header.insert_header("Content-Length", value.len().to_string())?;
-        session.write_response_header(Box::new(header)).await?;
-        session.write_response_body(value.into()).await?;
+        session
+            .write_response_header(Box::new(header), false)
+            .await?;
+        session
+            .write_response_body(Some(value.into()), true)
+            .await?;
         Ok(RequestFilterResult::ResponseSent)
     }
 }

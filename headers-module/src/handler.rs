@@ -192,7 +192,9 @@ mod tests {
                 inner.request_filter(session, ctx).await
             } else {
                 let header = make_response_header()?;
-                session.write_response_header(Box::new(header)).await?;
+                session
+                    .write_response_header(Box::new(header), true)
+                    .await?;
 
                 Ok(RequestFilterResult::ResponseSent)
             }

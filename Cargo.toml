@@ -53,8 +53,8 @@ maud = "0.26.0"
 pandora-module-utils = { path = "pandora-module-utils", version = "0.2.0" }
 pandora-module-utils-macros = { path = "pandora-module-utils-macros", version = "0.2.0" }
 percent-encoding = "2.1"
-pingora = "0.2.0"
-pingora-limits = "0.2.0"
+pingora = "0.3.0"
+pingora-limits = "0.3.0"
 rewrite-module = { path = "rewrite-module", version = "0.2.0" }
 serde = { version = "1.0", features = ["derive"] }
 startup-module = { path = "startup-module", version = "0.2.0" }

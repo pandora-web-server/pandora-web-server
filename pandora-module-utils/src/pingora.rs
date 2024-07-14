@@ -19,6 +19,7 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use http::{header, Extensions, Uri};
 pub use pingora::http::{IntoCaseHeaderName, RequestHeader, ResponseHeader};
+pub use pingora::modules::http::compression::ResponseCompression;
 pub use pingora::protocols::http::HttpTask;
 pub use pingora::protocols::l4::socket::SocketAddr;
 pub use pingora::proxy::{http_proxy_service, ProxyHttp, Session};
@@ -125,13 +126,25 @@ pub trait SessionWrapper: Send + Deref<Target = Session> + DerefMut {
     }
 
     /// See [`Session::write_response_header`](pingora::protocols::http::server::Session::write_response_header)
-    async fn write_response_header(&mut self, resp: Box<ResponseHeader>) -> Result<(), Box<Error>> {
-        self.deref_mut().write_response_header(resp).await
+    async fn write_response_header(
+        &mut self,
+        resp: Box<ResponseHeader>,
+        end_of_stream: bool,
+    ) -> Result<(), Box<Error>> {
+        self.deref_mut()
+            .write_response_header(resp, end_of_stream)
+            .await
     }
 
     /// See [`Session::write_response_header_ref`](pingora::protocols::http::server::Session::write_response_header_ref)
-    async fn write_response_header_ref(&mut self, resp: &ResponseHeader) -> Result<(), Box<Error>> {
-        self.deref_mut().write_response_header_ref(resp).await
+    async fn write_response_header_ref(
+        &mut self,
+        resp: &ResponseHeader,
+        end_of_stream: bool,
+    ) -> Result<(), Box<Error>> {
+        self.deref_mut()
+            .write_response_header(Box::new(resp.clone()), end_of_stream)
+            .await
     }
 
     /// See [`Session::response_written`](pingora::protocols::http::server::Session::response_written)
@@ -140,8 +153,14 @@ pub trait SessionWrapper: Send + Deref<Target = Session> + DerefMut {
     }
 
     /// See [`Session::write_response_body`](pingora::protocols::http::server::Session::write_response_body)
-    async fn write_response_body(&mut self, data: Bytes) -> Result<(), Box<Error>> {
-        self.deref_mut().write_response_body(data).await
+    async fn write_response_body(
+        &mut self,
+        data: Option<Bytes>,
+        end_of_stream: bool,
+    ) -> Result<(), Box<Error>> {
+        self.deref_mut()
+            .write_response_body(data, end_of_stream)
+            .await
     }
 }
 
