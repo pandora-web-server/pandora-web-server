@@ -20,7 +20,6 @@ use bytes::Bytes;
 use http::{header, Extensions, Uri};
 pub use pingora::http::{IntoCaseHeaderName, RequestHeader, ResponseHeader};
 pub use pingora::modules::http::compression::ResponseCompression;
-pub use pingora::protocols::http::HttpTask;
 pub use pingora::protocols::l4::socket::SocketAddr;
 pub use pingora::proxy::{http_proxy_service, ProxyHttp, Session};
 pub use pingora::server::configuration::{Opt as ServerOpt, ServerConf};
