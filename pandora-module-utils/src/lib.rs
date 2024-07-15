@@ -25,7 +25,7 @@ pub mod standard_response;
 mod trie;
 
 use log::{error, info, trace};
-use pingora::{Error, ErrorType, HttpPeer, ResponseHeader, SessionWrapper};
+use pingora::{Error, ErrorType, HttpModules, HttpPeer, ResponseHeader, SessionWrapper};
 use serde::{de::DeserializeSeed, Deserialize};
 use std::fmt::Debug;
 use std::fs::File;
@@ -85,6 +85,14 @@ pub trait RequestFilter: Sized {
     /// scenario: the session isn’t available at this point, so it isn’t yet known which one of the
     /// possible host-specific handlers will run.
     fn new_ctx() -> Self::CTX;
+
+    /// Handler to run during Pingora’s `init_downstream_modules` phase, see
+    /// [`pingora::ProxyHttp::init_downstream_modules`].
+    ///
+    /// Unlike Pingora’s method, this one is static. This is to accomodate the virtual hosts
+    /// scenario: the session isn’t available at this point, so it isn’t yet known which one of the
+    /// possible host-specific handlers will run.
+    fn init_downstream_modules(_modules: &mut HttpModules) {}
 
     /// Handler to run during Pingora’s `early_request_filter` phase, see
     /// [`pingora::ProxyHttp::early_request_filter`].

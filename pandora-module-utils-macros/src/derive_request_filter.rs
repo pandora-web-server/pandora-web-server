@@ -100,6 +100,14 @@ fn generate_request_filter_impl(
                     }
                 }
 
+                fn init_downstream_modules(
+                    _modules: &mut ::pandora_module_utils::pingora::HttpModules,
+                ) {
+                    #(
+                        <#field_type>::init_downstream_modules(_modules);
+                    )*
+                }
+
                 async fn early_request_filter(
                     &self,
                     _session: &mut impl ::pandora_module_utils::pingora::SessionWrapper,

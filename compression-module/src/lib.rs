@@ -16,7 +16,9 @@
 
 use async_trait::async_trait;
 use clap::Parser;
-use pandora_module_utils::pingora::{Error, ResponseCompression, SessionWrapper};
+use pandora_module_utils::pingora::{
+    Error, HttpModules, ResponseCompression, ResponseCompressionBuilder, SessionWrapper,
+};
 use pandora_module_utils::{DeserializeMap, RequestFilter};
 
 /// Command line options of the compression module
@@ -74,6 +76,10 @@ impl RequestFilter for CompressionHandler {
     type Conf = CompressionConf;
     type CTX = ();
     fn new_ctx() -> Self::CTX {}
+
+    fn init_downstream_modules(modules: &mut HttpModules) {
+        modules.add_module(ResponseCompressionBuilder::enable(0));
+    }
 
     async fn early_request_filter(
         &self,

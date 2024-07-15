@@ -259,6 +259,10 @@ where
         }
     }
 
+    fn init_downstream_modules(&self, modules: &mut HttpModules) {
+        H::init_downstream_modules(modules);
+    }
+
     async fn early_request_filter(
         &self,
         session: &mut Session,
