@@ -626,7 +626,7 @@ async fn if_none_match() {
     assert_body(&result, "Hi!\n");
 
     // With compression enabled this should produce Vary header
-    let mut app = make_app(extended_conf("compression_level: 3"));
+    let mut app = make_app(extended_conf("compression_level_gzip: 3"));
     let mut session = make_session("GET", "/file.txt").await;
     session
         .req_header_mut()
@@ -755,7 +755,7 @@ async fn if_match() {
     assert_body(&result, "");
 
     // With compression enabled this should produce Vary header
-    let mut app = make_app(extended_conf("compression_level: 3"));
+    let mut app = make_app(extended_conf("compression_level_gzip: 3"));
     let mut session = make_session("GET", "/file.txt").await;
     session
         .req_header_mut()
@@ -844,7 +844,7 @@ async fn if_modified_since() {
     assert_body(&result, "Hi!\n");
 
     // With compression enabled this should produce Vary header
-    let mut app = make_app(extended_conf("compression_level: 3"));
+    let mut app = make_app(extended_conf("compression_level_gzip: 3"));
     let mut session = make_session("GET", "/file.txt").await;
     session
         .req_header_mut()
@@ -931,7 +931,7 @@ async fn if_unmodified_since() {
     assert_body(&result, "");
 
     // With compression enabled this should produce Vary header
-    let mut app = make_app(extended_conf("compression_level: 3"));
+    let mut app = make_app(extended_conf("compression_level_gzip: 3"));
     let mut session = make_session("GET", "/file.txt").await;
     session
         .req_header_mut()
@@ -1040,7 +1040,7 @@ async fn ranged_request() {
     assert_body(&result, "");
 
     // With compression enabled this should produce Vary header
-    let mut app = make_app(extended_conf("compression_level: 3"));
+    let mut app = make_app(extended_conf("compression_level_gzip: 3"));
     let mut session = make_session("GET", "/large.txt").await;
     session
         .req_header_mut()
@@ -1064,7 +1064,7 @@ async fn ranged_request() {
 #[test(tokio::test)]
 async fn dynamic_compression() {
     let meta = Metadata::from_path(&root_path("large.txt"), None).unwrap();
-    let mut app = make_app(extended_conf("compression_level: 3"));
+    let mut app = make_app(extended_conf("compression_level_gzip: 3"));
 
     // Regular request should result in compressed response
     let mut session = make_session("GET", "/large.txt").await;

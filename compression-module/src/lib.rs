@@ -16,17 +16,28 @@
 
 use async_trait::async_trait;
 use clap::Parser;
+use log::trace;
 use pandora_module_utils::pingora::{
-    Error, HttpModules, ResponseCompression, ResponseCompressionBuilder, SessionWrapper,
+    CompressionAlgorithm, Error, HttpModules, ResponseCompression, ResponseCompressionBuilder,
+    SessionWrapper,
 };
 use pandora_module_utils::{DeserializeMap, RequestFilter};
 
 /// Command line options of the compression module
 #[derive(Debug, Default, Parser)]
 pub struct CompressionOpt {
-    /// Compression level to be used for dynamic compression (omit to disable compression)
+    /// Compression level to be used for dynamic gzip compression (omit to disable compression)
     #[clap(long)]
-    pub compression_level: Option<u32>,
+    pub compression_level_gzip: Option<u32>,
+
+    /// Compression level to be used for dynamic Brotli compression (omit to disable compression)
+    #[clap(long)]
+    pub compression_level_brotli: Option<u32>,
+
+    /// Compression level to be used for dynamic Zstandard compression (omit to disable
+    /// compression)
+    #[clap(long)]
+    pub compression_level_zstd: Option<u32>,
 
     /// Decompress upstream responses before passing them on
     #[clap(long)]
@@ -36,8 +47,14 @@ pub struct CompressionOpt {
 /// Configuration settings of the compression module
 #[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeMap)]
 pub struct CompressionConf {
-    /// Compression level to be used for dynamic compression (omit to disable compression).
-    pub compression_level: Option<u32>,
+    /// Compression level to be used for dynamic gzip compression (omit to disable compression).
+    pub compression_level_gzip: Option<u32>,
+
+    /// Compression level to be used for dynamic Brotli compression (omit to disable compression).
+    pub compression_level_brotli: Option<u32>,
+
+    /// Compression level to be used for dynamic Zstandard compression (omit to disable compression).
+    pub compression_level_zstd: Option<u32>,
 
     /// If `true`, upstream responses will be decompressed
     pub decompress_upstream: bool,
@@ -47,8 +64,16 @@ impl CompressionConf {
     /// Merges the command line options into the current configuration. Any command line options
     /// present overwrite existing settings.
     pub fn merge_with_opt(&mut self, opt: CompressionOpt) {
-        if opt.compression_level.is_some() {
-            self.compression_level = opt.compression_level;
+        if opt.compression_level_gzip.is_some() {
+            self.compression_level_gzip = opt.compression_level_gzip;
+        }
+
+        if opt.compression_level_brotli.is_some() {
+            self.compression_level_brotli = opt.compression_level_brotli;
+        }
+
+        if opt.compression_level_zstd.is_some() {
+            self.compression_level_zstd = opt.compression_level_zstd;
         }
 
         if opt.decompress_upstream {
@@ -86,13 +111,29 @@ impl RequestFilter for CompressionHandler {
         session: &mut impl SessionWrapper,
         _ctx: &mut Self::CTX,
     ) -> Result<(), Box<Error>> {
-        if let Some(level) = self.conf.compression_level {
-            session
-                .downstream_modules_ctx
-                .get_mut::<ResponseCompression>()
-                .unwrap()
-                .adjust_level(level);
+        macro_rules! enable_compression {
+            ($pref:ident => $algorithm:ident) => {
+                if let Some(level) = self.conf.$pref {
+                    trace!(
+                        concat!(
+                            "Enabled ",
+                            stringify!($algorithm),
+                            " compression with compression level {}"
+                        ),
+                        level
+                    );
+                    session
+                        .downstream_modules_ctx
+                        .get_mut::<ResponseCompression>()
+                        .unwrap()
+                        .adjust_algorithm_level(CompressionAlgorithm::$algorithm, level);
+                }
+            };
         }
+
+        enable_compression!(compression_level_gzip => Gzip);
+        enable_compression!(compression_level_brotli => Brotli);
+        enable_compression!(compression_level_zstd => Zstd);
 
         if self.conf.decompress_upstream {
             session.upstream_compression.adjust_decompression(true);
@@ -115,7 +156,7 @@ mod tests {
         let conf = if configured {
             <CompressionHandler as RequestFilter>::Conf::from_yaml(
                 r#"
-                    compression_level: 6
+                    compression_level_gzip: 6
                     decompress_upstream: true
                 "#,
             )

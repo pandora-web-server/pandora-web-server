@@ -21,6 +21,7 @@ use http::{header, Extensions, Uri};
 pub use pingora::http::{IntoCaseHeaderName, RequestHeader, ResponseHeader};
 pub use pingora::modules::http::compression::{ResponseCompression, ResponseCompressionBuilder};
 pub use pingora::modules::http::HttpModules;
+pub use pingora::protocols::http::compression::Algorithm as CompressionAlgorithm;
 pub use pingora::protocols::l4::socket::SocketAddr;
 pub use pingora::proxy::{http_proxy_service, ProxyHttp, Session};
 pub use pingora::server::configuration::{Opt as ServerOpt, ServerConf};

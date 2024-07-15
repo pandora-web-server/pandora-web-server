@@ -64,7 +64,9 @@ vhosts:
         root: ./local-debug-root
     example.com:
         default: true
-        compression_level: 3
+        compression_level_gzip: 3
+        compression_level_brotli: 3
+        compression_level_zstd: 3
         root: ./production-root
 ```
 

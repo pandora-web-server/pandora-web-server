@@ -4,11 +4,13 @@ The Compression module exposes two features provided by Pingora: dynamic compres
 
 ## Current limitation
 
-While Pingora supports gzip, brotli and zstd compression, currently only one setting for compression level exists which applies to all three algorithms. This issue [will be addressed in the next Pingora release](https://github.com/cloudflare/pingora/issues/228).
+When compressing, Pingora will currently only consider the first algorithm listed in the `Accept-Encoding` header. If compression is disabled for this algorithm, the response will not be compressed despite other supported algorithms present. For this reason it is currently recommendable to enable all compression algorithms.
 
 ## Configuration settings
 
-| Configuration setting   | Command line              | Type    | Default value | Description |
-|-------------------------|---------------------------|---------|---------------|-------------|
-| `compression_level`     | `--compression-level`     | integer |               | If present, enables dynamic compression of server responses and sets the compression level for all algorithms |
-| `decompress_upstream`   | `--decompress-upstream`   | boolean | `false`       | If `true`, upstream responses using compression not supported by the client will be decompressed |
+| Configuration setting      | Command line                 | Type    | Default value | Description |
+|----------------------------|------------------------------|---------|---------------|-------------|
+| `compression_level_gzip`   | `--compression-level_gzip`   | integer |               | If present, enables dynamic gzip compression of server responses and sets the compression level |
+| `compression_level_brotli` | `--compression-level_brotli` | integer |               | If present, enables dynamic Brotli compression of server responses and sets the compression level |
+| `compression_level_zstd`   | `--compression-level_zstd`   | integer |               | If present, enables dynamic Zstandard compression of server responses and sets the compression level |
+| `decompress_upstream`      | `--decompress-upstream`      | boolean | `false`       | If `true`, upstream responses using compression not supported by the client will be decompressed |

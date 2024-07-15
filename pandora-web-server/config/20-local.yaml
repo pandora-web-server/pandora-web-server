@@ -10,7 +10,9 @@ vhosts:
     canonicalize_uri: true
     index_file:
     - index.html
-    compression_level: 3
+    compression_level_gzip: 3
+    compression_level_brotli: 3
+    compression_level_zstd: 3
     precompressed:
     - gz
     - br
@@ -40,7 +42,9 @@ vhosts:
         index_file:
         - file.txt
         canonicalize_uri: false
-        compression_level: 3
+        compression_level_gzip: 3
+        compression_level_brotli: 3
+        compression_level_zstd: 3
         precompressed:
         - gz
         - br

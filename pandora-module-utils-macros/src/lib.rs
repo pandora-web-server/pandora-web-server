@@ -108,7 +108,7 @@ pub fn merge_opt(_args: TokenStream, input: TokenStream) -> TokenStream {
 ///
 /// assert!(Conf::from_yaml(r#"
 ///     root: .
-///     compression_level: 3
+///     compression_level_gzip: 3
 ///     unknown_field: flagged
 /// "#).is_err());
 /// ```
@@ -143,7 +143,9 @@ pub fn merge_conf(_attr: TokenStream, input: TokenStream) -> TokenStream {
 ///
 /// let conf = Conf::from_yaml(r#"
 ///     root: .
-///     compression_level: 3
+///     compression_level_gzip: 3
+///     compression_level_brotli: 3
+///     compression_level_zstd: 3
 /// "#).unwrap();
 /// let handler: Handler = conf.try_into().unwrap();
 /// ```
@@ -166,7 +168,7 @@ pub fn merge_conf(_attr: TokenStream, input: TokenStream) -> TokenStream {
 ///
 /// assert!(Conf::from_yaml(r#"
 ///     root: .
-///     compression_level: 3
+///     compression_level_gzip: 3
 ///     unknown_field: flagged
 /// "#).is_err());
 /// ```
