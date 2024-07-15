@@ -33,9 +33,6 @@ use std::borrow::Cow;
 use std::fmt::Debug;
 use std::ops::{Deref, DerefMut};
 
-#[derive(Debug, RequestFilter)]
-struct DummyHandler {}
-
 struct NoDebug<T> {
     inner: T,
 }
@@ -73,7 +70,6 @@ pub struct AppResult {
     err: Option<Box<Error>>,
     extensions: Extensions,
     body: BytesMut,
-    handler: DummyHandler,
 }
 
 impl AppResult {
@@ -88,18 +84,12 @@ impl AppResult {
             err,
             extensions,
             body,
-            handler: DummyHandler {},
         }
     }
 
     /// Produces the resulting session state of the request
     pub fn session(&mut self) -> impl SessionWrapper + '_ {
-        SessionWrapperImpl::new(
-            &mut self.session,
-            &self.handler,
-            &mut self.extensions,
-            false,
-        )
+        SessionWrapperImpl::new(&mut self.session, &mut self.extensions, false)
     }
 
     /// Retrieves the error if any
@@ -268,12 +258,7 @@ where
         session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> Result<(), Box<Error>> {
-        let mut session = SessionWrapperImpl::new(
-            session,
-            &self.handler,
-            &mut ctx.extensions,
-            self.capture_body,
-        );
+        let mut session = SessionWrapperImpl::new(session, &mut ctx.extensions, self.capture_body);
         self.handler
             .early_request_filter(&mut session, &mut ctx.handler)
             .await
@@ -284,12 +269,7 @@ where
         session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> Result<bool, Box<Error>> {
-        let mut session = SessionWrapperImpl::new(
-            session,
-            &self.handler,
-            &mut ctx.extensions,
-            self.capture_body,
-        );
+        let mut session = SessionWrapperImpl::new(session, &mut ctx.extensions, self.capture_body);
         Ok(self
             .handler
             .request_filter(&mut session, &mut ctx.handler)
@@ -302,12 +282,7 @@ where
         session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> Result<Box<HttpPeer>, Box<Error>> {
-        let mut session = SessionWrapperImpl::new(
-            session,
-            &self.handler,
-            &mut ctx.extensions,
-            self.capture_body,
-        );
+        let mut session = SessionWrapperImpl::new(session, &mut ctx.extensions, self.capture_body);
         let result = self
             .handler
             .upstream_peer(&mut session, &mut ctx.handler)
@@ -319,56 +294,25 @@ where
         }
     }
 
-    fn upstream_response_filter(
-        &self,
-        session: &mut Session,
-        response: &mut ResponseHeader,
-        ctx: &mut Self::CTX,
-    ) {
-        let mut session = SessionWrapperImpl::new(
-            session,
-            &self.handler,
-            &mut ctx.extensions,
-            self.capture_body,
-        );
-        self.handler
-            .response_filter(&mut session, response, Some(&mut ctx.handler))
-    }
-
     async fn logging(&self, session: &mut Session, e: Option<&Error>, ctx: &mut Self::CTX) {
-        let mut session = SessionWrapperImpl::new(
-            session,
-            &self.handler,
-            &mut ctx.extensions,
-            self.capture_body,
-        );
+        let mut session = SessionWrapperImpl::new(session, &mut ctx.extensions, self.capture_body);
         self.handler
             .logging(&mut session, e, &mut ctx.handler)
             .await
     }
 }
 
-struct SessionWrapperImpl<'a, H> {
+struct SessionWrapperImpl<'a> {
     inner: &'a mut Session,
-    handler: &'a H,
     extensions: &'a mut Extensions,
     capture_body: bool,
 }
 
-impl<'a, H> SessionWrapperImpl<'a, H> {
+impl<'a> SessionWrapperImpl<'a> {
     /// Creates a new session wrapper for the given Pingora session.
-    fn new(
-        inner: &'a mut Session,
-        handler: &'a H,
-        extensions: &'a mut Extensions,
-        capture_body: bool,
-    ) -> Self
-    where
-        H: RequestFilter,
-    {
+    fn new(inner: &'a mut Session, extensions: &'a mut Extensions, capture_body: bool) -> Self {
         Self {
             inner,
-            handler,
             extensions,
             capture_body,
         }
@@ -376,38 +320,13 @@ impl<'a, H> SessionWrapperImpl<'a, H> {
 }
 
 #[async_trait]
-impl<H> SessionWrapper for SessionWrapperImpl<'_, H>
-where
-    H: RequestFilter,
-    for<'a> &'a H: Send,
-{
+impl SessionWrapper for SessionWrapperImpl<'_> {
     fn extensions(&self) -> &Extensions {
         self.extensions
     }
 
     fn extensions_mut(&mut self) -> &mut Extensions {
         self.extensions
-    }
-
-    async fn write_response_header(
-        &mut self,
-        mut resp: Box<ResponseHeader>,
-        end_of_stream: bool,
-    ) -> Result<(), Box<Error>> {
-        self.handler.response_filter(self, &mut resp, None);
-
-        self.deref_mut()
-            .write_response_header(resp, end_of_stream)
-            .await
-    }
-
-    async fn write_response_header_ref(
-        &mut self,
-        resp: &ResponseHeader,
-        end_of_stream: bool,
-    ) -> Result<(), Box<Error>> {
-        self.write_response_header(Box::new(resp.clone()), end_of_stream)
-            .await
     }
 
     async fn write_response_body(
@@ -430,7 +349,7 @@ where
     }
 }
 
-impl<H> Deref for SessionWrapperImpl<'_, H> {
+impl Deref for SessionWrapperImpl<'_> {
     type Target = Session;
 
     fn deref(&self) -> &Self::Target {
@@ -438,7 +357,7 @@ impl<H> Deref for SessionWrapperImpl<'_, H> {
     }
 }
 
-impl<H> DerefMut for SessionWrapperImpl<'_, H> {
+impl DerefMut for SessionWrapperImpl<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.inner
     }

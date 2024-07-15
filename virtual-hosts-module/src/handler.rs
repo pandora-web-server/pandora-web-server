@@ -15,7 +15,7 @@
 use async_trait::async_trait;
 use http::uri::Uri;
 use log::warn;
-use pandora_module_utils::pingora::{Error, HttpModules, HttpPeer, ResponseHeader, SessionWrapper};
+use pandora_module_utils::pingora::{Error, HttpModules, HttpPeer, SessionWrapper};
 use pandora_module_utils::router::{Path, Router};
 use pandora_module_utils::{RequestFilter, RequestFilterResult};
 use std::collections::BTreeSet;
@@ -81,9 +81,6 @@ impl<H: Debug> VirtualHostsHandler<H> {
     }
 }
 
-#[derive(Debug, Clone)]
-struct IndexEntry(usize);
-
 #[async_trait]
 impl<H> RequestFilter for VirtualHostsHandler<H>
 where
@@ -127,9 +124,6 @@ where
                 session.set_uri(set_uri_path(session.uri(), new_path));
             }
 
-            // Save ctx.index in session as well, response_filter could be called without context
-            session.extensions_mut().insert(IndexEntry(index));
-
             handler.early_request_filter(session, ctx).await?;
         }
 
@@ -157,23 +151,6 @@ where
             handler.upstream_peer(session, ctx).await
         } else {
             Ok(None)
-        }
-    }
-
-    fn response_filter(
-        &self,
-        session: &mut impl SessionWrapper,
-        response: &mut ResponseHeader,
-        ctx: Option<&mut Self::CTX>,
-    ) {
-        let handler = ctx
-            .as_ref()
-            .and_then(|ctx| ctx.index)
-            .or_else(|| session.extensions().get::<IndexEntry>().map(|i| i.0))
-            .and_then(|index| self.handlers.retrieve(index))
-            .map(|(_, h)| h);
-        if let Some(handler) = handler {
-            handler.response_filter(session, response, ctx.map(|ctx| ctx.deref_mut()));
         }
     }
 
@@ -273,7 +250,9 @@ where
 mod tests {
     use super::*;
 
-    use pandora_module_utils::pingora::{create_test_session, ErrorType, RequestHeader, Session};
+    use pandora_module_utils::pingora::{
+        create_test_session, ErrorType, RequestHeader, ResponseHeader, Session,
+    };
     use pandora_module_utils::FromYaml;
     use startup_module::DefaultApp;
     use test_log::test;

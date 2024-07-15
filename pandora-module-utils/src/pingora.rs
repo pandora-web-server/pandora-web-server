@@ -20,7 +20,7 @@ use bytes::Bytes;
 use http::{header, Extensions, Uri};
 pub use pingora::http::{IntoCaseHeaderName, RequestHeader, ResponseHeader};
 pub use pingora::modules::http::compression::{ResponseCompression, ResponseCompressionBuilder};
-pub use pingora::modules::http::HttpModules;
+pub use pingora::modules::http::{HttpModule, HttpModuleBuilder, HttpModules};
 pub use pingora::protocols::http::compression::Algorithm as CompressionAlgorithm;
 pub use pingora::protocols::l4::socket::SocketAddr;
 pub use pingora::proxy::{http_proxy_service, ProxyHttp, Session};
@@ -124,28 +124,6 @@ pub trait SessionWrapper: Send + Deref<Target = Session> + DerefMut {
     /// Sets the name of the authorized user
     fn set_remote_user(&mut self, remote_user: String) {
         self.extensions_mut().insert(RemoteUser(remote_user));
-    }
-
-    /// See [`Session::write_response_header`](pingora::protocols::http::server::Session::write_response_header)
-    async fn write_response_header(
-        &mut self,
-        resp: Box<ResponseHeader>,
-        end_of_stream: bool,
-    ) -> Result<(), Box<Error>> {
-        self.deref_mut()
-            .write_response_header(resp, end_of_stream)
-            .await
-    }
-
-    /// See [`Session::write_response_header_ref`](pingora::protocols::http::server::Session::write_response_header_ref)
-    async fn write_response_header_ref(
-        &mut self,
-        resp: &ResponseHeader,
-        end_of_stream: bool,
-    ) -> Result<(), Box<Error>> {
-        self.deref_mut()
-            .write_response_header(Box::new(resp.clone()), end_of_stream)
-            .await
     }
 
     /// See [`Session::response_written`](pingora::protocols::http::server::Session::response_written)

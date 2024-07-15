@@ -160,17 +160,6 @@ fn generate_request_filter_impl(
                     ::std::result::Result::Ok(::std::option::Option::None)
                 }
 
-                fn response_filter(
-                    &self,
-                    _session: &mut impl ::pandora_module_utils::pingora::SessionWrapper,
-                    _response: &mut ::pandora_module_utils::pingora::ResponseHeader,
-                    mut _ctx: ::std::option::Option<&mut Self::CTX>,
-                ) {
-                    #(
-                        self.#field_name.response_filter(_session, _response, _ctx.as_mut().map(|ctx| &mut ctx.#field_name));
-                    )*
-                }
-
                 async fn logging(
                     &self,
                     _session: &mut impl ::pandora_module_utils::pingora::SessionWrapper,

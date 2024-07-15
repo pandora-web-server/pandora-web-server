@@ -16,9 +16,12 @@ use async_trait::async_trait;
 use http::{HeaderName, HeaderValue};
 use log::{debug, trace};
 use pandora_module_utils::merger::{Merger, StrictHostPathMatcher};
-use pandora_module_utils::pingora::{Error, ResponseHeader, SessionWrapper};
+use pandora_module_utils::pingora::{
+    Error, HttpModule, HttpModuleBuilder, HttpModules, ResponseHeader, SessionWrapper,
+};
 use pandora_module_utils::router::Router;
 use pandora_module_utils::{OneOrMany, RequestFilter, RequestFilterResult};
+use std::any::Any;
 
 use crate::configuration::{Header, HeadersConf, IntoHeaders, WithMatchRules};
 
@@ -39,8 +42,48 @@ where
     })
 }
 
-#[derive(Debug, Clone)]
-struct HeadersList(Vec<Header>);
+struct HeadersHttpModuleBuilder {}
+
+impl HttpModuleBuilder for HeadersHttpModuleBuilder {
+    fn init(&self) -> Box<dyn HttpModule + Sync + Send> {
+        Box::new(HeadersHttpModule::new())
+    }
+}
+
+struct HeadersHttpModule {
+    headers: Option<Vec<Header>>,
+}
+
+impl HeadersHttpModule {
+    fn new() -> Self {
+        Self { headers: None }
+    }
+}
+
+#[async_trait]
+impl HttpModule for HeadersHttpModule {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    async fn response_header_filter(
+        &mut self,
+        resp: &mut ResponseHeader,
+        _end_of_stream: bool,
+    ) -> Result<(), Box<Error>> {
+        if let Some(list) = &self.headers {
+            for (name, value) in list.iter() {
+                resp.insert_header(name, value)?;
+            }
+            trace!("Added headers to response: {list:?}");
+        }
+        Ok(())
+    }
+}
 
 /// Handler for Pingora’s `request_filter` phase
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -95,6 +138,10 @@ impl RequestFilter for HeadersHandler {
         Vec::new()
     }
 
+    fn init_downstream_modules(modules: &mut HttpModules) {
+        modules.add_module(Box::new(HeadersHttpModuleBuilder {}));
+    }
+
     async fn request_filter(
         &self,
         session: &mut impl SessionWrapper,
@@ -107,31 +154,16 @@ impl RequestFilter for HeadersHandler {
         );
 
         let host = session.host().unwrap_or_default();
-        let list = if let Some(list) = self.router.lookup(host.as_ref(), path) {
-            list.as_value()
-        } else {
-            return Ok(RequestFilterResult::Unhandled);
-        };
-
-        session.extensions_mut().insert(HeadersList(list.clone()));
-        trace!("Prepared headers for response: {list:?}");
+        if let Some(list) = self.router.lookup(host.as_ref(), path) {
+            session
+                .downstream_modules_ctx
+                .get_mut::<HeadersHttpModule>()
+                .unwrap()
+                .headers = Some(list.as_value().clone());
+            trace!("Prepared headers for response: {list:?}");
+        }
 
         Ok(RequestFilterResult::Unhandled)
-    }
-
-    fn response_filter(
-        &self,
-        session: &mut impl SessionWrapper,
-        response: &mut ResponseHeader,
-        _ctx: Option<&mut <Self as RequestFilter>::CTX>,
-    ) {
-        if let Some(HeadersList(list)) = session.extensions().get() {
-            for (name, value) in list.iter() {
-                // Conversion from HeaderName/HeaderValue is infallible, ignore errors.
-                let _ = response.insert_header(name, value);
-            }
-            trace!("Added headers to response: {list:?}");
-        }
     }
 }
 

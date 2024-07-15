@@ -25,7 +25,7 @@ pub mod standard_response;
 mod trie;
 
 use log::{error, info, trace};
-use pingora::{Error, ErrorType, HttpModules, HttpPeer, ResponseHeader, SessionWrapper};
+use pingora::{Error, ErrorType, HttpModules, HttpPeer, SessionWrapper};
 use serde::{de::DeserializeSeed, Deserialize};
 use std::fmt::Debug;
 use std::fs::File;
@@ -125,18 +125,6 @@ pub trait RequestFilter: Sized {
         _ctx: &mut Self::CTX,
     ) -> Result<Option<Box<HttpPeer>>, Box<Error>> {
         Ok(None)
-    }
-
-    /// Called when a response header is about to be sent, either from a request filter or an
-    /// upstream response.
-    ///
-    /// *Note*: A context will only be available for the latter call.
-    fn response_filter(
-        &self,
-        _session: &mut impl SessionWrapper,
-        _response: &mut ResponseHeader,
-        _ctx: Option<&mut Self::CTX>,
-    ) {
     }
 
     /// Handler to run during Pingora’s `logging` phase, see [`pingora::ProxyHttp::logging`].
