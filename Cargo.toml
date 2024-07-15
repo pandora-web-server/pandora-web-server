@@ -50,6 +50,7 @@ httpdate = "1"
 ip-anonymization-module = { path = "ip-anonymization-module", version = "0.2.0" }
 log = "0.4"
 maud = "0.26.0"
+once_cell = "1.19.0"
 pandora-module-utils = { path = "pandora-module-utils", version = "0.2.0" }
 pandora-module-utils-macros = { path = "pandora-module-utils-macros", version = "0.2.0" }
 percent-encoding = "2.1"

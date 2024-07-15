@@ -18,6 +18,7 @@
 use async_trait::async_trait;
 use bytes::Bytes;
 use http::{header, Extensions, Uri};
+use once_cell::sync::OnceCell;
 pub use pingora::http::{IntoCaseHeaderName, RequestHeader, ResponseHeader};
 pub use pingora::modules::http::compression::{ResponseCompression, ResponseCompressionBuilder};
 pub use pingora::modules::http::{HttpModule, HttpModuleBuilder, HttpModules};
@@ -31,6 +32,7 @@ pub use pingora::{Error, ErrorType};
 use std::borrow::Cow;
 use std::io::{Cursor, Seek, SeekFrom, Write};
 use std::ops::{Deref, DerefMut};
+use std::sync::Arc;
 
 /// A trait implemented by wrappers around Pingora’s session
 ///
@@ -63,21 +65,23 @@ pub trait SessionWrapper: Send + Deref<Target = Session> + DerefMut {
         host_from_header(self).or_else(|| host_from_uri(self))
     }
 
-    /// Return the client (peer) address of the connection.
-    ///
-    /// Unlike the identical method of the Pingora session, this value can be overwritten.
-    fn client_addr(&self) -> Option<&SocketAddr> {
-        let addr = self.extensions().get();
-        if addr.is_some() {
-            addr
-        } else {
-            self.deref().client_addr()
-        }
-    }
-
     /// Overwrites the client address for this connection.
     fn set_client_addr(&mut self, addr: SocketAddr) {
-        self.extensions_mut().insert(addr);
+        if let Some(digest) = self.digest_mut() {
+            // Existing SocketDigest is behind an Arc reference and cannot be changed, create a new
+            // one.
+            let mut socket_digest = pingora::protocols::SocketDigest::from_raw_fd(0);
+            socket_digest.peer_addr = OnceCell::new();
+            let _ = socket_digest.peer_addr.set(Some(addr));
+            socket_digest.local_addr = OnceCell::new();
+            let _ = socket_digest.local_addr.set(
+                digest
+                    .socket_digest
+                    .as_ref()
+                    .and_then(|digest| digest.local_addr().cloned()),
+            );
+            digest.socket_digest = Some(Arc::new(socket_digest));
+        }
     }
 
     /// Returns a reference to the associated extensions.

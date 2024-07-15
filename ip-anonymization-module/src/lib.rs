@@ -14,12 +14,11 @@
 
 #![doc = include_str!("../README.md")]
 
-use std::net::IpAddr;
-
 use async_trait::async_trait;
 use clap::Parser;
 use pandora_module_utils::pingora::{Error, SessionWrapper, SocketAddr};
-use pandora_module_utils::{DeserializeMap, RequestFilter, RequestFilterResult};
+use pandora_module_utils::{DeserializeMap, RequestFilter};
+use std::net::IpAddr;
 
 /// Command line options of the IP anonymization module
 #[derive(Debug, Parser)]
@@ -99,17 +98,17 @@ impl RequestFilter for IPAnonymizationHandler {
 
     fn new_ctx() -> Self::CTX {}
 
-    async fn request_filter(
+    async fn early_request_filter(
         &self,
         session: &mut impl SessionWrapper,
         _ctx: &mut Self::CTX,
-    ) -> Result<RequestFilterResult, Box<Error>> {
+    ) -> Result<(), Box<Error>> {
         if self.conf.anonymization_enabled {
             if let Some(addr) = anonymize_address(session.client_addr()) {
                 session.set_client_addr(addr);
             }
         }
-        Ok(RequestFilterResult::Unhandled)
+        Ok(())
     }
 }
 
@@ -139,15 +138,15 @@ mod tests {
         type CTX = ();
         fn new_ctx() -> Self::CTX {}
 
-        async fn request_filter(
+        async fn early_request_filter(
             &self,
             session: &mut impl SessionWrapper,
             _ctx: &mut Self::CTX,
-        ) -> Result<RequestFilterResult, Box<Error>> {
+        ) -> Result<(), Box<Error>> {
             session.set_client_addr(SocketAddr::Inet(
                 (IpAddr::from_str(&self.ip_address).unwrap(), 8000).into(),
             ));
-            Ok(RequestFilterResult::Unhandled)
+            Ok(())
         }
     }
 
