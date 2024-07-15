@@ -15,7 +15,7 @@
 use async_trait::async_trait;
 use http::uri::Uri;
 use log::warn;
-use pandora_module_utils::pingora::{Error, HttpPeer, ResponseHeader, SessionWrapper};
+use pandora_module_utils::pingora::{Error, HttpModules, HttpPeer, ResponseHeader, SessionWrapper};
 use pandora_module_utils::router::{Path, Router};
 use pandora_module_utils::{RequestFilter, RequestFilterResult};
 use std::collections::BTreeSet;
@@ -102,11 +102,15 @@ where
         }
     }
 
-    async fn request_filter(
+    fn init_downstream_modules(modules: &mut HttpModules) {
+        H::init_downstream_modules(modules);
+    }
+
+    async fn early_request_filter(
         &self,
         session: &mut impl SessionWrapper,
         ctx: &mut Self::CTX,
-    ) -> Result<RequestFilterResult, Box<Error>> {
+    ) -> Result<(), Box<Error>> {
         let path = session.uri().path();
         let host = session.host().unwrap_or_default();
 
@@ -126,6 +130,18 @@ where
             // Save ctx.index in session as well, response_filter could be called without context
             session.extensions_mut().insert(IndexEntry(index));
 
+            handler.early_request_filter(session, ctx).await?;
+        }
+
+        Ok(())
+    }
+
+    async fn request_filter(
+        &self,
+        session: &mut impl SessionWrapper,
+        ctx: &mut Self::CTX,
+    ) -> Result<RequestFilterResult, Box<Error>> {
+        if let Some(handler) = self.as_inner(ctx) {
             handler.request_filter(session, ctx).await
         } else {
             Ok(RequestFilterResult::Unhandled)
