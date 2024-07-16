@@ -20,6 +20,7 @@ use pandora_module_utils::{DeserializeMap, OneOrMany};
 use regex::Regex;
 use serde::Deserialize;
 use std::default::Default;
+use std::fmt::Debug;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Variable {
@@ -28,10 +29,23 @@ pub(crate) enum Variable {
     Header(HeaderName),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 enum VariableInterpolationPart {
     Literal(Vec<u8>),
     Variable(Variable),
+}
+
+impl Debug for VariableInterpolationPart {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        match &self {
+            Self::Literal(value) => {
+                write!(f, "Literal({:?})", String::from_utf8_lossy(value))
+            }
+            Self::Variable(variable) => {
+                write!(f, "Variable({variable:?})")
+            }
+        }
+    }
 }
 
 /// Parsed representation of a string with variable interpolation like the `to` field of the
