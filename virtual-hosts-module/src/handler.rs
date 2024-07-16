@@ -204,12 +204,14 @@ where
             names.extend(hosts);
 
             for host in &names {
-                handlers.push(
+                if handlers.push(
                     host,
                     "",
                     (None, handler.clone()),
                     Some((None, handler.clone())),
-                );
+                ) {
+                    warn!("overriding existing entry for virtual host {host}");
+                }
             }
 
             let mut subpaths = host_conf.subpaths.into_iter().collect::<Vec<_>>();

@@ -229,13 +229,14 @@ impl<Value: Clone + Eq> RouterBuilder<Value> {
         path: Path,
         value_exact: Value,
         mut value_prefix: Option<Value>,
-    ) {
+    ) -> bool {
         match existing.binary_search_by_key(&path.as_slice(), |entry| entry.path.as_slice()) {
             Ok(index) => {
                 existing[index].value_exact = value_exact;
                 if value_prefix.is_some() {
                     existing[index].value_prefix = value_prefix;
                 }
+                true
             }
             Err(index) => {
                 // Adding a new entry.
@@ -256,7 +257,8 @@ impl<Value: Clone + Eq> RouterBuilder<Value> {
                         value_exact,
                         value_prefix,
                     },
-                )
+                );
+                false
             }
         }
     }
@@ -265,13 +267,15 @@ impl<Value: Clone + Eq> RouterBuilder<Value> {
     ///
     /// The `value_exact` value is only used for exact path matches. For prefix matches where only
     /// part of the lookup path matched the `value_prefix` value will be used if present.
+    ///
+    /// This method returns `true` if an existing entry is overwritten, `false` otherwise.
     pub fn push(
         &mut self,
         host: impl AsRef<[u8]>,
         path: impl AsRef<[u8]>,
         value_exact: Value,
         value_prefix: Option<Value>,
-    ) {
+    ) -> bool {
         let path = Path::new(path);
 
         let existing = if host.as_ref().is_empty() {
@@ -280,7 +284,7 @@ impl<Value: Clone + Eq> RouterBuilder<Value> {
             self.entries.entry(host.as_ref().to_vec()).or_default()
         };
 
-        Self::merge_value(existing, path, value_exact, value_prefix);
+        Self::merge_value(existing, path, value_exact, value_prefix)
     }
 
     /// Translates all rules into a router instance while also merging values if multiple apply to
