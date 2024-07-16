@@ -21,18 +21,36 @@ use pandora_module_utils::pingora::{Error, ErrorType, SessionWrapper};
 use pandora_module_utils::standard_response::{error_response, redirect_response};
 use pandora_module_utils::{RequestFilter, RequestFilterResult};
 use std::io::ErrorKind;
+use std::path::PathBuf;
 
 use crate::compression::Compression;
 use crate::configuration::StaticFilesConf;
 use crate::file_writer::file_response;
 use crate::metadata::Metadata;
+use crate::mime_matcher::MimeMatcher;
 use crate::path::{path_to_uri, resolve_uri};
 use crate::range::{extract_range, Range};
+use crate::CompressionAlgorithm;
+
+const DEFAULT_TEXT_TYPES: &[&str] = &[
+    "text/*",
+    "*+xml",
+    "*+json",
+    "application/javascript",
+    "application/json",
+    "application/json5",
+];
 
 /// Handler for Pingora’s `request_filter` phase
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StaticFilesHandler {
-    conf: StaticFilesConf,
+    root: Option<PathBuf>,
+    canonicalize_uri: bool,
+    index_file: Vec<String>,
+    page_404: Option<String>,
+    precompressed: Vec<CompressionAlgorithm>,
+    declare_charset: String,
+    declare_charset_matcher: MimeMatcher,
 }
 
 #[async_trait]
@@ -48,7 +66,7 @@ impl RequestFilter for StaticFilesHandler {
         session: &mut impl SessionWrapper,
         _ctx: &mut Self::CTX,
     ) -> Result<RequestFilterResult, Box<Error>> {
-        let root = if let Some(root) = self.conf.root.as_ref() {
+        let root = if let Some(root) = self.root.as_ref() {
             root
         } else {
             debug!("received request but static files handler is not configured, ignoring");
@@ -63,7 +81,7 @@ impl RequestFilter for StaticFilesHandler {
             Err(err) if err.kind() == ErrorKind::NotFound => {
                 debug!("canonicalizing resulted in NotFound error");
 
-                let path = self.conf.page_404.as_ref().and_then(|page_404| {
+                let path = self.page_404.as_ref().and_then(|page_404| {
                     debug!("error page is {page_404}");
                     match resolve_uri(page_404, root) {
                         Ok(path) => Some(path),
@@ -107,7 +125,7 @@ impl RequestFilter for StaticFilesHandler {
 
         debug!("translated into file path {path:?}");
 
-        if self.conf.canonicalize_uri && !not_found {
+        if self.canonicalize_uri && !not_found {
             if let Some(mut canonical) = path_to_uri(&path, root) {
                 if canonical != uri.path() {
                     if let Some(query) = uri.query() {
@@ -133,7 +151,7 @@ impl RequestFilter for StaticFilesHandler {
         }
 
         if path.is_dir() {
-            for filename in &self.conf.index_file {
+            for filename in &self.index_file {
                 let candidate = path.join(filename);
                 if candidate.is_file() {
                     debug!("using directory index file {filename}");
@@ -155,7 +173,7 @@ impl RequestFilter for StaticFilesHandler {
             }
         }
 
-        let mut compression = Compression::new(session, &self.conf.precompressed);
+        let mut compression = Compression::new(session, &self.precompressed);
 
         let (path, orig_path) =
             if let Some(precompressed_path) = compression.rewrite_path(session, &path) {
@@ -194,23 +212,29 @@ impl RequestFilter for StaticFilesHandler {
             return Ok(RequestFilterResult::ResponseSent);
         }
 
+        let charset = if self.declare_charset_matcher.matches(&meta.mime) {
+            Some(self.declare_charset.as_str())
+        } else {
+            None
+        };
+
         let (mut header, start, end) = match extract_range(session, &meta) {
             Some(Range::Valid(start, end)) => {
                 debug!("bytes range requested: {start}-{end}");
-                let header = meta.to_partial_content_header(start, end)?;
+                let header = meta.to_partial_content_header(charset, start, end)?;
                 let header = compression.transform_header(session, header)?;
                 (header, start, end)
             }
             Some(Range::OutOfBounds) => {
                 debug!("requested bytes range is out of bounds");
-                let header = meta.to_custom_header(StatusCode::RANGE_NOT_SATISFIABLE)?;
+                let header = meta.to_not_satisfiable_header(charset)?;
                 let header = compression.transform_header(session, header)?;
                 session.write_response_header(header, true).await?;
                 return Ok(RequestFilterResult::ResponseSent);
             }
             None => {
                 // Range is either missing or cannot be parsed, produce the entire file.
-                let header = meta.to_response_header()?;
+                let header = meta.to_response_header(charset)?;
                 let header = compression.transform_header(session, header)?;
                 (header, 0, meta.size - 1)
             }
@@ -235,8 +259,8 @@ impl RequestFilter for StaticFilesHandler {
 impl TryFrom<StaticFilesConf> for StaticFilesHandler {
     type Error = Box<Error>;
 
-    fn try_from(mut conf: StaticFilesConf) -> Result<Self, Self::Error> {
-        conf.root = if let Some(root) = conf.root {
+    fn try_from(conf: StaticFilesConf) -> Result<Self, Self::Error> {
+        let root = if let Some(root) = conf.root {
             Some(root.canonicalize().map_err(|err| {
                 Error::because(
                     ErrorType::InternalError,
@@ -248,6 +272,25 @@ impl TryFrom<StaticFilesConf> for StaticFilesHandler {
             None
         };
 
-        Ok(Self { conf })
+        let mut declare_charset_matcher = MimeMatcher::new();
+        if !conf.declare_charset_types.is_empty() {
+            for mime in conf.declare_charset_types {
+                declare_charset_matcher.add(mime);
+            }
+        } else {
+            for mime in DEFAULT_TEXT_TYPES {
+                declare_charset_matcher.add((*mime).try_into().unwrap());
+            }
+        }
+
+        Ok(Self {
+            root,
+            canonicalize_uri: conf.canonicalize_uri,
+            index_file: conf.index_file.into(),
+            page_404: conf.page_404,
+            precompressed: conf.precompressed.into(),
+            declare_charset: conf.declare_charset,
+            declare_charset_matcher,
+        })
     }
 }

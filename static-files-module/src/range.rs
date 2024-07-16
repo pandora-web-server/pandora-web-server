@@ -109,7 +109,7 @@ mod tests {
 
     fn metadata() -> Metadata {
         Metadata {
-            mime: MimeGuess::from_ext("txt"),
+            mime: MimeGuess::from_ext("txt").first_or_octet_stream(),
             size: 1000,
             modified: Some("Fri, 15 May 2015 15:34:21 GMT".into()),
             etag: "\"abc\"".into(),

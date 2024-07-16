@@ -16,7 +16,7 @@
 
 use http::{header, status::StatusCode};
 use httpdate::fmt_http_date;
-use mime_guess::MimeGuess;
+use mime_guess::Mime;
 use pandora_module_utils::pingora::{ResponseHeader, SessionWrapper};
 use std::io::{Error, ErrorKind};
 use std::path::Path;
@@ -26,7 +26,7 @@ use std::time::SystemTime;
 #[derive(Debug)]
 pub struct Metadata {
     /// Guessed MIME types (if any) for the file
-    pub mime: MimeGuess,
+    pub mime: Mime,
     /// File size in bytes
     pub size: u64,
     /// Last modified time of the file in the format `Fri, 15 May 2015 15:34:21 GMT` if the time
@@ -52,7 +52,7 @@ impl Metadata {
             return Err(ErrorKind::InvalidInput.into());
         }
 
-        let mime = mime_guess::from_path(orig_path.unwrap_or(path));
+        let mime = mime_guess::from_path(orig_path.unwrap_or(path)).first_or_octet_stream();
         let size = meta.len();
         let modified = meta.modified().ok().map(fmt_http_date);
         let etag = format!(
@@ -123,14 +123,27 @@ impl Metadata {
     }
 
     #[inline(always)]
-    fn add_common_headers(
+    fn add_content_type(
+        &self,
+        header: &mut ResponseHeader,
+        charset: Option<&str>,
+    ) -> Result<(), Box<pandora_module_utils::pingora::Error>> {
+        if let Some(charset) = charset {
+            header.append_header(
+                header::CONTENT_TYPE,
+                format!("{};charset={charset}", self.mime.as_ref()),
+            )?;
+        } else {
+            header.append_header(header::CONTENT_TYPE, self.mime.as_ref())?;
+        }
+        Ok(())
+    }
+
+    #[inline(always)]
+    fn add_etag(
         &self,
         header: &mut ResponseHeader,
     ) -> Result<(), Box<pandora_module_utils::pingora::Error>> {
-        header.append_header(
-            header::CONTENT_TYPE,
-            self.mime.first_or_octet_stream().as_ref(),
-        )?;
         if let Some(modified) = &self.modified {
             header.append_header(header::LAST_MODIFIED, modified)?;
         }
@@ -141,17 +154,20 @@ impl Metadata {
     /// Produces a `200 OK` response and adds headers according to file metadata.
     pub(crate) fn to_response_header(
         &self,
+        charset: Option<&str>,
     ) -> Result<Box<ResponseHeader>, Box<pandora_module_utils::pingora::Error>> {
         let mut header = ResponseHeader::build(StatusCode::OK, Some(8))?;
         header.append_header(header::CONTENT_LENGTH, self.size.to_string())?;
         header.append_header(header::ACCEPT_RANGES, "bytes")?;
-        self.add_common_headers(&mut header)?;
+        self.add_content_type(&mut header, charset)?;
+        self.add_etag(&mut header)?;
         Ok(Box::new(header))
     }
 
     /// Produces a `206 Partial Content` response and adds headers according to file metadata.
     pub(crate) fn to_partial_content_header(
         &self,
+        charset: Option<&str>,
         start: u64,
         end: u64,
     ) -> Result<Box<ResponseHeader>, Box<pandora_module_utils::pingora::Error>> {
@@ -161,7 +177,20 @@ impl Metadata {
             header::CONTENT_RANGE,
             format!("bytes {start}-{end}/{}", self.size),
         )?;
-        self.add_common_headers(&mut header)?;
+        self.add_content_type(&mut header, charset)?;
+        self.add_etag(&mut header)?;
+        Ok(Box::new(header))
+    }
+
+    /// Produces a `416 Range Not Satisfiable` response and adds headers according to file
+    /// metadata.
+    pub(crate) fn to_not_satisfiable_header(
+        &self,
+        charset: Option<&str>,
+    ) -> Result<Box<ResponseHeader>, Box<pandora_module_utils::pingora::Error>> {
+        let mut header = ResponseHeader::build(StatusCode::RANGE_NOT_SATISFIABLE, Some(4))?;
+        self.add_content_type(&mut header, charset)?;
+        self.add_etag(&mut header)?;
         Ok(Box::new(header))
     }
 
@@ -172,7 +201,7 @@ impl Metadata {
         status: StatusCode,
     ) -> Result<Box<ResponseHeader>, Box<pandora_module_utils::pingora::Error>> {
         let mut header = ResponseHeader::build(status, Some(4))?;
-        self.add_common_headers(&mut header)?;
+        self.add_etag(&mut header)?;
         Ok(Box::new(header))
     }
 }

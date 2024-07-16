@@ -60,7 +60,7 @@ async fn unauthorized_response(
 
     let mut header = ResponseHeader::build(StatusCode::UNAUTHORIZED, Some(3))?;
     header.append_header(header::CONTENT_LENGTH, text.len().to_string())?;
-    header.append_header(header::CONTENT_TYPE, "text/html; charset=utf-8")?;
+    header.append_header(header::CONTENT_TYPE, "text/html;charset=utf-8")?;
     header.append_header(header::WWW_AUTHENTICATE, format!("Basic realm=\"{realm}\""))?;
 
     let send_body = session.req_header().method != Method::HEAD;
@@ -209,7 +209,7 @@ auth_rate_limits:
         assert_headers(
             result.session().response_written().unwrap(),
             vec![
-                ("Content-Type", "text/html; charset=utf-8"),
+                ("Content-Type", "text/html;charset=utf-8"),
                 ("Content-Length", &unauthorized_response.len().to_string()),
                 ("WWW-Authenticate", "Basic realm=\"Protected area\""),
             ],

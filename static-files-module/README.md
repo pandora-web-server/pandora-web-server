@@ -40,3 +40,15 @@ If pre-compressed files are disabled or no supported variant is found, the respo
 | `index_file`            | `--index-file`       | list of strings | `[]`          | When a directory is requested, look for these files within to directory and show the first one if found instead of the usual `403 Forbidden` error |
 | `page_404`              | `--page-404`         | URI             |               | If set, this page will be displayed instead of the standard `404 Not Found` error |
 | `precompressed`         | `--precompressed`    | list of file extensions | `[]`  | File extensions of pre-compressed files to look for. Supported extensions are `gz` (gzip), `zz` (zlib deflate), `z` (compress), `br` (Brotli), `zst` (Zstandard). |
+| `declare_charset`       | `--declare-charset`  | character set   | `"utf-8"`     | A [character set](https://www.iana.org/assignments/character-sets/character-sets.xhtml) to declare for text files |
+| `declare_charset_types` | `--declare_charset_types` | list of MIME types | `["text/*", "*+xml", "*+json", "application/javascript", "application/json", "application/json5"]` | MIME types that `declare_charset` setting should apply to |
+
+### Specifying MIME types
+
+The `declare_charset_types` setting is a list of MIME types. Each entry should be specified in one of the following formats:
+
+* `*`: Applies to any MIME type.
+* `text/*`: Type match, applies to any MIME type where the type part is `text`. This is processed more efficiently than prefix matches.
+* `image/svg*`: Prefix match, applies to any MIME type starting with `image/svg`.
+* `*+xml`: Suffix match, applies to any MIME type ending with `+xml`.
+* `application/javascript`: Exact match, applies only to `application/javascript` MIME type.

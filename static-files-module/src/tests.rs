@@ -136,7 +136,7 @@ async fn text_file() {
         vec![
             ("Content-Length", &meta.size.to_string()),
             ("accept-ranges", "bytes"),
-            ("Content-Type", "text/plain"),
+            ("Content-Type", "text/plain;charset=utf-8"),
             ("last-modified", &meta.modified.unwrap()),
             ("etag", &meta.etag),
         ],
@@ -153,7 +153,7 @@ async fn text_file() {
         vec![
             ("Content-Length", &meta.size.to_string()),
             ("accept-ranges", "bytes"),
-            ("Content-Type", "text/plain"),
+            ("Content-Type", "text/plain;charset=utf-8"),
             ("last-modified", &meta.modified.unwrap()),
             ("etag", &meta.etag),
         ],
@@ -175,7 +175,7 @@ async fn dir_index() {
         vec![
             ("Content-Length", &meta.size.to_string()),
             ("accept-ranges", "bytes"),
-            ("Content-Type", "text/html"),
+            ("Content-Type", "text/html;charset=utf-8"),
             ("last-modified", &meta.modified.unwrap()),
             ("etag", &meta.etag),
         ],
@@ -194,7 +194,7 @@ async fn dir_index() {
         &mut result,
         vec![
             ("Content-Length", &text.len().to_string()),
-            ("Content-Type", "text/html; charset=utf-8"),
+            ("Content-Type", "text/html;charset=utf-8"),
         ],
     );
     assert_body(&result, &text);
@@ -213,7 +213,7 @@ async fn no_trailing_slash() {
         &mut result,
         vec![
             ("Content-Length", &text.len().to_string()),
-            ("Content-Type", "text/html; charset=utf-8"),
+            ("Content-Type", "text/html;charset=utf-8"),
             ("location", "/subdir/?xyz"),
         ],
     );
@@ -232,7 +232,7 @@ async fn no_trailing_slash() {
         &mut result,
         vec![
             ("Content-Length", &text.len().to_string()),
-            ("Content-Type", "text/html; charset=utf-8"),
+            ("Content-Type", "text/html;charset=utf-8"),
             ("location", "/static/subdir/?xyz"),
         ],
     );
@@ -251,7 +251,7 @@ async fn no_trailing_slash() {
         &mut result,
         vec![
             ("Content-Length", &text.len().to_string()),
-            ("Content-Type", "text/html; charset=utf-8"),
+            ("Content-Type", "text/html;charset=utf-8"),
         ],
     );
     assert_body(&result, &text);
@@ -270,7 +270,7 @@ async fn unnecessary_percent_encoding() {
         &mut result,
         vec![
             ("Content-Length", &text.len().to_string()),
-            ("Content-Type", "text/html; charset=utf-8"),
+            ("Content-Type", "text/html;charset=utf-8"),
             ("location", "/file.txt"),
         ],
     );
@@ -289,7 +289,7 @@ async fn unnecessary_percent_encoding() {
         &mut result,
         vec![
             ("Content-Length", &text.len().to_string()),
-            ("Content-Type", "text/html; charset=utf-8"),
+            ("Content-Type", "text/html;charset=utf-8"),
             ("location", "/static/file.txt"),
         ],
     );
@@ -309,7 +309,7 @@ async fn complex_path() {
         &mut result,
         vec![
             ("Content-Length", &text.len().to_string()),
-            ("Content-Type", "text/html; charset=utf-8"),
+            ("Content-Type", "text/html;charset=utf-8"),
             ("location", "/file.txt?file%2Etxt"),
         ],
     );
@@ -334,7 +334,7 @@ async fn utf8_path() {
         vec![
             ("Content-Length", &meta.size.to_string()),
             ("accept-ranges", "bytes"),
-            ("Content-Type", "text/plain"),
+            ("Content-Type", "text/plain;charset=utf-8"),
             ("last-modified", &meta.modified.unwrap()),
             ("etag", &meta.etag),
         ],
@@ -355,7 +355,7 @@ async fn no_file() {
         &mut result,
         vec![
             ("Content-Length", &text.len().to_string()),
-            ("Content-Type", "text/html; charset=utf-8"),
+            ("Content-Type", "text/html;charset=utf-8"),
         ],
     );
     assert_body(&result, &text);
@@ -376,7 +376,7 @@ async fn no_file_with_page_404() {
         vec![
             ("Content-Length", &meta.size.to_string()),
             ("accept-ranges", "bytes"),
-            ("Content-Type", "text/plain"),
+            ("Content-Type", "text/plain;charset=utf-8"),
             ("last-modified", meta.modified.as_ref().unwrap()),
             ("etag", &meta.etag),
         ],
@@ -397,7 +397,7 @@ async fn no_index() {
         &mut result,
         vec![
             ("Content-Length", &text.len().to_string()),
-            ("Content-Type", "text/html; charset=utf-8"),
+            ("Content-Type", "text/html;charset=utf-8"),
         ],
     );
     assert_body(&result, &text);
@@ -416,7 +416,7 @@ async fn wrong_method() {
         &mut result,
         vec![
             ("Content-Length", &text.len().to_string()),
-            ("Content-Type", "text/html; charset=utf-8"),
+            ("Content-Type", "text/html;charset=utf-8"),
         ],
     );
     assert_body(&result, &text);
@@ -435,7 +435,7 @@ async fn wrong_method_no_file() {
         &mut result,
         vec![
             ("Content-Length", &text.len().to_string()),
-            ("Content-Type", "text/html; charset=utf-8"),
+            ("Content-Type", "text/html;charset=utf-8"),
         ],
     );
     assert_body(&result, &text);
@@ -455,7 +455,7 @@ async fn head_request() {
         vec![
             ("Content-Length", &meta.size.to_string()),
             ("accept-ranges", "bytes"),
-            ("Content-Type", "text/plain"),
+            ("Content-Type", "text/plain;charset=utf-8"),
             ("last-modified", &meta.modified.unwrap()),
             ("etag", &meta.etag),
         ],
@@ -471,7 +471,7 @@ async fn head_request() {
         &mut result,
         vec![
             ("Content-Length", &text.len().to_string()),
-            ("Content-Type", "text/html; charset=utf-8"),
+            ("Content-Type", "text/html;charset=utf-8"),
         ],
     );
     assert_body(&result, "");
@@ -485,7 +485,7 @@ async fn head_request() {
         &mut result,
         vec![
             ("Content-Length", &text.len().to_string()),
-            ("Content-Type", "text/html; charset=utf-8"),
+            ("Content-Type", "text/html;charset=utf-8"),
             ("location", "/subdir/"),
         ],
     );
@@ -505,7 +505,7 @@ async fn bad_request() {
         &mut result,
         vec![
             ("Content-Length", &text.len().to_string()),
-            ("Content-Type", "text/html; charset=utf-8"),
+            ("Content-Type", "text/html;charset=utf-8"),
         ],
     );
     assert_body(&result, &text);
@@ -518,7 +518,7 @@ async fn bad_request() {
         &mut result,
         vec![
             ("Content-Length", &text.len().to_string()),
-            ("Content-Type", "text/html; charset=utf-8"),
+            ("Content-Type", "text/html;charset=utf-8"),
         ],
     );
     assert_body(&result, &text);
@@ -540,7 +540,6 @@ async fn if_none_match() {
     assert_headers(
         &mut result,
         vec![
-            ("Content-Type", "text/plain"),
             ("last-modified", meta.modified.as_ref().unwrap()),
             ("etag", &meta.etag),
         ],
@@ -558,7 +557,6 @@ async fn if_none_match() {
     assert_headers(
         &mut result,
         vec![
-            ("Content-Type", "text/plain"),
             ("last-modified", meta.modified.as_ref().unwrap()),
             ("etag", &meta.etag),
         ],
@@ -576,7 +574,6 @@ async fn if_none_match() {
     assert_headers(
         &mut result,
         vec![
-            ("Content-Type", "text/plain"),
             ("last-modified", meta.modified.as_ref().unwrap()),
             ("etag", &meta.etag),
         ],
@@ -598,7 +595,6 @@ async fn if_none_match() {
     assert_headers(
         &mut result,
         vec![
-            ("Content-Type", "text/plain"),
             ("last-modified", meta.modified.as_ref().unwrap()),
             ("etag", &meta.etag),
         ],
@@ -618,7 +614,7 @@ async fn if_none_match() {
         vec![
             ("Content-Length", &meta.size.to_string()),
             ("accept-ranges", "bytes"),
-            ("Content-Type", "text/plain"),
+            ("Content-Type", "text/plain;charset=utf-8"),
             ("last-modified", meta.modified.as_ref().unwrap()),
             ("etag", &meta.etag),
         ],
@@ -638,7 +634,6 @@ async fn if_none_match() {
     assert_headers(
         &mut result,
         vec![
-            ("Content-Type", "text/plain"),
             ("last-modified", meta.modified.as_ref().unwrap()),
             ("etag", &meta.etag),
             ("vary", "Accept-Encoding"),
@@ -665,7 +660,7 @@ async fn if_match() {
         vec![
             ("Content-Length", &meta.size.to_string()),
             ("accept-ranges", "bytes"),
-            ("Content-Type", "text/plain"),
+            ("Content-Type", "text/plain;charset=utf-8"),
             ("last-modified", meta.modified.as_ref().unwrap()),
             ("etag", &meta.etag),
         ],
@@ -685,7 +680,7 @@ async fn if_match() {
         vec![
             ("Content-Length", &meta.size.to_string()),
             ("accept-ranges", "bytes"),
-            ("Content-Type", "text/plain"),
+            ("Content-Type", "text/plain;charset=utf-8"),
             ("last-modified", meta.modified.as_ref().unwrap()),
             ("etag", &meta.etag),
         ],
@@ -705,7 +700,7 @@ async fn if_match() {
         vec![
             ("Content-Length", &meta.size.to_string()),
             ("accept-ranges", "bytes"),
-            ("Content-Type", "text/plain"),
+            ("Content-Type", "text/plain;charset=utf-8"),
             ("last-modified", meta.modified.as_ref().unwrap()),
             ("etag", &meta.etag),
         ],
@@ -729,7 +724,7 @@ async fn if_match() {
         vec![
             ("Content-Length", &meta.size.to_string()),
             ("accept-ranges", "bytes"),
-            ("Content-Type", "text/plain"),
+            ("Content-Type", "text/plain;charset=utf-8"),
             ("last-modified", meta.modified.as_ref().unwrap()),
             ("etag", &meta.etag),
         ],
@@ -747,7 +742,6 @@ async fn if_match() {
     assert_headers(
         &mut result,
         vec![
-            ("Content-Type", "text/plain"),
             ("last-modified", meta.modified.as_ref().unwrap()),
             ("etag", &meta.etag),
         ],
@@ -767,7 +761,6 @@ async fn if_match() {
     assert_headers(
         &mut result,
         vec![
-            ("Content-Type", "text/plain"),
             ("last-modified", meta.modified.as_ref().unwrap()),
             ("etag", &meta.etag),
             ("vary", "Accept-Encoding"),
@@ -792,7 +785,6 @@ async fn if_modified_since() {
     assert_headers(
         &mut result,
         vec![
-            ("Content-Type", "text/plain"),
             ("last-modified", meta.modified.as_ref().unwrap()),
             ("etag", &meta.etag),
         ],
@@ -812,7 +804,7 @@ async fn if_modified_since() {
         vec![
             ("Content-Length", &meta.size.to_string()),
             ("accept-ranges", "bytes"),
-            ("Content-Type", "text/plain"),
+            ("Content-Type", "text/plain;charset=utf-8"),
             ("last-modified", meta.modified.as_ref().unwrap()),
             ("etag", &meta.etag),
         ],
@@ -836,7 +828,7 @@ async fn if_modified_since() {
         vec![
             ("Content-Length", &meta.size.to_string()),
             ("accept-ranges", "bytes"),
-            ("Content-Type", "text/plain"),
+            ("Content-Type", "text/plain;charset=utf-8"),
             ("last-modified", meta.modified.as_ref().unwrap()),
             ("etag", &meta.etag),
         ],
@@ -856,7 +848,6 @@ async fn if_modified_since() {
     assert_headers(
         &mut result,
         vec![
-            ("Content-Type", "text/plain"),
             ("last-modified", meta.modified.as_ref().unwrap()),
             ("etag", &meta.etag),
             ("vary", "Accept-Encoding"),
@@ -883,7 +874,7 @@ async fn if_unmodified_since() {
         vec![
             ("Content-Length", &meta.size.to_string()),
             ("accept-ranges", "bytes"),
-            ("Content-Type", "text/plain"),
+            ("Content-Type", "text/plain;charset=utf-8"),
             ("last-modified", meta.modified.as_ref().unwrap()),
             ("etag", &meta.etag),
         ],
@@ -901,7 +892,6 @@ async fn if_unmodified_since() {
     assert_headers(
         &mut result,
         vec![
-            ("Content-Type", "text/plain"),
             ("last-modified", meta.modified.as_ref().unwrap()),
             ("etag", &meta.etag),
         ],
@@ -923,7 +913,6 @@ async fn if_unmodified_since() {
     assert_headers(
         &mut result,
         vec![
-            ("Content-Type", "text/plain"),
             ("last-modified", meta.modified.as_ref().unwrap()),
             ("etag", &meta.etag),
         ],
@@ -947,7 +936,6 @@ async fn if_unmodified_since() {
     assert_headers(
         &mut result,
         vec![
-            ("Content-Type", "text/plain"),
             ("last-modified", meta.modified.as_ref().unwrap()),
             ("etag", &meta.etag),
             ("vary", "Accept-Encoding"),
@@ -974,7 +962,7 @@ async fn ranged_request() {
         vec![
             ("Content-Length", "4"),
             ("content-range", "bytes 2-5/100001"),
-            ("Content-Type", "text/plain"),
+            ("Content-Type", "text/plain;charset=utf-8"),
             ("last-modified", meta.modified.as_ref().unwrap()),
             ("etag", &meta.etag),
         ],
@@ -994,7 +982,7 @@ async fn ranged_request() {
         vec![
             ("Content-Length", "2"),
             ("content-range", "bytes 99999-100000/100001"),
-            ("Content-Type", "text/plain"),
+            ("Content-Type", "text/plain;charset=utf-8"),
             ("last-modified", meta.modified.as_ref().unwrap()),
             ("etag", &meta.etag),
         ],
@@ -1014,7 +1002,7 @@ async fn ranged_request() {
         vec![
             ("Content-Length", "5"),
             ("content-range", "bytes 99996-100000/100001"),
-            ("Content-Type", "text/plain"),
+            ("Content-Type", "text/plain;charset=utf-8"),
             ("last-modified", meta.modified.as_ref().unwrap()),
             ("etag", &meta.etag),
         ],
@@ -1032,7 +1020,7 @@ async fn ranged_request() {
     assert_headers(
         &mut result,
         vec![
-            ("Content-Type", "text/plain"),
+            ("Content-Type", "text/plain;charset=utf-8"),
             ("last-modified", meta.modified.as_ref().unwrap()),
             ("etag", &meta.etag),
         ],
@@ -1052,7 +1040,7 @@ async fn ranged_request() {
     assert_headers(
         &mut result,
         vec![
-            ("Content-Type", "text/plain"),
+            ("Content-Type", "text/plain;charset=utf-8"),
             ("last-modified", meta.modified.as_ref().unwrap()),
             ("etag", &meta.etag),
             ("vary", "Accept-Encoding"),
@@ -1079,7 +1067,7 @@ async fn dynamic_compression() {
         &mut result,
         vec![
             ("Content-Encoding", "gzip"),
-            ("Content-Type", "text/plain"),
+            ("Content-Type", "text/plain;charset=utf-8"),
             ("last-modified", meta.modified.as_ref().unwrap()),
             ("etag", &meta.etag),
             ("Transfer-Encoding", "chunked"),
@@ -1101,7 +1089,7 @@ async fn dynamic_compression() {
         vec![
             ("Content-Length", &meta.size.to_string()),
             ("accept-ranges", "bytes"),
-            ("Content-Type", "text/plain"),
+            ("Content-Type", "text/plain;charset=utf-8"),
             ("last-modified", meta.modified.as_ref().unwrap()),
             ("etag", &meta.etag),
             ("vary", "Accept-Encoding"),
@@ -1126,7 +1114,7 @@ async fn dynamic_compression() {
         vec![
             ("Content-Encoding", "gzip"),
             ("content-range", "bytes 0-10000/100001"),
-            ("Content-Type", "text/plain"),
+            ("Content-Type", "text/plain;charset=utf-8"),
             ("last-modified", meta.modified.as_ref().unwrap()),
             ("etag", &meta.etag),
             ("Transfer-Encoding", "chunked"),
@@ -1158,7 +1146,7 @@ async fn static_compression() {
         vec![
             ("Content-Length", &meta_compressed.size.to_string()),
             ("accept-ranges", "bytes"),
-            ("Content-Type", "text/plain"),
+            ("Content-Type", "text/plain;charset=utf-8"),
             ("last-modified", meta_compressed.modified.as_ref().unwrap()),
             ("etag", &meta_compressed.etag),
             ("Content-Encoding", "gzip"),
@@ -1182,7 +1170,7 @@ async fn static_compression() {
         vec![
             ("Content-Length", &meta_compressed.size.to_string()),
             ("accept-ranges", "bytes"),
-            ("Content-Type", "text/plain"),
+            ("Content-Type", "text/plain;charset=utf-8"),
             ("last-modified", meta_compressed.modified.as_ref().unwrap()),
             ("etag", &meta_compressed.etag),
             ("Content-Encoding", "gzip"),
@@ -1206,7 +1194,7 @@ async fn static_compression() {
         vec![
             ("Content-Length", &meta.size.to_string()),
             ("accept-ranges", "bytes"),
-            ("Content-Type", "text/plain"),
+            ("Content-Type", "text/plain;charset=utf-8"),
             ("last-modified", meta.modified.as_ref().unwrap()),
             ("etag", &meta.etag),
             ("vary", "Accept-Encoding"),
@@ -1236,11 +1224,75 @@ async fn static_compression() {
                 "content-range",
                 &format!("bytes 0-10/{}", meta_compressed.size),
             ),
-            ("Content-Type", "text/plain"),
+            ("Content-Type", "text/plain;charset=utf-8"),
             ("last-modified", meta_compressed.modified.as_ref().unwrap()),
             ("etag", &meta_compressed.etag),
             ("Content-Encoding", "gzip"),
             ("vary", "Accept-Encoding"),
+        ],
+    );
+}
+
+#[test(tokio::test)]
+async fn charset() {
+    let meta = Metadata::from_path(&root_path("large_precompressed.txt.gz"), None).unwrap();
+
+    // Binary files shouldn’t have a charset by default
+    let mut app = make_app(default_conf());
+    let session = make_session("GET", "/large_precompressed.txt.gz").await;
+
+    let mut result = app.handle_request(session).await;
+    assert!(result.err().is_none());
+
+    assert_status(&mut result, 200);
+    assert_headers(
+        &mut result,
+        vec![
+            ("Content-Length", &meta.size.to_string()),
+            ("accept-ranges", "bytes"),
+            ("Content-Type", "application/gzip"),
+            ("last-modified", meta.modified.as_ref().unwrap()),
+            ("etag", &meta.etag),
+        ],
+    );
+
+    // Enable charset for specific MIME type
+    let mut app = make_app(extended_conf(
+        "declare_charset: windows-1251\ndeclare_charset_types: application/gzip",
+    ));
+    let session = make_session("GET", "/large_precompressed.txt.gz").await;
+
+    let mut result = app.handle_request(session).await;
+    assert!(result.err().is_none());
+
+    assert_status(&mut result, 200);
+    assert_headers(
+        &mut result,
+        vec![
+            ("Content-Length", &meta.size.to_string()),
+            ("accept-ranges", "bytes"),
+            ("Content-Type", "application/gzip;charset=windows-1251"),
+            ("last-modified", meta.modified.as_ref().unwrap()),
+            ("etag", &meta.etag),
+        ],
+    );
+
+    // Enable charset for all MIME type
+    let mut app = make_app(extended_conf("declare_charset_types: '*'"));
+    let session = make_session("GET", "/large_precompressed.txt.gz").await;
+
+    let mut result = app.handle_request(session).await;
+    assert!(result.err().is_none());
+
+    assert_status(&mut result, 200);
+    assert_headers(
+        &mut result,
+        vec![
+            ("Content-Length", &meta.size.to_string()),
+            ("accept-ranges", "bytes"),
+            ("Content-Type", "application/gzip;charset=utf-8"),
+            ("last-modified", meta.modified.as_ref().unwrap()),
+            ("etag", &meta.etag),
         ],
     );
 }

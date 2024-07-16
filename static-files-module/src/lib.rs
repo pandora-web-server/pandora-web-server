@@ -20,6 +20,7 @@ mod configuration;
 mod file_writer;
 mod handler;
 pub mod metadata;
+mod mime_matcher;
 pub mod path;
 pub mod range;
 #[cfg(test)]

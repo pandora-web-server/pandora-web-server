@@ -15,11 +15,48 @@
 //! Data structures required for `StaticFilesHandler` configuration
 
 use clap::Parser;
+use mime_guess::mime::FromStrError;
+use mime_guess::Mime;
 use pandora_module_utils::{DeserializeMap, OneOrMany};
+use serde::Deserialize;
 use std::ffi::OsString;
 use std::path::PathBuf;
 
 use crate::compression_algorithm::CompressionAlgorithm;
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(try_from = "String")]
+pub enum MimeMatch {
+    Exact(Mime),
+    Type(String),
+    Prefix(String),
+    Suffix(String),
+}
+
+impl TryFrom<&str> for MimeMatch {
+    type Error = FromStrError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Ok(if let Some(prefix) = value.strip_suffix('*') {
+            if let Some(type_) = prefix.strip_suffix('/') {
+                Self::Type(type_.to_owned())
+            } else {
+                Self::Prefix(prefix.to_owned())
+            }
+        } else if let Some(suffix) = value.strip_prefix('*') {
+            Self::Suffix(suffix.to_owned())
+        } else {
+            Self::Exact(value.parse()?)
+        })
+    }
+}
+
+impl TryFrom<String> for MimeMatch {
+    type Error = FromStrError;
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        value.as_str().try_into()
+    }
+}
 
 /// Command line options of the static files module
 #[derive(Debug, Default, Parser)]
@@ -46,6 +83,15 @@ pub struct StaticFilesOpt {
     /// zz (zlib deflate), z (compress), br (Brotli), zst (Zstandard).
     #[clap(long, value_parser = clap::value_parser!(String))]
     pub precompressed: Option<Vec<CompressionAlgorithm>>,
+
+    /// The character set to declare for text files.
+    #[clap(long)]
+    pub declare_charset: Option<String>,
+
+    /// MIME type that the `declare_charset` setting should apply to. This command line flag can be
+    /// specified multiple times.
+    #[clap(long, value_parser = clap::value_parser!(String))]
+    pub declare_charset_types: Option<Vec<MimeMatch>>,
 }
 
 /// Configuration file settings of the static files module
@@ -67,6 +113,12 @@ pub struct StaticFilesConf {
     /// Supported file extensions are gz (gzip), zz (zlib deflate), z (compress), br (Brotli),
     /// zst (Zstandard).
     pub precompressed: OneOrMany<CompressionAlgorithm>,
+
+    /// The character set to declare for text files.
+    pub declare_charset: String,
+
+    /// List of MIME types that the `declare_charset` setting should apply to.
+    pub declare_charset_types: OneOrMany<MimeMatch>,
 }
 
 impl StaticFilesConf {
@@ -92,6 +144,14 @@ impl StaticFilesConf {
         if let Some(precompressed) = opt.precompressed {
             self.precompressed = precompressed.into();
         }
+
+        if let Some(declare_charset) = opt.declare_charset {
+            self.declare_charset = declare_charset;
+        }
+
+        if let Some(declare_charset_types) = opt.declare_charset_types {
+            self.declare_charset_types = declare_charset_types.into();
+        }
     }
 }
 
@@ -103,6 +163,43 @@ impl Default for StaticFilesConf {
             index_file: Default::default(),
             page_404: None,
             precompressed: Default::default(),
+            declare_charset: "utf-8".to_owned(),
+            declare_charset_types: Default::default(),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    use test_log::test;
+
+    #[test]
+    fn mime_match_parsing() {
+        assert_eq!(
+            MimeMatch::try_from("*").unwrap(),
+            MimeMatch::Prefix("".to_owned())
+        );
+
+        assert_eq!(
+            MimeMatch::try_from("text*").unwrap(),
+            MimeMatch::Prefix("text".to_owned())
+        );
+
+        assert_eq!(
+            MimeMatch::try_from("text/*").unwrap(),
+            MimeMatch::Type("text".to_owned())
+        );
+
+        assert_eq!(
+            MimeMatch::try_from("*+xml").unwrap(),
+            MimeMatch::Suffix("+xml".to_owned())
+        );
+
+        assert_eq!(
+            MimeMatch::try_from("text/xml").unwrap(),
+            MimeMatch::Exact("text/xml".parse().unwrap())
+        );
     }
 }

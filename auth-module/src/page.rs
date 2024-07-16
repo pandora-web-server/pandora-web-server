@@ -114,7 +114,7 @@ async fn login_response(
 
     let mut header = ResponseHeader::build(StatusCode::OK, Some(3))?;
     header.append_header(header::CONTENT_LENGTH, text.len().to_string())?;
-    header.append_header(header::CONTENT_TYPE, "text/html; charset=utf-8")?;
+    header.append_header(header::CONTENT_TYPE, "text/html;charset=utf-8")?;
     header.append_header(header::CACHE_CONTROL, "no-store")?;
 
     let send_body = session.req_header().method != Method::HEAD;
@@ -155,7 +155,7 @@ async fn login_response_json(
 
     let mut header = ResponseHeader::build(StatusCode::OK, Some(3))?;
     header.append_header(header::CONTENT_LENGTH, text.len().to_string())?;
-    header.append_header(header::CONTENT_TYPE, "application/json; charset=utf-8")?;
+    header.append_header(header::CONTENT_TYPE, "application/json;charset=utf-8")?;
     if let Some(cookie) = cookie {
         header.append_header(header::SET_COOKIE, cookie)?;
     }
@@ -412,7 +412,7 @@ auth_page_session:
                     .unwrap()
                     .to_str()
                     .unwrap(),
-                "text/html; charset=utf-8"
+                "text/html;charset=utf-8"
             );
         }
 
@@ -442,7 +442,7 @@ auth_page_session:
                     .unwrap()
                     .to_str()
                     .unwrap(),
-                "application/json; charset=utf-8"
+                "application/json;charset=utf-8"
             );
         }
 
