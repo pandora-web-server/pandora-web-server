@@ -182,7 +182,16 @@ where
         let mut files = files
             .into_iter()
             .filter_map(|path| match glob::glob(path.as_ref()) {
-                Ok(iter) => Some(iter),
+                Ok(iter) => {
+                    let mut iter = iter.peekable();
+                    if iter.peek().is_none() {
+                        error!(
+                            "Glob pattern {} didn't result in any configuration files",
+                            path.as_ref()
+                        );
+                    }
+                    Some(iter)
+                }
                 Err(err) => {
                     error!("Ignoring invalid glob pattern `{}`: {err}", path.as_ref());
                     None
