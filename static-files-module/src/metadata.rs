@@ -189,6 +189,7 @@ impl Metadata {
         charset: Option<&str>,
     ) -> Result<Box<ResponseHeader>, Box<pandora_module_utils::pingora::Error>> {
         let mut header = ResponseHeader::build(StatusCode::RANGE_NOT_SATISFIABLE, Some(4))?;
+        header.append_header(header::CONTENT_RANGE, format!("bytes */{}", self.size))?;
         self.add_content_type(&mut header, charset)?;
         self.add_etag(&mut header)?;
         Ok(Box::new(header))

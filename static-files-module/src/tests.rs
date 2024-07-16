@@ -1021,6 +1021,7 @@ async fn ranged_request() {
         &mut result,
         vec![
             ("Content-Type", "text/plain;charset=utf-8"),
+            ("Content-Range", "bytes */100001"),
             ("last-modified", meta.modified.as_ref().unwrap()),
             ("etag", &meta.etag),
         ],
@@ -1041,6 +1042,7 @@ async fn ranged_request() {
         &mut result,
         vec![
             ("Content-Type", "text/plain;charset=utf-8"),
+            ("Content-Range", "bytes */100001"),
             ("last-modified", meta.modified.as_ref().unwrap()),
             ("etag", &meta.etag),
             ("vary", "Accept-Encoding"),
