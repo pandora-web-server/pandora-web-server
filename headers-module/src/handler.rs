@@ -14,7 +14,7 @@
 
 use async_trait::async_trait;
 use http::{HeaderName, HeaderValue};
-use log::{debug, trace};
+use log::trace;
 use pandora_module_utils::merger::{Merger, StrictHostPathMatcher};
 use pandora_module_utils::pingora::{
     Error, HttpModule, HttpModuleBuilder, HttpModules, ResponseHeader, SessionWrapper,
@@ -95,8 +95,6 @@ impl TryFrom<HeadersConf> for HeadersHandler {
     type Error = Box<Error>;
 
     fn try_from(value: HeadersConf) -> Result<Self, Self::Error> {
-        debug!("Headers configuration received: {value:#?}");
-
         let cache_control = merge_rules(value.response_headers.cache_control);
         let content_security_policy = merge_rules(value.response_headers.content_security_policy);
         let custom = merge_rules(value.response_headers.custom);

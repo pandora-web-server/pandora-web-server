@@ -248,7 +248,6 @@ impl TryFrom<StaticFilesConf> for StaticFilesHandler {
             None
         };
 
-        debug!("Initialized static files handler, settings: {conf:#?}");
         Ok(Self { conf })
     }
 }

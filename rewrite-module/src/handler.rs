@@ -16,7 +16,7 @@
 
 use async_trait::async_trait;
 use http::StatusCode;
-use log::{debug, error, trace};
+use log::{error, trace};
 use pandora_module_utils::merger::Merger;
 use pandora_module_utils::pingora::{Error, SessionWrapper};
 use pandora_module_utils::router::{Path, Router};
@@ -43,8 +43,6 @@ impl TryFrom<RewriteConf> for RewriteHandler {
     type Error = Box<Error>;
 
     fn try_from(mut conf: RewriteConf) -> Result<Self, Self::Error> {
-        debug!("Rewrite configuration received: {conf:#?}");
-
         let mut merger = Merger::new();
 
         // Add in reverse order, so that the first rule listed in configuration takes precedence.

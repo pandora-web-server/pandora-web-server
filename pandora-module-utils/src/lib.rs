@@ -207,10 +207,17 @@ where
             })
             .collect::<Vec<_>>();
         files.sort();
-        files.into_iter().try_fold(Self::default(), |conf, path| {
+
+        let result = files.into_iter().try_fold(Self::default(), |conf, path| {
             info!("Loading configuration file `{}`", path.display());
             conf.merge_load_from_yaml(path)
-        })
+        });
+
+        if let Ok(conf) = &result {
+            trace!("Successfully loaded configuration: {conf:#?}");
+        }
+
+        result
     }
 
     fn load_from_yaml(path: impl AsRef<Path>) -> Result<Self, Box<Error>> {
@@ -237,7 +244,6 @@ where
                     err,
                 )
             })?;
-        trace!("Loaded configuration file: {conf:#?}");
 
         Ok(conf)
     }
@@ -252,7 +258,6 @@ where
             .map_err(|err| {
                 Error::because(ErrorType::ReadError, "failed reading configuration", err)
             })?;
-        trace!("Loaded configuration: {conf:#?}");
 
         Ok(conf)
     }
