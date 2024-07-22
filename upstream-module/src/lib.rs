@@ -72,7 +72,7 @@ pub struct UpstreamContext {
     sni: String,
 }
 
-/// Handler for Pingora’s `request_filter` phase
+/// Upstream module handler
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UpstreamHandler {
     host_port: String,

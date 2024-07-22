@@ -33,7 +33,7 @@ struct Rule {
     r#type: RewriteType,
 }
 
-/// Handler for Pingora’s `request_filter` phase
+/// Rewrite module handler
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RewriteHandler {
     router: Router<Vec<(Path, Rule)>>,

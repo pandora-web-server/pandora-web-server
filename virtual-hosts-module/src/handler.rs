@@ -60,7 +60,7 @@ impl<Ctx> DerefMut for VirtualHostsCtx<Ctx> {
     }
 }
 
-/// Handler for Pingora’s `request_filter` phase
+/// Virtual Hosts module handler
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VirtualHostsHandler<H: Debug> {
     handlers: Router<(Option<Path>, H)>,

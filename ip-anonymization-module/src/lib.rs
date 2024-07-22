@@ -46,7 +46,7 @@ impl IPAnonymizationConf {
     }
 }
 
-/// Handler for Pingora’s `request_filter` phase
+/// IP Anonymization module handler
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IPAnonymizationHandler {
     conf: IPAnonymizationConf,

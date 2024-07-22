@@ -41,7 +41,7 @@ const DEFAULT_TEXT_TYPES: &[&str] = &[
     "application/json5",
 ];
 
-/// Handler for Pingora’s `request_filter` phase
+/// Static Files module handler
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StaticFilesHandler {
     root: Option<PathBuf>,

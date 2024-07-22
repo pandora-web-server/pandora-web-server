@@ -313,7 +313,7 @@ impl Default for AuthConf {
     }
 }
 
-/// Handler for Pingora’s `request_filter` phase
+/// Auth module handler
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AuthHandler {
     conf: AuthConf,

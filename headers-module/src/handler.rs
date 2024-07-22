@@ -85,7 +85,7 @@ impl HttpModule for HeadersHttpModule {
     }
 }
 
-/// Handler for Pingora’s `request_filter` phase
+/// Headers module handler
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HeadersHandler {
     router: Router<Vec<Header>>,

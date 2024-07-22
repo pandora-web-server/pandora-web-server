@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Handler for Pingora’s `request_filter` and `logging` phases
+//! Common Log module handler
 
 use async_trait::async_trait;
 use http::header;
@@ -57,7 +57,7 @@ fn normalize_path(path: PathBuf) -> Result<PathBuf, Box<Error>> {
     }
 }
 
-/// Handler for Pingora’s `request_filter` phase
+/// Common Log module handler
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommonLogHandler {
     conf: CommonLogConf,

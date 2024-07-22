@@ -82,7 +82,7 @@ impl CompressionConf {
     }
 }
 
-/// Handler for Pingora’s `request_filter` phase
+/// Compression module handler
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompressionHandler {
     conf: CompressionConf,
