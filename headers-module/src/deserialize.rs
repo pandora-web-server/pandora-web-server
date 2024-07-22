@@ -16,7 +16,9 @@
 
 use http::header::{HeaderName, HeaderValue};
 use pandora_module_utils::{DeserializeMap, MapVisitor};
-use serde::de::{Deserialize, DeserializeSeed, Deserializer, Error as _, MapAccess, Visitor};
+use serde::de::{
+    Deserialize, DeserializeSeed, Deserializer, Error as _, MapAccess, Unexpected, Visitor,
+};
 use std::collections::HashMap;
 
 use crate::configuration::CustomHeadersConf;
@@ -111,10 +113,11 @@ impl<'de> MapVisitor<'de> for CustomHeadersVisitor {
     where
         D: Deserializer<'de>,
     {
-        let name =
-            HeaderName::try_from(field).map_err(|_| D::Error::custom("Invalid header name"))?;
-        let value = HeaderValue::try_from(String::deserialize(deserializer)?)
-            .map_err(|_| D::Error::custom("Invalid header value"))?;
+        let name = HeaderName::try_from(field)
+            .map_err(|_| D::Error::invalid_value(Unexpected::Str(field), &"header name"))?;
+        let value = String::deserialize(deserializer)?;
+        let value = HeaderValue::try_from(&value)
+            .map_err(|_| D::Error::invalid_value(Unexpected::Str(&value), &"header value"))?;
         self.headers.insert(name, value);
         Ok(self)
     }

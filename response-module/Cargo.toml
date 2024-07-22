@@ -1,0 +1,33 @@
+[package]
+name = "response-module"
+version = "0.2.0"
+authors = ["Wladimir Palant"]
+repository = "https://github.com/pandora-web-server/pandora-web-server"
+categories = ["network-programming", "web-programming::http-server"]
+keywords = ["http-response", "url", "web-server", "http", "pandora"]
+license = "Apache-2.0"
+edition = "2021"
+rust-version.workspace = true
+description = """
+A Pandora Web Server module producing HTTP responses from configuration
+"""
+
+[lib]
+name = "response_module"
+path = "src/lib.rs"
+
+[dependencies]
+async-trait.workspace = true
+headers-module.workspace = true
+http.workspace = true
+pandora-module-utils.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+env_logger.workspace = true
+startup-module.workspace = true
+test-log.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true

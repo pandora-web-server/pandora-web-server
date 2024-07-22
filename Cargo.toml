@@ -9,6 +9,7 @@ members = [
   "compression-module",
   "headers-module",
   "ip-anonymization-module",
+  "response-module",
   "rewrite-module",
   "startup-module",
   "static-files-module",
@@ -25,6 +26,7 @@ default-members = [
   "compression-module",
   "headers-module",
   "ip-anonymization-module",
+  "response-module",
   "rewrite-module",
   "startup-module",
   "static-files-module",
@@ -56,6 +58,7 @@ pandora-module-utils-macros = { path = "pandora-module-utils-macros", version = 
 percent-encoding = "2.1"
 pingora = "0.3.0"
 pingora-limits = "0.3.0"
+response-module = { path = "response-module", version = "0.2.0" }
 rewrite-module = { path = "rewrite-module", version = "0.2.0" }
 serde = { version = "1.0", features = ["derive"] }
 startup-module = { path = "startup-module", version = "0.2.0" }

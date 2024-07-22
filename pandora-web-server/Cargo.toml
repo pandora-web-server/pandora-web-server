@@ -22,6 +22,7 @@ headers-module = { workspace = true, optional = true }
 ip-anonymization-module = { workspace = true, optional = true }
 log.workspace = true
 pandora-module-utils.workspace = true
+response-module = { workspace = true, optional = true }
 rewrite-module = { workspace = true, optional = true }
 startup-module.workspace = true
 static-files-module = { workspace = true, optional = true }
@@ -36,6 +37,7 @@ default-single-host = [
     "compression-top-level",
     "headers-top-level",
     "ip-anonymization-top-level",
+    "response-top-level",
     "rewrite-top-level",
     "static-files-top-level",
     "upstream-top-level",
@@ -46,6 +48,7 @@ default-vhosts = [
     "compression-per-host",
     "headers-top-level",
     "ip-anonymization-top-level",
+    "response-per-host",
     "rewrite-per-host",
     "static-files-per-host",
     "upstream-per-host",
@@ -60,6 +63,8 @@ headers-top-level = ["dep:headers-module"]
 headers-per-host = ["dep:headers-module", "dep:virtual-hosts-module"]
 ip-anonymization-top-level = ["dep:ip-anonymization-module"]
 ip-anonymization-per-host = ["dep:ip-anonymization-module", "dep:virtual-hosts-module"]
+response-top-level = ["dep:response-module"]
+response-per-host = ["dep:response-module", "dep:virtual-hosts-module"]
 rewrite-top-level = ["dep:rewrite-module"]
 rewrite-per-host = ["dep:rewrite-module", "dep:virtual-hosts-module"]
 static-files-top-level = ["dep:static-files-module"]

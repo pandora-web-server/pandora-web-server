@@ -37,6 +37,8 @@ struct Handler {
     upstream: upstream_module::UpstreamHandler,
     #[cfg(feature = "static-files-top-level")]
     static_files: static_files_module::StaticFilesHandler,
+    #[cfg(feature = "response-top-level")]
+    response: response_module::ResponseHandler,
     #[cfg(any(
         feature = "auth-per-host",
         feature = "common-log-per-host",
@@ -44,6 +46,7 @@ struct Handler {
         feature = "headers-per-host",
         feature = "ip-anonymization-per-host",
         feature = "rewrite-per-host",
+        feature = "response-per-host",
         feature = "static-files-per-host",
         feature = "upstream-per-host"
     ))]
@@ -68,6 +71,8 @@ struct HostHandler {
     upstream: upstream_module::UpstreamHandler,
     #[cfg(feature = "static-files-per-host")]
     static_files: static_files_module::StaticFilesHandler,
+    #[cfg(feature = "response-per-host")]
+    response: response_module::ResponseHandler,
 }
 
 /// Run Pandora Web Server

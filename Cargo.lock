@@ -1493,6 +1493,7 @@ dependencies = [
  "ip-anonymization-module",
  "log",
  "pandora-module-utils",
+ "response-module",
  "rewrite-module",
  "startup-module",
  "static-files-module",
@@ -1994,6 +1995,21 @@ dependencies = [
  "web-sys",
  "webpki-roots",
  "winreg",
+]
+
+[[package]]
+name = "response-module"
+version = "0.2.0"
+dependencies = [
+ "async-trait",
+ "env_logger",
+ "headers-module",
+ "http 1.1.0",
+ "pandora-module-utils",
+ "serde",
+ "startup-module",
+ "test-log",
+ "tokio",
 ]
 
 [[package]]

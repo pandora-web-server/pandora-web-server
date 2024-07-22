@@ -332,7 +332,8 @@ impl_conf! {csp:
 /// Custom headers configuration
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct CustomHeadersConf {
-    pub(crate) headers: HashMap<HeaderName, HeaderValue>,
+    /// Mapping of header names to values
+    pub headers: HashMap<HeaderName, HeaderValue>,
 }
 
 impl IntoHeaders for CustomHeadersConf {

@@ -16,6 +16,7 @@ Other than that, there are:
 * [Headers module](../../tree/main/headers-module): Configure HTTP headers to be added to responses
 * [IP Anonymization module](../../tree/main/ip-anonymization-module): Remove part of the IP address
   to anonymize requests
+* [Response module](../../tree/main/response-module): Produce HTTP responses from configuration
 * [Rewrite module](../../tree/main/rewrite-module): Rules to modify request URI or produce
   redirect responses
 * [Startup module](../../tree/main/static-files-module): Configuring and starting the web server

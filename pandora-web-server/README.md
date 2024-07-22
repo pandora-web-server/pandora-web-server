@@ -23,6 +23,7 @@ This is a modular web server, supporting different configurations per host name 
   headers, supports adding custom response headers.
 * **IP Anonymization**: Removes part of the IP address, making sure no personal data is
   collected here.
+* **Response**: Produce HTTP responses from configuration.
 * **Rewrite**: Flexible rules allowing internal or external redirection of requests.
 * **Static Files**: Serves static files from a directory, supports pre-compressed files.
 * **Startup**: Listening on any number of IP addresses/ports, TLS support, automatic
@@ -38,27 +39,28 @@ the top level, all other modules are configured per host name. A configuration f
 like this then:
 
 ```yaml
-# Startup module settings (https://docs.rs/startup-module/latest/startup_module/struct.StartupConf.html)
+# Startup module settings (https://github.com/pandora-web-server/pandora-web-server/blob/main/docs/startup-module.md#configuration-settings)
 listen:
 - "[::]:8080"
 daemon: false
 
-# IP Anonymization module settings (https://docs.rs/ip-anonymization-module/latest/ip_anonymization_module/struct.IPAnonymizationConf.html)
+# IP Anonymization module settings (https://github.com/pandora-web-server/pandora-web-server/blob/main/docs/ip-anonymization-module.md#configuration-settings)
 anonymization_enabled: true
 
-# Headers module settings (https://docs.rs/headers-module/latest/headers_module/struct.HeadersConf.html)
+# Headers module settings (https://github.com/pandora-web-server/pandora-web-server/blob/main/docs/headers-module.md#configuration-settings)
 response_headers:
     custom:
     - Server: "My server is the best"
 
 # Virtual hosts settings:
-# * https://docs.rs/virtual-hosts-module/latest/virtual_hosts_module/struct.VirtualHostsConf.html
-# * https://docs.rs/log-module/latest/log_module/struct.LogConf.html
-# * https://docs.rs/compression-module/latest/compression_module/struct.CompressionConf.html
-# * https://docs.rs/auth-module/latest/auth_module/struct.AuthConf.html
-# * https://docs.rs/rewrite-module/latest/rewrite_module/struct.RewriteConf.html
-# * https://docs.rs/upstream-module/latest/upstream_module/struct.UpstreamConf.html
-# * https://docs.rs/static-files-module/latest/static_files_module/struct.StaticFilesConf.html
+# * https://github.com/pandora-web-server/pandora-web-server/blob/main/docs/virtual-hosts-module.md#configuration-settings
+# * https://github.com/pandora-web-server/pandora-web-server/blob/main/docs/common-log-module.md#configuration-settings
+# * https://github.com/pandora-web-server/pandora-web-server/blob/main/docs/compression-module.md#configuration-settings
+# * https://github.com/pandora-web-server/pandora-web-server/blob/main/docs/auth-module.md#configuration-settings
+# * https://github.com/pandora-web-server/pandora-web-server/blob/main/docs/rewrite-module.md#configuration-settings
+# * https://github.com/pandora-web-server/pandora-web-server/blob/main/docs/upstream-module.md#configuration-settings
+# * https://github.com/pandora-web-server/pandora-web-server/blob/main/docs/static-files-module.md#configuration-settings
+# * https://github.com/pandora-web-server/pandora-web-server/blob/main/docs/response-module.md#configuration-settings
 vhosts:
     [localhost:8080, 127.0.0.1:8080, "[::1]:8080"]:
         root: ./local-debug-root
@@ -117,6 +119,7 @@ top level or in a per-host configuration:
 | Compression       | `compression-top-level`       | `compression-per-host`        |
 | Headers           | `headers-top-level`           | `headers-per-host`            |
 | IP Anonymization  | `ip-anonymization-top-level`  | `ip-anonymization-per-host`   |
+| Response          | `response-top-level`          | `response-per-host`           |
 | Rewrite           | `rewrite-top-level`           | `rewrite-per-host`            |
 | Static Files      | `static-files-top-level`      | `static-files-per-host`       |
 | Upstream          | `upstream-top-level`          | `upstream-per-host`           |

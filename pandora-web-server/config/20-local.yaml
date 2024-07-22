@@ -48,3 +48,8 @@ vhosts:
         precompressed:
         - gz
         - br
+      /fake_file.txt:
+        log_file: localhost.access.log
+        response: This is not an actual file.
+        response_headers:
+          Content-Type: text/plain

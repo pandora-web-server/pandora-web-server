@@ -1,6 +1,6 @@
 # Pandora Web Server documentation
 
-* [Server configuration](server-configuration)
+* [Server configuration](server-configuration.md)
 
 ## Module documentation
 
@@ -9,6 +9,7 @@
 * [Compression module](compression-module.md)
 * [Headers module](headers-module.md)
 * [IP Anonymization module](ip-anonymization-module.md)
+* [Response module](response-module.md)
 * [Rewrite module](rewrite-module.md)
 * [Startup module](startup-module.md)
 * [Static Files module](static-files-module.md)
