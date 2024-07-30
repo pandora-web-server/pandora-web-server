@@ -566,7 +566,7 @@ async fn if_none_match() {
     let mut session = make_session("GET", "/file.txt").await;
     session
         .req_header_mut()
-        .insert_header("If-None-Match", &format!("\"xyz\", {}", &meta.etag))
+        .insert_header("If-None-Match", format!("\"xyz\", {}", &meta.etag))
         .unwrap();
     let mut result = app.handle_request(session).await;
     assert!(result.err().is_none());
@@ -690,7 +690,7 @@ async fn if_match() {
     let mut session = make_session("GET", "/file.txt").await;
     session
         .req_header_mut()
-        .insert_header("If-Match", &format!("\"xyz\", {}", &meta.etag))
+        .insert_header("If-Match", format!("\"xyz\", {}", &meta.etag))
         .unwrap();
     let mut result = app.handle_request(session).await;
     assert!(result.err().is_none());
