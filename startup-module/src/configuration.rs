@@ -302,7 +302,7 @@ pub struct TlsConf {
     pub default: CertKeyConf,
 
     /// Certificate/key combinations for particular server names
-    pub server_names: HashMap<String, CertKeyConf>,
+    pub server_names: HashMap<OneOrMany<String>, CertKeyConf>,
 
     /// HTTP to HTTPS redirector settings
     pub redirector: TlsRedirectorConf,
@@ -311,15 +311,20 @@ pub struct TlsConf {
 impl TlsConf {
     fn into_callbacks(self) -> Result<TlsAcceptCallbacks, Box<Error>> {
         let mut certificates = HashMap::with_capacity(self.server_names.len() + 1);
-        for (name, conf) in self.server_names.into_iter() {
+        for (names, conf) in self.server_names.into_iter() {
             let cert = conf.into_certificate().map_err(|err| {
                 Error::because(
                     TLS_CONF_ERR,
-                    format!("failed setting up certificate/key for server name {name}"),
+                    format!(
+                        "failed setting up certificate/key for server names {}",
+                        names.join(", ")
+                    ),
                     err,
                 )
             })?;
-            certificates.insert(name, cert);
+            for name in names {
+                certificates.insert(name, cert.clone());
+            }
         }
         let cert = self.default.into_certificate().map_err(|err| {
             Error::because(

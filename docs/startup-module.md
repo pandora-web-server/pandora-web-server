@@ -29,7 +29,7 @@ tls:
   cert_path: cert.pem
   key_path: key.pem
   server_names:
-    example.com:
+    [example.com, www.example.com]:
       cert_path: cert.example.com.pem
       key_path: key.example.com.pem
     example.net:
@@ -104,7 +104,7 @@ These settings are required in any of the addresses in the `listen` setting is l
 |-----------------------|-----------|-------------|
 | `cert_path`           | file path | Path to the default certificate file |
 | `key_path`            | file path | Path to the default private key file |
-| `server_names`        | map       | Server names mapped to their respective `cert_path` and `key_path` settings |
+| `server_names`        | map       | Lists of server names mapped to their respective `cert_path` and `key_path` settings |
 | `redirector`          | [redirector configuration](#tls-redirector-configuration) | Configures plain HTTP to HTTP redirection |
 
 Note that server names in the TLS configuration are different from virtual hosts, they do not contain the port number.

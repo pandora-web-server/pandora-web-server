@@ -2,9 +2,12 @@ tls:
   cert_path: config/cert_example.com.pem
   key_path: config/key_example.com.pem
   server_names:
-    localhost:
+    [localhost, localhost.localdomain]:
       cert_path: config/cert_localhost.pem
       key_path: config/key_localhost.pem
+    example.net:
+      cert_path: config/cert_example.com.pem
+      key_path: config/key_example.com.pem
   redirector:
     listen:
     - 127.0.0.1:8081
