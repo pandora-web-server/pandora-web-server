@@ -100,9 +100,16 @@ pub(crate) fn create_redirector(
         ));
     }
 
+    let mut redirect_by_name = HashMap::new();
+    for (names, target) in &conf.redirect_by_name {
+        for name in names {
+            redirect_by_name.insert(name.clone(), target.clone());
+        }
+    }
+
     let app = RedirectorApp {
         redirect_to: conf.redirect_to.clone(),
-        redirect_by_name: conf.redirect_by_name.to_owned(),
+        redirect_by_name,
     };
     let mut service = http_proxy_service(server_conf, app);
 

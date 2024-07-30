@@ -15,7 +15,8 @@ tls:
     - "[::]:80"
     redirect_to: example.com
     redirect_by_name:
-      localhost: localhost
+      [localhost, localhost.localdomain]: localhost
+      example.net: example.com
 ```
 
 ## Server Name Indication (SNI) support
@@ -66,8 +67,7 @@ tls:
     listen: 192.0.2.3:80
     redirect_to: example.com
     redirect_by_name:
-      example.net: example.net
-      www.example.net: example.net
+      [example.net, www.example.net]: example.net
 ```
 
 Note that the `redirect_to` setting is still required as fallback for the scenario that some unknown server name is requested.
@@ -116,5 +116,5 @@ The TLS redirector can automatically redirect incoming connections on plain HTTP
 | Configuration setting | Type      | Description |
 |-----------------------|-----------|-------------|
 | `listen`              | list of [IP address/port configurations](#ip-addressport-configuration) | The IP addresses and ports that the TLS redirector should bind to |
-| `redirect_to`         | string    | default server name to redirect to |
-| `redirect_by_name`    | map       | maps server names to the names they should be redirected to |
+| `redirect_to`         | string    | Default server name to redirect to |
+| `redirect_by_name`    | map       | Maps lists of server names to the names they should be redirected to |

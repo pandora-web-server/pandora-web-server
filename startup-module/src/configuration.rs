@@ -278,7 +278,7 @@ pub struct TlsRedirectorConf {
     ///
     /// If the requested name is not found in the list or the request didn’t contain a server name,
     /// the default redirect target will be used.
-    pub redirect_by_name: HashMap<String, String>,
+    pub redirect_by_name: HashMap<OneOrMany<String>, String>,
 }
 
 impl TlsRedirectorConf {
